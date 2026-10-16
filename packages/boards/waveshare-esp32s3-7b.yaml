@@ -80,13 +80,32 @@ waveshare_io_ch32v003:
     i2c_id: touch_bus
 
 output:
+  # Keep every backlight path (including fades, alerts and OTA) on the same hardware output.
+  # Set the PWM before enabling the light; at zero, disable EXIO2 after the fade reaches its end.
+  - platform: template
+    id: gpio_backlight_pwm
+    type: float
+    write_action:
+      - lambda: |-
+          id(backlight_pwm).set_level(state);
+          static int enabled = -1;
+          const bool lit = state > 0.0f;
+          if (enabled != lit) {
+            id(backlight_enable).set_state(lit);
+            enabled = lit;
+          }
+  - platform: gpio
+    id: backlight_enable
+    pin:
+      waveshare_io_ch32v003: expander
+      number: 2
+      mode:
+        output: true
   # The backlight's level is the expander's PWM output, low for full light (inverted). The safe levels are
   # ESPHome's defaults for this board: 247 keeps the backlight from flickering at the dark end, and 1 is full light.
-  # The enable line (EXIO2) stays out of this output. It goes high once, with the panel below, and never low again:
-  # on the 4.3-inch Waveshare, switching the backlight's boost converter on from a dark screen browned the board out
-  # (packages/features/backlight-always-on.yaml). A level of 0 is the darkest the PWM gives, with the enable kept on.
+  # EXIO2 above switches the backlight fully off when the requested level is zero.
   - platform: waveshare_io_ch32v003
-    id: gpio_backlight_pwm
+    id: backlight_pwm
     waveshare_io_ch32v003_id: expander
     inverted: true
     safe_pwm_levels:
@@ -147,12 +166,8 @@ display:
       number: 3
       mode:
         output: true
-    # The backlight enable (EXIO2) and the panel supply (EXIO6), both high from the panel's start on.
+    # Keep the panel supply (EXIO6) on; the backlight output owns EXIO2 separately.
     enable_pin:
-      - waveshare_io_ch32v003: expander
-        number: 2
-        mode:
-          output: true
       - waveshare_io_ch32v003: expander
         number: 6
         mode:

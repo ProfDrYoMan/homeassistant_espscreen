@@ -23,9 +23,8 @@ The board's one USB-C port goes through a USB-to-UART chip, and the logs go out 
 - Landscape: 1024 x 600, four columns of four cells. Portrait: 600 x 1024, two columns of seven cells.
 - The standard look at 170 dpi, the density of the 4-inch Guition, so a tile keeps the size it has there.
 - The backlight takes levels: brightness is a percentage, and standby, night mode, Sleep, Wake and the alert's flashes
-  are enabled. The level is the PWM output of the board's expander. Its enable line goes high once, at start, and
-  never low again, so a dark standby is the darkest the PWM gives rather than a backlight switched off. The 4.3-inch
-  Waveshare browned out when it switched its backlight on from fully dark; this board never does that, but the wake
+  are enabled. The level is the PWM output of the board's expander. At zero brightness its enable line, EXIO2, goes
+  low to switch the backlight fully off; above zero it goes high again. The panel supply, EXIO6, stays on. The wake
   from standby has not been seen on this hardware yet.
 - Camera tiles, full-screen snapshots, live tile pictures, camera alerts and media artwork use the shared PSRAM implementation.
   Their operation on this board still needs physical verification.

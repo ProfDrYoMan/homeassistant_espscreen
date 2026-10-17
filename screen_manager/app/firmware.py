@@ -14,12 +14,39 @@ import signal
 import time
 import yaml
 import zipfile
+import atomic
 import build_cache
 import build_memory
+import build_server
 from core import BOARD_KEYS, REF, REPO, SHAPES, channel, hotspot_name, installation_yaml, old_hotspot_name, our_ref, ref
 from i18n import t
 
 LOG = logging.getLogger('screen_manager')
+
+# What a build gets of the container's environment. ESPHome runs the Python of every external component while it
+# builds a screen, a plugin's too, inside this app's container (docs/PLUGINS.md, "Where a plugin's code runs"), so a
+# build never gets the whole environment: the Supervisor's token in it would hand any plugin the app's own standing
+# with Home Assistant. The names and the families the compilers, ESPHome, ESP-IDF, PlatformIO, ccache, pip, git and
+# Python read pass; nothing else does, and a name that spells a token or a password never, whatever family it is in.
+BUILD_ENV_NAMES = frozenset({'PATH', 'HOME', 'LANG', 'LANGUAGE', 'TZ', 'TMPDIR', 'TMP', 'TEMP', 'TERM', 'USER', 'LOGNAME',
+                             'SHELL', 'VIRTUAL_ENV', 'NO_COLOR', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy',
+                             'https_proxy', 'no_proxy', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE'})
+BUILD_ENV_PREFIXES = ('ESPHOME_', 'ESP_IDF_', 'IDF_', 'PLATFORMIO_', 'CCACHE_', 'CMAKE_', 'NINJA_', 'PIP_', 'PYTHON', 'XDG_',
+                      'LC_', 'GIT_', 'SSL_', 'ESP_SCREENS_')
+BUILD_ENV_NEVER = ('TOKEN', 'SECRET', 'PASSWORD', 'PASSWD', 'CREDENTIAL')
+
+
+def build_environment(environ):
+    """What a build gets of `environ` (the container's): BUILD_ENV_NAMES and the BUILD_ENV_PREFIXES families, never a
+    name of BUILD_ENV_NEVER or the Supervisor's own (SUPERVISOR_, HASSIO_)."""
+    out = {}
+    for key, value in environ.items():
+        upper = key.upper()
+        if upper.startswith(('SUPERVISOR_', 'HASSIO_')) or any(word in upper for word in BUILD_ENV_NEVER):
+            continue
+        if key in BUILD_ENV_NAMES or key.startswith(BUILD_ENV_PREFIXES):
+            out[key] = value
+    return out
 
 # libyaml parses a 300 KB profile roughly ten times faster than the pure-Python loader.
 class LenientLoader(yaml.CSafeLoader if getattr(yaml, '__with_libyaml__', False) else yaml.SafeLoader):
@@ -160,6 +187,10 @@ class Firmware:
         self.language = None  # the language builds speak: the manager's Settings -> Language & region (app 0.2.90)
         # The app's build line (build_queue.BuildQueue), which alone starts a job here; None on its own (a test).
         self.builds = None
+        # The build server builds go to first when it is on (build_server.BuildServer, docs/BUILDS.md "On a build
+        # server"), and per profile the images of its last build there: what `esphome upload --file` sends.
+        self.server = None
+        self.served = {}
 
     def profiles(self):
         if not self.root.exists(): return []
@@ -247,9 +278,7 @@ class Firmware:
             values[key] = value
         path = self.root / 'secrets.yaml'
         if wifi['state'] == 'new':
-            with path.open('x') as f:
-                os.chmod(path, 0o600)
-                yaml.safe_dump(values, f, width=4096)
+            self._write_secrets(path, yaml.safe_dump(values, width=4096))
             return
         # An existing file with missing keys: replace only that key's own line, or append it.
         text = path.read_text()
@@ -263,7 +292,7 @@ class Firmware:
         check = yaml.safe_load(text)
         if not isinstance(check, dict) or any(check.get(key) != value for key, value in values.items()):
             raise ValueError(t('addon.errors.firmware.wifi_not_set'))
-        path.write_text(text)
+        self._write_secrets(path, text)
 
     def change_wifi(self, data):
         """Another network or password (app 0.4.32): both lines in secrets.yaml replaced in place, every other line and
@@ -286,12 +315,7 @@ class Firmware:
         check = yaml.safe_load(text)
         if not isinstance(check, dict) or check.get('wifi_ssid') != ssid or check.get('wifi_password') != password:
             raise ValueError(t('addon.errors.firmware.wifi_not_set'))
-        if not path.exists():
-            with path.open('x') as f:
-                os.chmod(path, 0o600)
-                f.write(text)
-            return
-        path.write_text(text)
+        self._write_secrets(path, text)
 
     def create(self, data):
         """Write the device profile, its empty local override, and any missing wifi secrets."""
@@ -386,7 +410,12 @@ class Firmware:
         """Every screen's YAML on what the app's channel builds from (core.ref), at the start of the app: its own release
         tag for the stable app, dev for the dev channel. A build Home Assistant's firmware update or ESPHome Device
         Builder starts then makes the firmware this app knows too. An app with no channel changes nothing. The names
-        of the profiles that changed."""
+        of the profiles that changed. A missing Override YAML is written again first, for the same builds (start)."""
+        for entry in self.profiles():
+            try:
+                self.restore_override(entry['file'])
+            except (OSError, ValueError) as error:
+                LOG.warning('Could not write the missing Override YAML of %s (%s)', entry['file'], error)
         if not channel():
             return []
         moved = []
@@ -667,13 +696,13 @@ packages:
         return profile, path
 
     def _atomic_write(self, path, text):
-        temporary = path.with_name(path.name + '.tmp')
-        with temporary.open('w', encoding='utf8') as handle:
-            os.chmod(temporary, 0o600)
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        temporary.replace(path)
+        atomic.write_text(path, text)
+
+    def _write_secrets(self, path, text):
+        """secrets.yaml whole or not at all (atomic.write_text): a stop during the write never leaves the Wi-Fi of every
+        screen half written. A file that is there keeps its mode; a new one is the owner's alone."""
+        mode = (path.stat().st_mode & 0o777) if path.exists() else 0o600
+        atomic.write_text(path, text, mode)
 
     def _ensure_override_include(self, profile):
         """Attach an existing profile to its sidecar without reformatting user YAML."""
@@ -776,6 +805,16 @@ packages:
         content = path.read_text() if path.exists() else '{}\n'
         return {'file': profile.name, 'override_file': path.name, 'attached': attached,
                 'exists': path.exists(), 'content': content}
+
+    def restore_override(self, name):
+        """Write an empty Override YAML when the screen's YAML includes one that isn't there. True when it wrote it."""
+        profile, path = self._override_path(name)
+        if path.exists() or not re.search(rf'(?m)^\s*local_overrides:\s*!include\s+{re.escape(path.name)}\s*$',
+                                          profile.read_text()):
+            return False
+        self._atomic_write(path, '{}\n')
+        LOG.info('%s included %s, which was gone: wrote it again, empty', profile.name, path.name)
+        return True
 
     def save_override(self, name, content):
         profile, path = self._override_path(name)
@@ -950,6 +989,14 @@ packages:
         # What a build writes into the screen's own YAML first. Not for a table, which goes with the build that was
         # made, and not for a bridge, which this app wrote whole.
         managed = action not in ('validate', 'widen') and not profile.name.endswith(self.BRIDGE_SUFFIX)
+        # ESPHome Device Builder lists the Override YAML as a device of its own (`<name>.local`, GitHub #219), and
+        # deleting that one leaves the screen's YAML including a file that is gone: every build stops at "file not
+        # found". An empty override, the one New screen writes, makes it build again.
+        if not profile.name.endswith(self.BRIDGE_SUFFIX):
+            try:
+                self.restore_override(profile.name)
+            except (OSError, ValueError) as error:
+                LOG.warning('Could not write the missing Override YAML of %s (%s)', profile.name, error)
         # Every build speaks the language of Settings -> Language & region, also for a profile made or changed since
         # that language was set (app 0.2.90).
         if managed and callable(self.language):
@@ -1034,8 +1081,11 @@ packages:
         nothing says otherwise, as PlatformIO ran them (ESP-IDF's ninja would start two more, and each takes a few
         hundred MB next to Home Assistant on a small Raspberry Pi; ESPHome's own limit, which the official ESPHome app
         sets too), fewer when the memory that is free says so. A limit the owner set in the add-on's environment stands.
-        The ccache options let a compile cache GitHub made answer here (build_cache, app 0.4.49)."""
-        return {**os.environ, 'ESPHOME_BUILD_PATH': str(self.data / 'build' / profile.stem),
+        The ccache options let a compile cache GitHub made answer here (build_cache, app 0.4.49).
+
+        Of the container's own environment only what the build tools read goes in (build_environment): ESPHome runs a
+        plugin's Python during the build, and the app's token for Home Assistant is not its to have."""
+        return {**build_environment(os.environ), 'ESPHOME_BUILD_PATH': str(self.data / 'build' / profile.stem),
                 'ESPHOME_DATA_DIR': str(self.data / 'esphome'), 'ESPHOME_ESP_IDF_PREFIX': str(self.data / 'idf'),
                 'CCACHE_MAXSIZE': os.environ.get('CCACHE_MAXSIZE', self.CCACHE_SIZE),
                 **{key: os.environ.get(key, value) for key, value in build_cache.CCACHE_ENV.items()},
@@ -1108,19 +1158,67 @@ packages:
             code = await self.process.wait()
             return code, killed or (stage == 'compile' and build_memory.killed_exit(code))
 
+    async def compile_on_server(self, profile, env):
+        """The compile of a job on the build server when it is on (build_server.py): True when its images are staged
+        here, so the job goes on to its upload with them; False when the build runs here after all, with the reason in
+        the log and on the job (`fallback`), so the page says why. A build that failed on the server fails the job."""
+        self.served.pop(profile.name, None)
+        server = self.server
+        if server is None or not server.wanted():
+            return False
+        name = (server.server or {}).get('name') or 'the build server'
+        self.job.update(where='server', server=name, remote='bundle')
+        self._changed()
+
+        def phase(step):
+            self.job['remote'] = step
+            self._changed()
+
+        def log(line):
+            text = self.redact(terminal_line(line))
+            if text:
+                self.logs.append(text)
+        try:
+            self.served[profile.name] = await server.compile(profile, self.root, self.data, env, log, phase)
+            return True
+        except build_server.Failed as error:
+            raise RuntimeError(str(error)) from None
+        except build_server.Fallback as fallback:
+            detail = f' ({self.redact(fallback.detail)})' if fallback.detail else ''
+            self.logs.append(f'Build server: {build_server.FALLBACK_NOTES.get(fallback.reason, fallback.reason)}{detail} '
+                             'Building here instead.')
+            LOG.info('%s builds here: the build server %s (%s)', profile.name, fallback.reason, fallback.detail)
+            self.job.update(where='here', remote=None, fallback=fallback.reason)
+            self._changed()
+            await self.seed_cache(profile, env)
+            return False
+
+    def served_file(self, profile, action, target):
+        """`--file` for an upload of what the build server built last for this profile: the factory image over USB
+        (ESPHome writes it from address 0), the update image over Wi-Fi, the partition table for `widen`. Nothing for a
+        build made here, which ESPHome finds in its own build folder."""
+        images = self.served.get(profile.name) or {}
+        path = images.get('table') if action == 'widen' else images.get('factory') if target.startswith('/dev/') \
+            else images.get('ota')
+        return ['--file', str(path)] if path and Path(path).is_file() else []
+
     async def run(self, profile, action, target):
         env = self.build_env(profile)
         try:
             if action not in ('validate', 'widen'):
                 await self.retire_platformio()
-                await self.seed_cache(profile, env)
+                # A build the server makes needs no compile cache here; one that falls back gets it then.
+                if not (self.server and self.server.wanted()):
+                    await self.seed_cache(profile, env)
             stages = ['config'] if action=='validate' else ['upload'] if action=='widen' else ['compile'] + (['upload'] if action=='install' else [])
             memory = None
             for stage in stages:
                 cmd=['esphome']+(['--quiet'] if stage=='config' else [])+[stage]+(['--partition-table'] if action=='widen' else [])+[str(profile)]
-                if stage=='upload': cmd += ['--device',target]
+                if stage=='upload': cmd += ['--device',target] + self.served_file(profile, action, target)
                 self.job['stage']=stage
                 self._changed()
+                if stage == 'compile' and await self.compile_on_server(profile, env):
+                    continue
                 if stage == 'compile':
                     # As many compilers at once as the memory that is free takes (build_memory, app 0.4.65). The job
                     # carries the plan, so the editor can say why this build is slower than the machine's cores allow.

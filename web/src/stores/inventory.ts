@@ -14,7 +14,7 @@ import { sizesOn } from "../model/sizes";
 import { slug } from "../model/slug";
 import { readStored, writeStored } from "../storage";
 import renderer from "../wasm/renderer.json";
-import type { Inventory, PageDocument, Screen } from "../types";
+import type { BuildServerView, Inventory, PageDocument, Screen } from "../types";
 import { lookups } from "./lookup";
 import { useUiStore } from "./ui";
 
@@ -37,6 +37,9 @@ export const useInventoryStore = defineStore("inventory", () => {
   const inventory = ref<Inventory>({ screens: [], entities: [] } as Inventory);
   // Whether the add-on answered the last request for its inventory, and whether it is connected to Home Assistant.
   const reachable = ref(true);
+  // Whether the inventory has been read once (refresh): the live stream can bring screens before that answer, which also
+  // brings the token every write needs (api.ts setCsrf), so what opens a screen at the start waits for this.
+  const loaded = ref(false);
   const connected = computed(() => Boolean(inventory.value.connected));
   // The editor's features the add-on turns on (UI experiments, opt-in; saved documents and device support stay independent).
   const tallerTilesEnabled = computed(() => inventory.value.editor_features?.tall_tiles === true);
@@ -126,18 +129,31 @@ export const useInventoryStore = defineStore("inventory", () => {
       const virtual = await migrateVirtualScreens();
       // A light poll carries only screens and update status; keep the catalogues we have.
       inventory.value = full ? data : { ...inventory.value, ...data };
+      inventory.value.build_server = newerServer(data.build_server);
       inventory.value.screens = [...inventory.value.screens.filter((screen) => !screen.virtual), ...virtual];
       if (data.csrf) setCsrf(data.csrf);
       reachable.value = true;
+      loaded.value = true;
       arrived();
     } catch {
       reachable.value = false;
     }
   }
   function applyLive(data: Partial<Inventory>) {
-    inventory.value = { ...inventory.value, ...data } as Inventory;
+    inventory.value = { ...inventory.value, ...data, build_server: newerServer(data.build_server) } as Inventory;
     inventory.value.screens = [...inventory.value.screens.filter((screen) => !screen.virtual), ...virtualScreens()];
     arrived();
+  }
+
+  // The build server's state goes by its own number (build_server.py `rev`): an answer that left the add-on before a live
+  // message never puts an older state back over a newer one, and the stream would not send that state again.
+  function newerServer(next: BuildServerView | undefined) {
+    const now = inventory.value.build_server;
+    return next && (!now || next.rev >= now.rev) ? next : now;
+  }
+  /** The build server as an action's own answer says it, unless the page already has a newer state. */
+  function takeBuildServer(next: BuildServerView) {
+    inventory.value = { ...inventory.value, build_server: newerServer(next) } as Inventory;
   }
 
   // ---- The live stream, and the polls that stand in for it ----
@@ -224,8 +240,8 @@ export const useInventoryStore = defineStore("inventory", () => {
   }
 
   return {
-    inventory, reachable, connected, tallerTilesEnabled, pluginsEnabled,
+    inventory, reachable, loaded, connected, tallerTilesEnabled, pluginsEnabled,
     ...lookups({ entityOf }),
-    persistVirtualScreens, createVirtualScreen, onArrival, refresh, applyLive, installClaudeSkill, start,
+    persistVirtualScreens, createVirtualScreen, onArrival, refresh, applyLive, takeBuildServer, installClaudeSkill, start,
   };
 });

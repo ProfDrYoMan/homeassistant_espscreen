@@ -16,13 +16,17 @@
 # fonts/materialdesignicons-webfont.ttf (Apache 2.0, github.com/Templarian/MaterialDesign-Webfont).
 ############################################################
 substitutions:
-  SCREEN_FIRMWARE_VERSION: "0.56.0"
+  SCREEN_FIRMWARE_VERSION: "0.57.0"
   DASHBOARD_INBOX_INTERNAL: "false"
   CALIBRATION_ON_BOOT: "false"                     # a bench build: start on the touch test page
   ROOM_NAME: ""                                    # top left until ESP Screens sends the screen name
   # The language of every text on the screen (app 0.2.90): a file in screen_manager/translations, English for any
   # text it lacks. ESP Screens writes it into the screen's own YAML, from Home Assistant's language or its Settings.
   LANGUAGE: "en"
+  # Swipe between pages on a screen that has stored no choice of its own: off, as every screen set up before had it, so
+  # an update changes nothing there. New screen writes "1" into a new screen's own YAML, which then swipes and opens the
+  # Dock out of the box. Once the screen stores a choice (any change of a setting), that choice wins. Keep "0" here.
+  SWIPE_PAGES_DEFAULT: "0"
 
   ## DIM settings
   AUTO_DIM: "true"                                 # true = enable auto dimming
@@ -193,6 +197,8 @@ esphome:
           // the 3.3 V rail under the brownout level when it switches on from a dark screen, so that board has no
           // standby and no night. The rows, the entities and the add-on's Settings follow the same fact.
           settings_screen::can_standby = ${CAN_STANDBY};
+          // Swipe between pages before the screen's own choice is read: the start value of a screen that stored none.
+          settings_screen::swipe_pages = ${SWIPE_PAGES_DEFAULT};
           runtime_tiles::load_settings();
           // Colours (firmware 0.2.54+): the styles of this profile take their colours from theme.h. The list runs now,
           // in the look the screen saved, before anything is drawn, and again after every change of look.
@@ -259,6 +265,8 @@ esphome:
           screen_power::later = [](uint32_t ms) { id(screen_power_wait).execute(ms); };
           screen_power::dark = []() { return id(display_dimmed) && runtime_tiles::standby_level() == 0; };
           screen_power::wake = []() { id(wake_display).execute(); };
+          // Feedback a finger hears or feels (touch_feedback.h): none for the push that wakes a dimmed screen, nor in a calibration.
+          touch_feedback::quiet = []() { return id(display_dimmed) || id(calibration_active); };
           {
             // A touch on the dark glass resumes drawing before LVGL reads it, so the wake overlay gets the tap.
             struct WakeListener : public esphome::touchscreen::TouchListener {
@@ -275,6 +283,8 @@ esphome:
           // whole number, the look took the exact one for its sizes.
           ui::configure(atoi("${ (DISPLAY_DPI | float) | round | int }"), "${LOOK}");
           runtime_tiles::grid_bind(id(tile_scroll), atoi("${GRID_MARGIN}"), atoi("${PAGE_BAR_H}"));
+          // Full: a tap on the page dots opens the Dock, the chevrons keep the bar's outer parts (the dock module).
+          runtime_tiles::page_dots_open(id(page_number));
           // The alert card, laid out on the glass it landed on (firmware 0.2.103+): screen_alert::layout works every
           // size out from the canvas, the look and the fonts, lying down or standing up, and runtime_tiles::alert_place
           // puts the parts; an alert with a camera image lays it out again with room for the picture.
@@ -666,6 +676,9 @@ api:
                     features.add("saver_keys");
                     // saver_items (firmware 0.50.0+, app 0.4.81): the clock's row of entities, `wi` of the op "saver".
                     features.add("saver_items");
+                    // saver_photos (app 0.4.89): the screensaver's photos step, a folder of Home Assistant's media, one photo
+                    // after the other over the whole glass. Only a board that draws pictures shows them.
+                    if (runtime_tiles::camera_supported()) features.add("saver_photos");
                     // speaker_groups (firmware 0.26.0+, app speakers.py): a player's speakers with a key to join or leave
                     // the group and each one's volume, its inputs behind a key of their own, and the speaker it follows.
                     features.add("speaker_groups");
@@ -690,6 +703,27 @@ api:
                     // bar_cards (firmware 0.56.0): an entity's item in the top bar opens its tile's card (hold_card), so ESP
                     // Screens names that tile in the item (`d`) and sends a tile without a cell for an entity on no tile.
                     features.add("bar_cards");
+                    // clock_faces (module clock_faces, tier full): the screensaver's clock draws Glass, Classic and Bauhaus,
+                    // so ESP Screens sends the face chosen for it (`cf` of the op "saver").
+                    #ifdef SD_MOD_CLOCK_FACES
+                    features.add("clock_faces");
+                    #endif
+                    // vacuum_card (module vacuum, tier full): the vacuum card draws its map, rooms and routines, so ESP
+                    // Screens sends them (the `vc` block, screen_manager/app/vacuum_card.py).
+                    #ifdef SD_MOD_VACUUM_CARD
+                    features.add("vacuum_card");
+                    #endif
+                    // cover_rows (firmware 0.57.0): a cover card lays out what its room holds (cover_tile.h), so ESP
+                    // Screens sends a card one row high its slats and a 1x1 card its control, which it draws when they fit.
+                    features.add("cover_rows");
+                    // media_rows: a taller player card draws its volume over its playback keys (volume_playback), so
+                    // ESP Screens sends the pair; an older screen gets the keys.
+                    features.add("media_rows");
+                    // group_covers (firmware 0.57.0, module cover_groups): a cover group's card has a key to the group's page, one card per
+                    // cover, so ESP Screens sends a cover group's covers (`covers`, cover_groups.py) with its state.
+                    #ifdef SD_MOD_COVER_GROUPS
+                    features.add("group_covers");
+                    #endif
                     auto sizes = root["tile_sizes"].to<JsonArray>();
                     for (const auto &size : page_protocol::TILE_SIZES)
                       if (size.fits(runtime_tiles::grid.columns, runtime_tiles::grid.rows)) sizes.add(size.name);

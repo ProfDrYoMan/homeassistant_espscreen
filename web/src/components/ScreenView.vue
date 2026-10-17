@@ -49,9 +49,7 @@ const others = computed(() => inv.inventory.screens.filter((s) => s.id !== scree
 function closeMenu() { ui.menuOpen = false; }
 function openOverride() {
   closeMenu();
-  ui.overrideProfile = screen.value.update?.profile || null;
-  ui.overrideFriendly = screen.value.name;
-  ui.go("#override");
+  ui.openOverride(screen.value.update?.profile || null);
 }
 function inspectAll() {
   closeMenu();
@@ -102,7 +100,9 @@ function onKey(e: KeyboardEvent) {
     if (popoverEscape) return;
     if (ui.menuOpen) closeMenu();
     else if (ui.palette) return;
-    else if (insp.inspector && !(e.target as HTMLElement)?.closest?.(".picker")) insp.closeInspector();
+    // In the inspector Escape goes one step out (stores/inspector.ts escape): an open icon choice, a tile's actions or
+    // another entity first, also from their search.
+    else if (insp.inspector && (insp.iconPickerOpen || insp.actionPickerOpen || insp.entityPickerOpen || !(e.target as HTMLElement)?.closest?.(".picker"))) insp.escape();
   } else if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented && insp.chosenTiles.length && !isEditableTarget(e.target) && !inMenu(e)) {
     // The selected tile goes, as a selected object does in Keynote (app 0.4.32), and so do several chosen together; Undo
     // brings them back.

@@ -10,6 +10,7 @@
 // A touch wakes the screen, as it always did in standby, except on a player's three keys (firmware 0.33.0+): play or
 // pause and the volume work from the screensaver, and the screen stays in standby.
 #include <algorithm>
+#include <cmath>
 #include "media_card.h"
 
 namespace saver_view {
@@ -107,4 +108,14 @@ inline ClockRow clock_row(int width, int time_w, int ampm_w, int space) {
 inline Rect temperature(int width, int height, int margin, int line_h) {
   return {margin, height - margin - line_h, std::max(1, width - 2 * margin), line_h};
 }
+// Nothing stands on the same pixels for hours (the clock's faces since module clock_faces, a plugin's saver since plugin API
+// 0.14): the whole saver moves along a slow circle of `radius` pixels (a millimetre of glass), a step every minute of the
+// day. Pure, so tests/test_saver_view.cpp checks it stays within the circle and moves every minute.
+struct Offset { int x = 0, y = 0; };
+inline Offset drift(int minute_of_day, int radius) {
+  if (minute_of_day < 0 || radius <= 0) return {};
+  const float a = minute_of_day * 0.7f;
+  return {(int) std::lround(std::cos(a) * radius), (int) std::lround(std::sin(a) * radius)};
+}
+
 }  // namespace saver_view

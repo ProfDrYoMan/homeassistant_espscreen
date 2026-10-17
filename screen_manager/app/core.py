@@ -161,7 +161,7 @@ def our_ref(value):
 # The shared firmware of this app release: packages/core.yaml's SCREEN_FIRMWARE_VERSION, what every board builds
 # unless its own board file went ahead with a fix for that board alone (firmware_target, docs/BOARD_RELEASES.md). The
 # middle number is the core: the feature gates below name a shared X.Y.0, so a feature always ships with a new core.
-FIRMWARE_VERSION = '0.56.0'
+FIRMWARE_VERSION = '0.57.0'
 # The Auto standby switch a screen offers Home Assistant automations.
 AUTO_STANDBY_MIN_FIRMWARE = '0.2.41'
 # The settings page the screen opens itself, and the screen.settings tile that opens it.
@@ -187,6 +187,9 @@ ALARM_MIN_FIRMWARE = catalogue.parse_version(catalogue.of_type('alarm_control_pa
 LOCK_MIN_FIRMWARE = catalogue.parse_version(catalogue.of_type('lock')['firmware'])
 # How far a lock's tile may go (the `guard` option): unlock after a second tap, or lock only.
 LOCK_GUARDS = tuple(catalogue.of_type('lock')['guards'])
+# Where a cover's slats stand open (the `tilt_open` option): 100 as Home Assistant's rule has it, the default and never
+# stored, or 50 for a blind that reports 0 and 100 as closed one way and the other (catalogue/cover.yaml).
+COVER_TILT_OPEN = tuple(catalogue.of_type('cover')['tilt_open'])
 # An automation as a tile (GitHub #62): a tap switches it on or off and holding runs its actions, or with the tap option
 # `run` the other way round. Older firmware refuses the domain, so a layout with one waits for the update.
 AUTOMATION_MIN_FIRMWARE = catalogue.parse_version(catalogue.of_type('automation')['firmware'])
@@ -733,6 +736,11 @@ def has_battery(screen, said=()):
         return True
     return bool(SHAPES.get(board_of(screen), {}).get('battery'))
 
+def has_module(screen, name):
+    """Whether this screen's board has the firmware module `name` (docs/MODULES.md): boards.json's `modules`, worked
+    out from the board's flash as the firmware does. A board this app does not know has none."""
+    return name in SHAPES.get(board_of(screen), {}).get('modules', ())
+
 def dimmable(screen):
     """Whether this screen's backlight takes levels: no normal brightness without it, and standby and night as the
     switch they really are."""
@@ -1092,6 +1100,10 @@ PLUGIN_TILE = re.compile(r'^plugin:([a-z][a-z0-9_]{0,31})\.([a-z][a-z0-9_]{0,31}
 PLUGIN_TILE_OPTIONS = {'size', 'background', 'icon', 'tap', 'plugin', 'plugin_entity'}
 PLUGIN_OPTION_MAX = 12
 PLUGIN_TEXT_MAX = 64
+# A list option's values (plugin API 0.12), and what a tile's options take together as JSON (plugin_manifest's
+# MAX_MULTIPLE and OPTIONS_BYTES, the editor's PLUGIN_OPTIONS_BYTES; a test keeps them equal).
+PLUGIN_LIST_MAX = 16
+PLUGIN_OPTIONS_BYTES = 1280
 # What a tile of a plugin the screen does not have costs (plugin_host::PLACEHOLDER_BYTES in the firmware).
 PLUGIN_PLACEHOLDER_BYTES = 64
 # What each plugin tile type the app knows costs, from its manifest's `memory` (plugins.Plugins keeps it up to date).
@@ -1111,21 +1123,39 @@ def plugin_entity(value):
         and not value.startswith(('screen.', 'plugin'))
 
 
+def _plugin_text(value, empty=True):
+    return isinstance(value, str) and (empty or value != '') and len(value) <= PLUGIN_TEXT_MAX
+
+
+def _plugin_pick(value):
+    """A pick of a list of choices (plugin API 0.12): {value, label}, both short texts, the value never empty."""
+    return isinstance(value, dict) and set(value) <= {'value', 'label'} and _plugin_text(value.get('value'), False) \
+        and _plugin_text(value.get('label', ''))
+
+
 def plugin_options(value):
-    """A plugin tile's own options in their stored shape: at most 12, each a short text, a number or true/false."""
+    """A plugin tile's own options in their stored shape: at most 12, each a short text, a number, true/false, a pick
+    {value, label}, or a list of up to 16 texts or picks (plugin API 0.12), together at most PLUGIN_OPTIONS_BYTES of
+    JSON. Whether a value fits its option is the manifest's (plugin_manifest.option_value)."""
     if not isinstance(value, dict) or len(value) > PLUGIN_OPTION_MAX:
         return False
     for key, item in value.items():
         if not isinstance(key, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,31}', key):
             return False
-        if isinstance(item, str):
+        if isinstance(item, list):
+            if len(item) > PLUGIN_LIST_MAX or not all(_plugin_text(v, False) or _plugin_pick(v) for v in item):
+                return False
+        elif isinstance(item, dict):
+            if not _plugin_pick(item):
+                return False
+        elif isinstance(item, str):
             if len(item) > PLUGIN_TEXT_MAX:
                 return False
         elif isinstance(item, bool) or (isinstance(item, (int, float)) and math.isfinite(item)):
             continue
         else:
             return False
-    return True
+    return len(json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode()) <= PLUGIN_OPTIONS_BYTES
 
 
 def entity_id(value):
@@ -1331,6 +1361,8 @@ TILE_RESULT_EVENT = 'esp_screens_tile_result'
 TILE_EVENT_OPTIONS = {'size': 'size', 'controls': 'controls', 'display': 'display', 'icon': 'icon',
                       'color': 'background', 'background': 'background', 'tap': 'tap', 'inline': 'inline',
                       'history_hours': 'history_hours', 'refresh': 'refresh', 'fit': 'fit', 'overlay': 'overlay',
+                      # Where a cover's slats stand open: 100 (Home Assistant's rule) or 50.
+                      'tilt_open': 'tilt_open',
                       # How a map frames its people (app 0.4.33); who is on it is the editor's.
                       'framing': 'framing', 'distance': 'distance',
                       # A favourite (app 0.4.42): what it plays, as Home Assistant's library names it, and on which speaker.
@@ -1912,7 +1944,7 @@ def validate_layout(data, stored=False, grid=DEFAULT_GRID):
             continue
         if 'options' in tile:
             options = tile['options']
-            if not isinstance(options, dict) or set(options) - {'tap', 'display', 'inline', 'history_hours', 'background', 'size', 'icon', 'controls', 'action', 'refresh', 'sub', 'fit', 'overlay', 'guard', 'flow', *MAP_OWN, *FAVORITE_OWN, *calendar_feed.KEYS, *meter.KEYS}:
+            if not isinstance(options, dict) or set(options) - {'tap', 'display', 'inline', 'history_hours', 'background', 'size', 'icon', 'controls', 'action', 'refresh', 'sub', 'fit', 'overlay', 'guard', 'tilt_open', 'flow', *MAP_OWN, *FAVORITE_OWN, *calendar_feed.KEYS, *meter.KEYS}:
                 raise ValueError(t('addon.errors.layout.unknown_settings'))
             # A calendar card's choices (firmware 0.56.0): its calendars, its filters, its look; other tiles have none.
             if tile['entity'].startswith('calendar.'):
@@ -1969,6 +2001,14 @@ def validate_layout(data, stored=False, grid=DEFAULT_GRID):
                     raise ValueError(t('addon.errors.layout.invalid_setting', setting='guard'))
                 if options['guard'] == 'confirm':
                     options = {k: v for k, v in options.items() if k != 'guard'}
+            # A cover's slats: open at 100 (Home Assistant's rule, the default) or at 50; no other tile has the choice.
+            if 'tilt_open' in options:
+                value = str(options['tilt_open'])
+                if domain != 'cover' or value not in COVER_TILT_OPEN:
+                    raise ValueError(t('addon.errors.layout.invalid_setting', setting='tilt_open'))
+                options = {k: v for k, v in options.items() if k != 'tilt_open'}
+                if value != COVER_TILT_OPEN[0]:
+                    options['tilt_open'] = value
             # A plugin's tap action (docs/PLUGINS.md, plugin:<plugin>.<action>) on any tile: which domains it takes is its
             # manifest's, and a screen without that plugin does nothing on the tap.
             if plugin_tile(options.get('tap')):
@@ -2583,9 +2623,10 @@ def state_message(index, tile, states, extra=None, precision=None, entry=None, u
     for key in keys:
         value = attrs.get(key)
         if isinstance(value, bool):
-            # assumed_state only matters to a lock's keys (firmware 0.5.0+) and a player's power keys (firmware
-            # 0.39.0, both as Home Assistant's dialog has them); anywhere else it is bytes for nothing.
-            if key in BOOL_ATTRS and (key != 'assumed_state' or tile['entity'].startswith(('lock.', 'media_player.'))):
+            # assumed_state only matters to a lock's keys (firmware 0.5.0+), a player's power keys (firmware 0.39.0)
+            # and a cover's open and close (firmware 0.57.0), all as Home Assistant's dialog has them; anywhere else it
+            # is bytes for nothing.
+            if key in BOOL_ATTRS and (key != 'assumed_state' or tile['entity'].startswith(('lock.', 'media_player.', 'cover.'))):
                 bounded[key] = value
             continue
         if value is None:
@@ -2617,7 +2658,7 @@ def drawn_controls(message, features):
     """The controls a screen draws right for this tile (app 0.4.32), in place of ones it would get wrong: what the entity
     can draw and what the screen's hello says it draws (catalogue.drawn_controls). `features`: the list the screen's
     hello said, None where it is not known (the editor's preview, which runs the newest firmware)."""
-    return catalogue.drawn_controls(message, features)
+    return catalogue.drawn_controls(message, features, span_of)
 
 def encode(message):
     """The message as the firmware parses it: compact JSON, at most 4096 bytes."""
@@ -3050,6 +3091,9 @@ def installation_yaml(data):
     if not isinstance(chosen, dict) or any(key not in offered or value not in offered[key] for key, value in chosen.items()):
         raise ValueError(t('addon.errors.firmware.choice'))
     choice_lines = ''.join(f'  {key}: {quote(chosen[key])}\n' for key in offered if chosen.get(key, offered[key][0]) != offered[key][0])
+    # Swipe between pages is on for a screen set up here: the line is the screen's start value until it stores a choice
+    # of its own (packages/core.yaml, SWIPE_PAGES_DEFAULT). A profile written before has no line and keeps the core's off,
+    # so an update never turns swiping on for a screen that is out there.
     # The components and fonts come from the branch the board package does (packages/<key>.yaml), main unless the app
     # runs in another channel.
     branch_line = f'  GITHUB_REF: {quote(ref())}\n' if ref() != REF else ''
@@ -3076,6 +3120,7 @@ substitutions:
   DEVICE_NAME: {quote(name)}
   DEVICE_FRIENDLY_NAME: {quote(friendly.strip())}
   LANGUAGE: {quote(language)}
+  SWIPE_PAGES_DEFAULT: "1"
 {rotation_line}{grid_lines}{choice_lines}{branch_line}
 esphome:
   name: {quote(name)}

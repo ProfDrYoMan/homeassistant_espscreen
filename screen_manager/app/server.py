@@ -23,7 +23,9 @@ import claude_skill
 import screen_hang
 import screen_labels
 import screen_saver
+import saver_photos
 import feedback
+import build_server
 from build_queue import BuildQueue
 from firmware import Firmware
 import ha_pairing
@@ -31,12 +33,15 @@ import catalogue
 import ha_catalogue
 import light_effects
 import light_groups
+import cover_groups
 import media_library
+import vacuum_card
 import speakers
 import map_card
 import energy_flow
 import plugin_pictures
 import map_tiles
+import valetudo_map
 import tile_icons
 from updates import Updater
 import core
@@ -46,7 +51,7 @@ import plugins
 from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType, web
 from core import alarm_extras, lock_extras, ALERT_EVENT, board_of, BROADCAST_EVENTS, BROADCAST_SHOW, BUILTIN, CAMERA_DOMAINS, entity_id, SETTINGS_BESIDE_BLOCK, TILE_EVENTS, TILE_RESULT_EVENT, layout_snapshot, match_screen, HEADER_MIN_FIRMWARE, NAME_TILE_SETTINGS, TRANSPORT_MIN_FIRMWARE, alert_action, alert_camera, alert_choice, alert_data, choice_service, ALERT_CHOICE_ACTION, ALERT_CHOICE_MIN_FIRMWARE, parse_firmware, alert_reference, alert_screen_choice, alert_screen_names, alert_service, alert_targets, backgrounds, builtin_name, controls_catalogue, device_prefixes, discover, discover_screens, encode, entity_slug, extras, media_cover, media_extras, forecast_kinds, header_items, inbox_prefix, message_action, min_firmware, name_clash, packets, revision, screen_items, state_message, validate_header, validate_layout, validate_settings
 from core import ENERGY_TILE, MAP_TILE_MIN_FIRMWARE, WEATHER_WEEK, calibrate_entity, can_standby, dimmable, SETTING_ENTITIES, SETTING_RULES, STANDBY_KEYS, setting_action, setting_entities, setting_from_state, state_word
-from core import BAR_CARDS_FEATURE, BOARD_KEYS, has_battery, is_key, drawn_controls, FAVORITE_KINDS, SCREENSAVER_MIN_FIRMWARE, short, plugin_tile
+from core import BAR_CARDS_FEATURE, BOARD_KEYS, has_battery, has_module, is_key, drawn_controls, FAVORITE_KINDS, SCREENSAVER_MIN_FIRMWARE, short, plugin_tile
 from core import (FIRMWARE_MAX_BAR_ITEMS, FIRMWARE_MAX_PAGES, FIRMWARE_MAX_TILES, Grid, page_target, PAGE_TILE_REPEAT_MIN_FIRMWARE, ENTITY_REPEAT_MIN_FIRMWARE, ROTATION_MIN_FIRMWARE, SHAPES, firmware_features, grid_of, orientation_at,
                   packed_slots, run_tile_event, screen_firmware, shape_of, turns_of, update_in_tessera, version_text)
 import header_bar
@@ -71,7 +76,7 @@ def row_icon(eid, state, attrs, entry):
 
 LOG = logging.getLogger('screen_manager')
 
-REGISTRY_EVENTS = ('entity_registry_updated', 'device_registry_updated', 'area_registry_updated')
+REGISTRY_EVENTS = ('entity_registry_updated', 'device_registry_updated', 'area_registry_updated', 'floor_registry_updated')
 # Keepalive cadence. Firmware 0.2.33+ gets a small ping carrying the layout revision; every
 # layout message declares this number, so the firmware sizes its feed watchdog from it
 # (firmware 0.2.22+). Firmware before 0.2.33 still gets the whole layout every round.
@@ -190,7 +195,7 @@ class HomeAssistant:
         self.next_id = 0
         self.pending = {}
         self.states = {}
-        self.registry, self.devices, self.areas = [], [], []
+        self.registry, self.devices, self.areas, self.floors = [], [], [], []
         self.online = False
         self.changed = asyncio.Event()
         self.state_events = preview_events.Changes()
@@ -214,6 +219,9 @@ class HomeAssistant:
         self.language_of = lambda: 'en'
         self.config_stale = False
         self.on_config = lambda: None
+        # Home Assistant's time zone changed (a screen in a van that crosses one): the manager resyncs the
+        # screens' clocks, which Home Assistant's ESPHome integration only tells a screen when it connects.
+        self.on_time_zone = lambda: None
         # (event type, data) of alert events for every screen, for Manager.alert_loop.
         self.broadcasts = asyncio.Queue()
         # (event type, data) of tile events (app 0.2.51+), for Manager.tile_loop.
@@ -375,6 +383,11 @@ class HomeAssistant:
     async def registries(self):
         self.registry, self.devices, self.areas = await asyncio.gather(
             self.request('config/entity_registry/list'), self.request('config/device_registry/list'), self.request('config/area_registry/list'))
+        # The floors, in Home Assistant's order (a vacuum card groups its rooms by them, as Home Assistant's own view does).
+        try:
+            self.floors = await self.request('config/floor_registry/list') or []
+        except Exception:  # noqa: BLE001 - a Home Assistant without floors: the rooms stand in one group
+            self.floors = []
 
     async def actions_blocked(self):
         """The devices that may not perform Home Assistant actions (app 0.4.63): the ESPHome integration keeps that off
@@ -447,13 +460,17 @@ class HomeAssistant:
         try:
             config = await self.request('get_config')
             self.units = config.get('unit_system') or {}
-            self.time_zone = ZoneInfo(config.get('time_zone') or 'UTC')
+            zone = ZoneInfo(config.get('time_zone') or 'UTC')
+            moved = isinstance(self.time_zone, ZoneInfo) and self.time_zone.key != zone.key
+            self.time_zone = zone
             self.location_name = config.get('location_name') if isinstance(config.get('location_name'), str) else ''
             language = config.get('language')
             changed = isinstance(language, str) and language != self.ha_language
             self.ha_language = language if isinstance(language, str) else self.ha_language
             if changed:
                 self.on_config()
+            if moved:
+                self.on_time_zone()
         except (Refused, TimeoutError, ConnectionError, ValueError, TypeError, AttributeError, KeyError):
             self.time_zone = self.time_zone or timezone.utc
 
@@ -667,7 +684,8 @@ class HomeAssistant:
                 raw += chunk
                 if len(raw) > camera_feed.MAX_SNAPSHOT_BYTES:
                     raise ValueError('image too large')
-            return bytes(raw)
+        # A Valetudo robot's map camera hands out a placeholder with the map inside: the app draws that map, once per map.
+        return await valetudo_map.prepared(bytes(raw))
 
     def media_picture(self, entity):
         """The address of a media player's cover as its state carries it right now (core.media_cover: Home Assistant's
@@ -749,6 +767,59 @@ class HomeAssistant:
                     raise ValueError('picture too large')
             return bytes(raw)
 
+    async def media_file(self, address):
+        """A photo of the screensaver's folder (saver_photos.py), at the address Home Assistant's own
+        `media_source/resolve_media` named for it: a path of Home Assistant (/media/..., an integration's own view such as
+        Immich's) with the app's token, or a public address on the internet; never a private one, never a redirect."""
+        root = self.base[:-4] if self.base.endswith('/api') else self.base
+        options = {}
+        if address.startswith('/'):
+            parsed = urlsplit(address)
+            if parsed.netloc or '..' in parsed.path or address.startswith('//'):
+                raise ValueError('unsafe photo address')
+            url, headers = f'{root}{address}', {'Authorization': 'Bearer ' + self.token}
+            # Under the Supervisor its proxy passes /api/ alone, and a media source serves its files elsewhere
+            # (/media/local/..., /immich/...): the photo comes from Home Assistant itself, at the internal address it
+            # names, by the signature resolve_media gave the path (`authSig`), with no token of the app's.
+            if self.base == 'http://supervisor/core/api' and not parsed.path.startswith('/api/'):
+                direct = await self.internal_url()
+                if not direct or 'authSig=' not in (parsed.query or ''):
+                    raise ValueError('no way to Home Assistant for this photo')
+                url, headers = f'{direct}{address}', {}
+                # A home on https with its own certificate: the request carries no secret (the signature is the
+                # photo's own, from Home Assistant), so the certificate is not checked here, as a browser in the
+                # house would need telling to.
+                if direct.startswith('https://'):
+                    options['ssl'] = False
+        elif address.startswith(('http://', 'https://')):
+            if not await self._allow_media_url(address):
+                raise ValueError('unsafe photo address')
+            url, headers = address, {}
+        else:
+            raise ValueError('unknown photo address')
+        async with self.session.get(url, headers=headers, timeout=ClientTimeout(total=saver_photos.FETCH_SECONDS),
+                                    allow_redirects=False, **options) as response:
+            response.raise_for_status()
+            if (response.content_length or 0) > saver_photos.MAX_PHOTO_BYTES:
+                raise ValueError('photo too large')
+            raw = bytearray()
+            async for chunk in response.content.iter_chunked(65536):
+                raw += chunk
+                if len(raw) > saver_photos.MAX_PHOTO_BYTES:
+                    raise ValueError('photo too large')
+            return bytes(raw)
+
+    async def internal_url(self):
+        """Home Assistant's own internal address (websocket network/url, its Network settings), without a trailing slash,
+        or '' when it has none; asked once."""
+        if getattr(self, '_internal_url', None) is None:
+            try:
+                urls = await self.request('network/url')
+                self._internal_url = str((urls or {}).get('internal') or '').rstrip('/')
+            except Exception:  # noqa: BLE001 - an older Home Assistant, or no rights: the proxy only
+                self._internal_url = ''
+        return self._internal_url
+
     async def browse_image(self, entity, picture):
         """A thumbnail of a player's library (app 0.4.42): a public address on the internet (Spotify's), or Home
         Assistant's own proxy for that player's library (Sonos, Music Assistant); never a private address, never a
@@ -791,6 +862,10 @@ class HomeAssistant:
         """Home Assistant's ESPHome integrations, by their entry id: the entry behind each screen."""
         entries = await self.request('config_entries/get', domain='esphome')
         return {entry['entry_id']: entry for entry in entries or [] if isinstance(entry, dict) and entry.get('entry_id')}
+
+    async def reload_entry(self, entry_id):
+        """Load one integration again, as its Reload in Home Assistant's menu does: an ESPHome screen connects anew."""
+        await self.call_service('homeassistant', 'reload_config_entry', {'entry_id': entry_id})
 
     async def flows(self):
         """The config flows Home Assistant has under way, the devices under "Discovered" among them."""
@@ -933,6 +1008,8 @@ class Manager:
         self.firmware = Firmware(os.environ.get("ESPHOME_CONFIG", "/homeassistant/esphome"), self.path.parent)
         # The app's one build line (docs/BUILDS.md): updates, plugin builds, New screen and Firmware & USB wait in it.
         self.build_queue = self.firmware.builds = BuildQueue(self)
+        # The build server builds go to first when it is on (build_server.py, docs/BUILDS.md "On a build server").
+        self.build_server = self.firmware.server = build_server.BuildServer(self.path.parent, self.notify)
         # Plugins (docs/PLUGINS.md): which exist, which each screen runs, their files and their tiles' data.
         self.plugins = plugins.Plugins(self, self.path.parent, self.firmware.root)
         self.updates = Updater(self, self.path.parent / 'updates.json')
@@ -950,11 +1027,18 @@ class Manager:
         self.savers = screen_saver.ScreenSavers(self.path.parent / 'screensavers.json')
         self.saver_sent = {}
         self.saver_shown = {}  # the player each screen's screensaver shows, by inbox
+        # The photos step (app 0.4.89, saver_photos.py): a folder of Home Assistant's media, walked per screen.
+        self.photos = saver_photos.Photos(lambda kind, **data: self.ha.request(kind, **data),
+                                          lambda address: self.ha.media_file(address))
+        self.photos.changed = lambda: self.ha.changed.set()
+        self.photo_links = {}  # inbox -> (mark, box, fit, token) of the photo link a screen got last
         # Settings -> Language & region (app 0.2.90): the language, clock and numbers of every screen.
         self.region = Region(self.path.parent / 'language.json', ha_language=lambda: getattr(self.ha, 'ha_language', None))
         self.ha.language_of = self.region.language
         self.firmware.language = self.region.language
         self.ha.on_config = self.language_changed
+        self.ha.on_time_zone = self.time_zone_changed
+        self._clock_resync = None
         self.set_screens()
         self.skill_dir = claude_skill.skill_dir()
         self._registry_source, self._registry_index = None, {}
@@ -1472,6 +1556,8 @@ class Manager:
                 if self._pairing_trouble != type(error).__name__:
                     LOG.info('Adding new screens to Home Assistant waits (%s)', type(error).__name__)
                 self._pairing_trouble = type(error).__name__
+            except Exception:   # a slip in one round never ends the app: every loop under main()'s gather keeps going
+                LOG.exception('Adding new screens to Home Assistant failed this round')
 
     def layout_sensors(self, screen):
         """The layout sensors this app published for a screen (publish_layouts), so they go with it.
@@ -1826,6 +1912,8 @@ class Manager:
                 await self.answer_options(request)
             except (ClientError, ConnectionError, TimeoutError, OSError, ValueError) as error:
                 LOG.info('No options for %s (%s)', request.get('entity') if isinstance(request, dict) else '?', type(error).__name__)
+            except Exception:   # one screen's request never ends the app
+                LOG.exception('No options for %s', request.get('entity') if isinstance(request, dict) else '?')
 
     async def plugin_loop(self):
         """Answer the plugins on the screens (docs/PLUGINS.md): a Home Assistant command their manifest names."""
@@ -2352,9 +2440,13 @@ class Manager:
             entity = (tile.get('options') or {}).get('plugin_entity')
             return (entity,) if entity else ()
         if tile['entity'].startswith('vacuum.'):
-            return tuple(vacuum_related(tile['entity'], self.device_entries(tile['entity']), self.ha.states).values())
+            device = self.device_entries(tile['entity'])
+            return tuple(dict.fromkeys((*vacuum_related(tile['entity'], device, self.ha.states).values(),
+                                        *vacuum_card.related(tile['entity'], device, self.ha.states))))
         if tile['entity'].startswith('cover.'):
-            return tuple(cover_related(tile['entity'], self.device_entries(tile['entity']), self.ha.states).values())
+            # Its device's battery, and a group's covers (its page, firmware 0.57.0).
+            return (tuple(cover_related(tile['entity'], self.device_entries(tile['entity']), self.ha.states).values()) +
+                    tuple(cover_groups.cover_ids(tile['entity'], self.ha.states)))
         # A map (app 0.4.33) is drawn from everyone on it and the zones around them: a move or a zone's edit reaches
         # its movement mark only through this.
         if (tile.get('options') or {}).get('display') == 'map':
@@ -2543,6 +2635,23 @@ class Manager:
         self.ha.changed.set()
         self.notify()
 
+    def time_zone_changed(self):
+        """Home Assistant moved to another time zone. Its ESPHome integration reads the zone once, when it connects to a
+        screen, and answers every later time request with that one, so a screen would keep the old hour until Home
+        Assistant restarts. Each screen's integration is loaded again, and the screen takes the new zone as it connects."""
+        if self._clock_resync is None or self._clock_resync.done():
+            self._clock_resync = asyncio.get_running_loop().create_task(self.resync_clocks())
+
+    async def resync_clocks(self):
+        zone = getattr(self.ha.time_zone, 'key', self.ha.time_zone)
+        for screen in self.screens():
+            try:
+                entry = await self.entry_of(screen)
+                await self.ha.reload_entry(entry)
+                LOG.info('%s follows Home Assistant to the time zone %s', screen['name'], zone)
+            except (ValueError, ConnectionError, TimeoutError, ClientError) as error:
+                LOG.warning('%s keeps its time zone until it reconnects: %s', screen['name'], error)
+
     def write_languages(self):
         """Every paired screen's YAML says the language of its next build (the LANGUAGE substitution)."""
         language, profiles = self.region.language(), self.firmware.profile_names()
@@ -2584,6 +2693,8 @@ class Manager:
                 record['plugins'] = list(build.plugins['add'])
             if view['state'] == 'queued':
                 record['place'] = view['place']
+            # On the build server (build_server.py): its name and step, or why it builds here after all.
+            record.update({key: view[key] for key in ('where', 'server', 'remote', 'fallback') if view.get(key)})
             out[inbox] = record
         return out
 
@@ -2608,10 +2719,10 @@ class Manager:
     def watched_entities(self):
         """Entities whose state changes matter: tiles on any layout plus the screens' own diagnostics.
 
-        Cached per (registry, layouts, the lamps of the light groups on them): the first two are replaced as whole
-        objects when they change; a group's lamps live in its state."""
-        groups = tuple((tile['entity'], tuple(light_groups.lamp_ids(tile['entity'], self.ha.states)))
-                       for layout in self.layouts.values() for tile in layout['tiles'] if tile['entity'].startswith('light.'))
+        Cached per (registry, layouts, the lamps of the light groups and the covers of the cover groups on them): the first
+        two are replaced as whole objects when they change; a group's members live in its state."""
+        groups = tuple((tile['entity'], tuple(light_groups.lamp_ids(tile['entity'], self.ha.states) or cover_groups.cover_ids(tile['entity'], self.ha.states)))
+                       for layout in self.layouts.values() for tile in layout['tiles'] if tile['entity'].startswith(('light.', 'cover.')))
         # The speakers a player's menu lists change with what this app started and the libraries it read.
         media = (tuple(sorted(self.outputs.items())), tuple(sorted(e for e, known in self.accounts.items() if known[1])))
         savers = tuple(sorted(e for choice in self.savers.choices.values() for e in screen_saver.entities(choice, self.ha.states)))
@@ -2727,6 +2838,17 @@ class Manager:
                      icon_of=row_icon if light else None,device_name=self.device_name_of(tile['entity']) if light else None,week=week)
         if tile['entity'].startswith('vacuum.'):
             ha_catalogue.chip_words(extra,tile['entity'],self.ha.states,device,getattr(self.ha,'state_words',None))
+            # The card of the module (vacuum_card.py): its map, its rooms, its routines and why it stopped, to a screen
+            # that draws them (its hello says vacuum_card).
+            if features is not None and vacuum_card.FEATURE in features:
+                card=vacuum_card.payload(tile['entity'],self.ha.states,device,self.registry_index(),getattr(self.ha,'areas',None),
+                                         getattr(self.ha,'floors',None),getattr(self.ha,'state_words',None),self.device_name_of(tile['entity']),
+                                         lambda icon: tile_icons.GLYPHS.get(icon[4:]) if icon.startswith('mdi:') else None)
+                if card:
+                    extra={**(extra or {}),'vc':card}
+                    # The map read ahead, so the card that opens only waits for its own size (vacuum_map_warm).
+                    if isinstance(card.get('map'),dict):
+                        self.camera.vacuum_map_warm(card['map']['e'],card['map']['m'])
         if tile['entity'].startswith('calendar.'):
             extra = {**(extra or {}), 'cal': await self.calendar_extras(tile)}
         message=state_message(index,tile,states,extra,
@@ -2779,6 +2901,11 @@ class Manager:
             members=light_groups.lamps(tile['entity'],self.ha.states)
             if members:
                 message.setdefault('x',{})['lamps']=members
+        # A cover group's covers for its page (firmware 0.57.0), to a screen whose hello says group_covers.
+        if features and cover_groups.FEATURE in features and tile['entity'].startswith('cover.'):
+            members=cover_groups.covers(tile['entity'],self.ha.states)
+            if members:
+                message.setdefault('x',{})['covers']=members
         if tile['entity'].startswith('alarm_control_panel.'):
             for key,value in alarm_extras(state,entry).items():
                 message.setdefault('x',{})[key]=value
@@ -2792,7 +2919,7 @@ class Manager:
                 message.setdefault('x',{})['keys']=keys
         # A second line set to a value of this entity (app 0.2.105): the finished line, or seconds for a moment in
         # time. The other three settings live in the option itself, so the screen keeps drawing them without us.
-        for key,value in ha_catalogue.subtitle_message(tile,state).items():
+        for key,value in ha_catalogue.subtitle_message(tile,state,getattr(self.ha,'units',None),entry,getattr(self.ha,'state_words',None)).items():
             message.setdefault('x',{})[key]=value
         if tile['entity'].startswith('sensor.') and hasattr(self.ha,'history'):
             hours=tile.get('options',{}).get('history_hours',24)
@@ -3179,9 +3306,27 @@ class Manager:
         row = screen_saver.ITEMS_FEATURE in (getattr(sender, 'features', None) or ())
         # A player whose cover could not be fetched gives way to the next step (GitHub #229).
         broken = {entity for entity in screen_saver.players(choice) if self.camera.cover_broken(entity)}
-        return screen_saver.message(choice, self.ha.states, pictures, short, media_extras, self.player_ground, keys,
-                                    held=self.saver_shown.get(screen.get('id'), ''), bar=self.saver_item if row else None,
-                                    broken=broken)
+        # A face other than the digital clock, for a screen whose hello says it draws them (module clock_faces).
+        faces = screen_saver.FACES_FEATURE in (getattr(sender, 'features', None) or ())
+        # The photos step (app 0.4.89): only for a screen whose hello names it, and only while it may show.
+        photos = None
+        if pictures and screen_saver.PHOTOS_FEATURE in (getattr(sender, 'features', None) or ()):
+            wanted = choice.get('show') and 'photos' not in choice.get('off', ()) and choice['photos'].get('source')
+            photos = self.photos.state(screen.get('id'), choice['photos']) if wanted else {'ready': False}
+            if not wanted:
+                self.photos.forget(screen.get('id'))
+        message = screen_saver.message(choice, self.ha.states, pictures, short, media_extras, self.player_ground, keys,
+                                       held=self.saver_shown.get(screen.get('id'), ''), bar=self.saver_item if row else None,
+                                       broken=broken, faces=faces, photos=photos, plugins=self.saver_plugins(screen, choice))
+        # A plugin's face or step gets its options with the manifest's defaults, as a plugin tile does (plugin API 0.14).
+        if 'pf' in message and core.plugins_enabled():
+            message['pf']['o'] = self.plugins.saver_values(screen.get('id'), message['pf']['p'], message['pf']['o'])
+        return message
+
+    def saver_plugins(self, screen, choice):
+        """The plugins' faces and steps a screen's screensaver may show (plugin API 0.14), or None for a screen without
+        any: {'faces': {key: step}, 'steps': {key: what the step draws from, None while it has nothing}}."""
+        return self.plugins.saver_plugins(screen, choice, self.ha.states) if core.plugins_enabled() else None
 
     def saver_item(self, item):
         """One of the clock's entity items as the top bar sends it (header_bar.entity_item)."""
@@ -3258,7 +3403,7 @@ class Manager:
             await self.library_art(inbox, screen, request)
             return
         # The screensaver's picture (app 0.4.48, firmware 0.29.0+): the screen's whole box, darkened, of its own choice.
-        if request.get('saver') in ('media', 'camera'):
+        if request.get('saver') in ('media', 'camera', 'photos'):
             await self.answer_saver(inbox, screen, request)
             return
         # The pictures of a plugin tile's places (plugin API 0.10): one atlas for all of them.
@@ -3268,6 +3413,10 @@ class Manager:
         # The live pictures of a page's camera tiles (app 0.2.91, firmware 0.2.77+): one strip for all of them.
         if 'tiles' in request:
             await self.answer_live(inbox, screen, request)
+            return
+        # A vacuum card's map (vacuum_card.py, vacuum_map.py), at the size and on the colour the card asks for.
+        if 'vmap' in request:
+            await self.answer_vacuum_map(inbox, screen, request)
             return
         # A map tapped open over the whole glass (app 0.4.36, firmware 0.21.0+), as a camera opens.
         if camera_feed.map_supported(entity) and not request.get('size'):
@@ -3294,10 +3443,34 @@ class Manager:
         await self.send_auxiliary(inbox, message, action, request)
         LOG.info('%s %s on %s%s', 'Cover of' if cover else 'Camera', entity, screen['name'], '' if message['u'] else ': no image')
 
+    async def answer_vacuum_map(self, inbox, screen, request):
+        """A link to the map of a vacuum on the screen's layout, cleaned up and in the screen's look (vacuum_map.py), at
+        exactly the box the card asks for; an empty link when the robot has no map that can be had."""
+        entity = request.get('entity')
+        asked = camera_feed.vacuum_map_request(request)
+        if not asked or not isinstance(entity, str) or not entity.startswith('vacuum.') or not screen or not screen.get('online') \
+                or not camera_feed.can_show(screen) or not self.camera_allowed(inbox, entity):
+            return
+        action = self.transport(inbox, screen)
+        if not action:
+            return
+        width, height, background = asked
+        found = vacuum_card.map_entity(entity, self.device_entries(entity), self.ha.states)
+        url = ''
+        base = await camera_feed.base_url(self.ha.request)
+        dark = camera_feed.live_dark(request)
+        if base and found and await self.camera.vacuum_map(found['e'], found['m'], (width, height), background, dark):
+            url = f"{base}/camera/{self.camera.link(entity, (width, height), vacuum=(found['e'], found['m'], background, dark))}.bmp"
+        await self.send_auxiliary(inbox, {'v': 1, 'op': 'camera', 't': 'vmap', 'e': entity, 'u': url}, action, request)
+        LOG.info('Map of %s on %s%s', entity, screen['name'], '' if url else ': none')
+
     async def answer_saver(self, inbox, screen, request):
         """A link to the screensaver's picture (camera_feed.encode_saver) of the player or camera this screen's
         screensaver follows, at the screen's full box; an empty link while there is none."""
         kind, entity = request.get('saver'), request.get('entity')
+        if kind == 'photos':
+            await self.answer_photo(inbox, screen, request)
+            return
         if not screen or not screen.get('online') or entity not in self.saver_entities(inbox):
             return
         if (kind == 'media') != (entity.split('.')[0] == 'media_player'):
@@ -3324,6 +3497,49 @@ class Manager:
         if not url and kind == 'media':
             # The cover did not come: a pass right away, which gives the glass to the next step (cover_broken).
             self.ha.changed.set()
+
+    async def answer_photo(self, inbox, screen, request):
+        """A link to the photo this screen's photos step shows now (camera_feed.encode_photo), at the screen's full box: a
+        still link, made once per photo and size. No answer while the photo is not here: the screen asks again."""
+        if not screen or not screen.get('online') or request.get('entity') != screen_saver.PHOTOS_ENTITY:
+            return
+        box, action = camera_feed.box(screen, 'full', camera_feed.picture_cap(request)), self.transport(inbox, screen)
+        if not box or not action:
+            return
+        choice = self.savers.get(screen.get('device_id')) if screen.get('device_id') else dict(screen_saver.DEFAULT)
+        fit = choice['photos'].get('fit', 'auto')
+        # A photo that moves is cut a little larger, where that fits the screen's picture memory (picture_motion.h).
+        moving = camera_feed.motion_box(tuple(box), camera_feed.picture_cap(request)) \
+            if choice['photos'].get('motion') == 'slow' else None
+        raw = self.photos.raw(inbox)
+        if raw is None:
+            return
+        state = self.photos.state(inbox, choice['photos'])
+        key = (state.get('mark'), tuple(box), fit, moving)
+        made = self.photo_links.get(inbox)
+        token = made[1] if made and made[0] == key and made[1] in self.camera.links else None
+        if token is None:
+            try:
+                image = await asyncio.get_running_loop().run_in_executor(None, camera_feed.encode_photo, raw, tuple(box), fit, moving)
+            except Exception as error:  # noqa: BLE001 - a photo that cannot be read is passed over at the next turn
+                LOG.info('Screensaver photo on %s cannot be read (%s)', screen['name'], type(error).__name__)
+                return
+            token = self.camera.link(screen_saver.PHOTOS_ENTITY, tuple(moving or box), still=image)
+            self.photo_links[inbox] = (key, token)
+        base = await camera_feed.base_url(self.ha.request)
+        if not base:
+            return
+        url = f'{base}/camera/{token}.bmp'
+        await self.send_auxiliary(inbox, {'v': 1, 'op': 'camera', 't': 'saver', 'e': screen_saver.PHOTOS_ENTITY, 'u': url},
+                                  action, request)
+        LOG.info('Screensaver photo on %s', screen['name'])
+
+    async def photo_loop(self):
+        """A pass when a screen's next photo is due (the passes otherwise follow Home Assistant's changes)."""
+        while True:
+            await asyncio.sleep(2)
+            if self.photos.due():
+                self.ha.changed.set()
 
     async def answer_live(self, inbox, screen, request):
         """The strip for a page's live camera tiles: every tile the screen names must be a camera tile of its layout
@@ -3426,7 +3642,8 @@ class Manager:
 
     async def answer_plugin_pictures(self, inbox, screen, request):
         """The pictures of a plugin tile's places (plugin API 0.10, plugin_pictures): the tile must be a plugin tile of
-        the screen's layout whose manifest gives it places, and every address one the manifest allows. The answer is a
+        the screen's layout whose manifest gives it places, and every address one the manifest allows. A card's (0.13)
+        is a card of a plugin the screen runs whose manifest gives it places. The answer is a
         link to one picture of all its frames, as a camera tile gets; an empty link says there is none now (the screen
         asks again later, each time after a longer while)."""
         if not screen or not screen.get('online') or not camera_feed.can_show_live(screen):
@@ -3436,19 +3653,40 @@ class Manager:
         action = self.transport(inbox, screen) if question else None
         if not action:
             return
-        answer = {'v': 1, 'op': 'camera', 't': 'live', 'e': question.entity, 'u': ''}
         placed = self.layouts.get(inbox, {}).get('tiles', [])
-        if not (question.index < len(placed) and placed[question.index]['entity'] == question.entity):
-            LOG.info('Pictures for %s: not tile %d of %s', question.entity, question.index, screen['name'])
-            return
-        entry = self.plugins.known(question.plugin, inbox)
-        kind = entry.tile(question.tile) if entry else None
-        problem = plugin_pictures.refused(question, entry.manifest if entry else None, kind)
+        of_entity = None
+        if question.saver:
+            # A screensaver of a plugin (plugin API 0.14): one this screen runs and shows, answered as "psaver". Home
+            # Assistant's own pictures for a step of an entity: the entity chosen for it.
+            answer = {'v': 1, 'op': 'camera', 't': 'psaver', 'e': question.entity, 'u': ''}
+            entry, kind = self.plugins.saver_kinds(inbox).get(question.entity, (None, None))
+            choice = self.savers.get(screen.get('device_id')) if screen.get('device_id') else {}
+            chosen = ((choice.get('plugins') or {}).get(question.entity) or {}).get('entity', '')
+            of_entity = bool(question.of) and question.of == chosen
+        elif question.card:
+            # A card over the page (plugin API 0.13): of a plugin this screen runs, answered as "pcard". Home
+            # Assistant's own pictures only for a card shown for an entity of the screen's layout.
+            answer = {'v': 1, 'op': 'camera', 't': 'pcard', 'e': question.entity, 'u': ''}
+            entry = self.plugins.known(question.plugin, inbox) if self.plugins.store.get(inbox, question.plugin) else None
+            kind = entry.card(question.tile) if entry else None
+            of_entity = bool(question.of) and any(question.of in (tile['entity'], (tile.get('options') or {}).get('plugin_entity'))
+                                                  for tile in placed)
+        else:
+            answer = {'v': 1, 'op': 'camera', 't': 'live', 'e': question.entity, 'u': ''}
+            if not (question.index < len(placed) and placed[question.index]['entity'] == question.entity):
+                LOG.info('Pictures for %s: not tile %d of %s', question.entity, question.index, screen['name'])
+                return
+            entry = self.plugins.known(question.plugin, inbox)
+            kind = entry.tile(question.tile) if entry else None
+        problem = plugin_pictures.refused(question, entry.manifest if entry else None, kind, of_entity)
         if problem:
             LOG.info('Pictures for %s on %s refused: %s', question.entity, screen['name'], problem)
             await self.send_auxiliary(inbox, answer, action, request)
             return
-        raws = await asyncio.gather(*(self.plugins.pictures.fetch(url, entry.manifest, kind) for url in question.sources))
+        raws = await asyncio.gather(*(self.saver_picture(inbox, screen, kind)
+                                      if url == plugin_pictures.SAVER_PICTURE else
+                                      self.plugins.pictures.fetch(url, entry.manifest, kind, of_entity)
+                                      for url in question.sources))
         base = await camera_feed.base_url(self.ha.request)
         if not base:
             LOG.warning('Plugin pictures: no address for this app on the LAN; set SCREEN_CAMERA_URL')
@@ -3464,6 +3702,17 @@ class Manager:
         await self.send_auxiliary(inbox, answer, action, request)
         LOG.info('Pictures of %s on %s: %d of %d%s', question.entity, screen['name'], sum(raw is not None for raw in raws),
                  len(raws), '' if answer['u'] else ', no picture')
+
+    async def saver_picture(self, inbox, screen, kind):
+        """The picture of the step a plugin's screensaver face draws (plugin API 0.14, 'saver:picture'): the cover of the
+        player the music step shows, or the photo of the photos step; None while there is none."""
+        if kind.get('step') == 'photos':
+            return self.photos.raw(inbox)
+        if kind.get('step') == 'media':
+            entity = self.saver_shown.get(inbox, '')
+            if entity:
+                return await self.camera.cover_raw(entity)
+        return None
 
     async def thumbnail(self, entity, url, title=''):
         """A picture of a player's library, fetched once and kept a while (the library's covers and the favourites'); None
@@ -3776,10 +4025,17 @@ class Manager:
         # Firmware 0.2.65+ takes a navigation tile on several pages, 0.16.0+ any entity on several tiles; an older
         # screen keeps one per page a navigation tile goes to, and one of everything else.
         firmware = self.firmware_version(inbox, screen) or (0, 0, 0)
-        layout, tile = run_tile_event(self.layouts.get(inbox) or {'title': screen['name'], 'tiles': []}, TILE_EVENTS[event_type], data,
-                                      firmware >= PAGE_TILE_REPEAT_MIN_FIRMWARE, self.layout_grid(inbox, screen).for_firmware(firmware),
-                                      firmware >= ENTITY_REPEAT_MIN_FIRMWARE)
-        await self.check_supported(inbox, layout)
+        for _ in range(3):
+            # check_supported waits on Home Assistant for the capabilities of the entity. A save of the editor's that lands
+            # meanwhile makes a new revision, and a layout laid over the one before it would undo that save without a
+            # word: start again from what is there now. Two saves in a row within one wait is as rare as it gets.
+            before = self.store.get(inbox)   # a copy of the record as stored: a save meanwhile shows as another one
+            layout, tile = run_tile_event(self.layouts.get(inbox) or {'title': screen['name'], 'tiles': []}, TILE_EVENTS[event_type], data,
+                                          firmware >= PAGE_TILE_REPEAT_MIN_FIRMWARE, self.layout_grid(inbox, screen).for_firmware(firmware),
+                                          firmware >= ENTITY_REPEAT_MIN_FIRMWARE)
+            await self.check_supported(inbox, layout)
+            if self.store.get(inbox) == before:
+                break
         record = self.store.get(inbox)
         if record and record['format'] == PAGE_FORMAT:
             self.save_pages(inbox, {'format': PAGE_FORMAT, 'revision': record['revision'], 'layout': replace_tiles(record, layout)})
@@ -3894,7 +4150,10 @@ def create_app(manager, development=False):
             return web.json_response({'error': t('addon.errors.ha_unreachable')}, status=503)
         except web.HTTPRequestEntityTooLarge:
             return web.json_response({'error': t('addon.errors.too_large')}, status=413)
-        except (TypeError, KeyError):
+        except (TypeError, KeyError) as error:
+            # Input the handler could not read, or a slip of the app's own that looks just like it: the page gets the
+            # one sentence either way, and the log the traceback, so a bug is not taken for bad input.
+            LOG.warning('%s %s: %s (%s)', request.method, request.path, type(error).__name__, error, exc_info=True)
             return web.json_response({'error': t('addon.errors.invalid_input')}, status=400)
         if response.prepared:
             return response  # streamed (SSE) responses set their headers before prepare()
@@ -3969,7 +4228,12 @@ def create_app(manager, development=False):
             # draws pictures (else the clock alone) and whether it goes into standby at all.
             screen['screensaver'] = {**manager.savers.get(screen.get('device_id')),
                                      'ready': (manager.firmware_version(screen['id'], screen) or (0, 0, 0)) >= SCREENSAVER_MIN_FIRMWARE,
-                                     'pictures': bool(camera_feed.box(screen, 'full')), 'standby': can_standby(screen)}
+                                     'pictures': bool(camera_feed.box(screen, 'full')), 'standby': can_standby(screen),
+                                     # The clock's faces where the board has their module (docs/MODULES.md).
+                                     'faces': has_module(screen, screen_saver.MODULE),
+                                     # The photos step where the screen's firmware takes it (app 0.4.89); `photos` is the
+                                     # choice's own folder, pace, order and fit.
+                                     'photos_step': screen_saver.PHOTOS_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ())}
             # The delivery and our own word for a screen that reports nothing, in the editor's language (app 0.2.90).
             status = manager.status.get(screen['id'])
             word = PAGE_DELIVERY_WORDS.get(status) if isinstance(status, str) else None
@@ -4011,6 +4275,8 @@ def create_app(manager, development=False):
             # And whether it has a battery for the top bar (firmware 0.41.0): what its hello said, else its board.
             screen['battery'] = manager.has_battery(screen)
             screen['live_camera'] = manager.live_camera(screen)
+            # The Dock (docs/MODULES.md): the editor offers "Show in Dock" on a page of a board that has it.
+            screen['dock'] = has_module(screen, 'dock')
             # Whether the board draws pictures (camera tiles, an alert's snapshot, an album cover): the boards with
             # memory for them say so with their camera sizes (boards.json); the firmware that draws them is a
             # separate question the editor asks by version, so an older screen still learns what an update brings.
@@ -4044,6 +4310,8 @@ def create_app(manager, development=False):
                 # on its way (Manager.builds), from one look at the line, so the editor has one source for every build.
                 'line': manager.build_queue.payload(),
                 'builds': manager.builds(screens, profiles),
+                # The build server: paired or not, there or not, on or off, what it builds (build_server.py).
+                'build_server': manager.build_server.view(),
                 'language': manager.region.view()}
     async def seen_pending(payload):
         """Marks each screen that waits for pairing that Home Assistant has found on the network (`seen`); the rest is
@@ -4207,6 +4475,18 @@ def create_app(manager, development=False):
         label = manager.labels.set(screen['device_id'], data['name'])
         manager.notify()
         return web.json_response({'name': label or screen['name']})
+    async def browse_photos(request):
+        """One level of Home Assistant's media sources for the photos step's folder (app 0.4.89): the folders in it and
+        how many photos it holds right there."""
+        content_id = request.query.get('id', '')
+        if content_id and not screen_saver.MEDIA_SOURCE.fullmatch(content_id):
+            return web.json_response({'error': t('addon.errors.pages.fields')}, status=400)
+        try:
+            return web.json_response(await manager.photos.browse(content_id))
+        except Exception as error:  # noqa: BLE001 - Home Assistant could not browse it
+            LOG.info('Photos folder cannot be browsed (%s)', type(error).__name__)
+            return web.json_response({'id': content_id, 'title': '', 'folders': [], 'photos': 0, 'failed': True})
+
     async def change_screensaver(request):
         """The screensaver of one screen (app 0.4.48): the whole choice at once; the screen hears of it on the next pass."""
         data = await request.json()
@@ -4473,7 +4753,10 @@ def create_app(manager, development=False):
             word = (durations.text(message['state'], (state.get('attributes') or {}).get('unit_of_measurement'), i18n.screen_language())
                     if eid.startswith('sensor.') and durations.is_duration(state.get('attributes')) else None)
             result[eid] = {'state': message['state'], 'a': attributes,
-                           'word': word or state_word(eid, state.get('state'), state.get('attributes'), entry, getattr(manager.ha, 'state_words', None))}
+                           'word': word or state_word(eid, state.get('state'), state.get('attributes'), entry, getattr(manager.ha, 'state_words', None)),
+                           # A tile's second line set to one of its values, written as the screen gets it (ha_catalogue).
+                           'sub': ha_catalogue.subtitle_lines(eid, state, getattr(manager.ha, 'units', None), entry,
+                                                              getattr(manager.ha, 'state_words', None))}
         return web.json_response({'states': result})
     async def firmware_preview(request):
         """The device's normal packets, for an unsaved layout. No device registration or HA actions."""
@@ -4700,7 +4983,50 @@ def create_app(manager, development=False):
         except ValueError as error:
             raise ValueError(t(FEEDBACK_ERRORS.get(str(error), 'addon.errors.invalid_input'))) from None
         return web.json_response({'feedback': store.view(device)})
+    # ---- The build server (build_server.py, docs/BUILDS.md "On a build server") ----
+    def build_server_refused(error):
+        return ValueError(t(f'addon.errors.build_server.{error.args[0]}'))
+    async def build_server_start(app):
+        manager.build_server.start()
+    app.on_startup.append(build_server_start)
+    async def build_server_view(request):
+        return web.json_response(manager.build_server.view())
+    async def build_server_preview(request):
+        """The server at an address: its name, its ESPHome and its fingerprint, for the person to compare."""
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError(t('addon.errors.invalid_input'))
+        try:
+            return web.json_response(await manager.build_server.preview(data.get('host'), data.get('port')))
+        except build_server.Refused as error:
+            raise build_server_refused(error) from None
+    async def build_server_pair(request):
+        """Ask the previewed server to let this app in, with the one-time key a headless server prints."""
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError(t('addon.errors.invalid_input'))
+        try:
+            return web.json_response(await manager.build_server.pair(data.get('host'), data.get('port'), data.get('key')))
+        except build_server.Refused as error:
+            raise build_server_refused(error) from None
+    async def build_server_change(request):
+        """On or off: whether builds go to the server first."""
+        data = await request.json()
+        if not isinstance(data, dict) or not isinstance(data.get('enabled'), bool):
+            raise ValueError(t('addon.errors.invalid_input'))
+        try:
+            return web.json_response(manager.build_server.set_enabled(data['enabled']))
+        except build_server.Refused as error:
+            raise build_server_refused(error) from None
+    async def build_server_forget(request):
+        return web.json_response(await manager.build_server.forget())
+    app.router.add_get('/api/build-server', build_server_view)
+    app.router.add_post('/api/build-server/preview', build_server_preview)
+    app.router.add_post('/api/build-server/pair', build_server_pair)
+    app.router.add_put('/api/build-server', build_server_change)
+    app.router.add_delete('/api/build-server', build_server_forget)
     async def shutdown(app):
+        await manager.build_server.stop()
         await manager.build_queue.close()
         task = manager.firmware.task
         if task and not task.done():
@@ -4747,11 +5073,20 @@ def create_app(manager, development=False):
             return web.json_response(manager.plugins.set_secret(request.match_info['plugin'], request.match_info['input'],
                                                                 data.get('value')))
 
-        # `_screen`: the screen the inspector shows (no option id starts with _), whose own plugin of that id answers.
+        # The tile's options as they are kept (plugin API 0.12: typed, a list as a list), in a body so no type is lost on
+        # the way; `screen`: the screen the inspector shows, whose own plugin of that id answers; `search`: what the
+        # person typed in a searched list.
+        async def plugin_body(request):
+            data = await request.json()
+            if not isinstance(data, dict) or not isinstance(data.get('options', {}), dict):
+                raise ValueError(t('addon.errors.plugins.request'))
+            screen = data.get('screen')
+            return data.get('options') or {}, screen if isinstance(screen, str) and screen else None, data
+
         async def plugins_choices(request):
-            values = {key: value for key, value in request.query.items() if key not in ('language', '_screen')}
-            return web.json_response(await manager.plugins.choices(request.match_info['plugin'], request.match_info['fetch'], values,
-                                                                   request.query.get('_screen')))
+            options, screen, data = await plugin_body(request)
+            return web.json_response(await manager.plugins.choices(request.match_info['plugin'], request.match_info['fetch'],
+                                                                   options, screen, data.get('search') or ''))
 
         async def plugins_plan(request):
             return web.json_response(manager.plugins.plan(request.match_info['inbox'], await request.json(),
@@ -4768,15 +5103,16 @@ def create_app(manager, development=False):
         app.router.add_post('/api/screens/{inbox}/plugins', plugins_apply)
         app.router.add_get('/api/screens/{inbox}/plugins/file', plugins_file)
         app.router.add_put('/api/plugins/{plugin}/secrets/{input}', plugins_secret)
-        app.router.add_get('/api/plugins/{plugin}/choices/{fetch}', plugins_choices)
+        app.router.add_post('/api/plugins/{plugin}/choices/{fetch}', plugins_choices)
         app.router.add_post('/api/screens/{inbox}/plugins/plan', plugins_plan)
         app.router.add_put('/api/plugins/{plugin}/like', plugins_like)
 
         async def plugins_preview(request):
-            options = {key: value for key, value in request.query.items() if key not in ('language', '_screen')}
+            options, screen, data = await plugin_body(request)
+            entity = data.get('entity') if isinstance(data.get('entity'), str) else None
             return web.json_response(await manager.plugins.preview(request.match_info['plugin'], request.match_info['tile'], options,
-                                                                   request.query.get('_screen')))
-        app.router.add_get('/api/plugins/{plugin}/preview/{tile}', plugins_preview)
+                                                                   screen, entity))
+        app.router.add_post('/api/plugins/{plugin}/preview/{tile}', plugins_preview)
 
         async def plugins_image(request):
             # A plugin's picture for the Plugins page (store.png), served by the app: the editor shows no picture of
@@ -4798,6 +5134,11 @@ def create_app(manager, development=False):
         async def plugins_settings(request):
             return web.json_response(manager.plugins.settings_for(request.match_info['inbox'], REQUEST_LANGUAGE.get()))
 
+        async def plugins_settings_events(request):
+            language = REQUEST_LANGUAGE.get()
+            return await entity_settings.stream(manager, request,
+                lambda: manager.plugins.settings_for(request.match_info['inbox'], language))
+
         async def plugins_setting(request):
             data = await request.json()
             if not isinstance(data, dict):
@@ -4805,10 +5146,16 @@ def create_app(manager, development=False):
             result = await manager.plugins.set_setting(request.match_info['inbox'], data.get('entity'), data.get('value'))
             return web.json_response(result)
         app.router.add_get('/api/screens/{inbox}/plugins/settings', plugins_settings)
+        app.router.add_get('/api/screens/{inbox}/plugins/settings/events', plugins_settings_events)
         app.router.add_post('/api/screens/{inbox}/plugins/settings', plugins_setting)
     # A board's extras under Screen settings (docs/SETTINGS.md, "A board's own settings"): for every screen, plugins or not.
     async def extras(request):
         return web.json_response(entity_settings.extras_for(manager, request.match_info['inbox'], REQUEST_LANGUAGE.get()))
+
+    async def extras_events(request):
+        language = REQUEST_LANGUAGE.get()
+        return await entity_settings.stream(manager, request,
+            lambda: entity_settings.extras_for(manager, request.match_info['inbox'], language))
 
     async def extra(request):
         data = await request.json()
@@ -4838,6 +5185,7 @@ def create_app(manager, development=False):
         return web.json_response({'cal': card, 'places': [place for place, _ in places.most_common(24)], 'bookable': sorted(bookable)})
     app.router.add_post('/api/calendar/preview', calendar_preview)
     app.router.add_get('/api/screens/{inbox}/extras', extras)
+    app.router.add_get('/api/screens/{inbox}/extras/events', extras_events)
     app.router.add_post('/api/screens/{inbox}/extras', extra)
     app.router.add_get('/', index)
     app.router.add_get('/api/inventory', inventory)
@@ -4876,6 +5224,7 @@ def create_app(manager, development=False):
     app.router.add_put('/api/screens/{inbox}/name', rename_screen)
     app.router.add_put('/api/screens/{inbox}/settings', change_settings)
     app.router.add_put('/api/screens/{inbox}/screensaver', change_screensaver)
+    app.router.add_get('/api/screensaver/photos', browse_photos)
     app.router.add_post('/api/screens/{inbox}/feedback', feedback_action)
     app.router.add_static('/assets/', static / 'assets')
     return app
@@ -4934,7 +5283,7 @@ async def main():
         try:
             await asyncio.gather(ha.run(), manager.run(), manager.history_loop(), manager.updates.run(),
                                  manager.alert_loop(), manager.tile_loop(), manager.card_history_loop(), manager.camera_loop(), manager.card_options_loop(),
-                                 manager.media_loop(), manager.pairing_loop(),
+                                 manager.media_loop(), manager.pairing_loop(), manager.photo_loop(),
                                  *([manager.plugins.loop(), manager.plugin_loop()] if core.plugins_enabled() else []))
         finally:
             await cameras.cleanup()

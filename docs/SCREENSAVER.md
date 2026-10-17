@@ -73,6 +73,48 @@ white on black like the rest, whatever the colour of the entity. They look as th
 and icons, and a moment ("5 min ago") counts on as it does there. When the line is wider than the glass, the last
 entities leave until it fits, so the temperature always stays. A screen on older firmware shows the temperature alone.
 
+**Clock faces** (boards with 8 MB of flash or more). In the drawer of Clock, **Face** picks how the clock looks, each
+choice shown as a small picture of your own glass:
+
+- **Digital**: the time with the date, the temperature and the entities, as above. Every screen has it.
+- **Glass**: the dial is the glass itself. Ticks run along its edge, the numbers stand inside them, and white hands
+  with an orange seconds hand turn in the middle. **Numbers** shows none, 4 (12, 3, 6 and 9) or all 12. Twelve is
+  offered only on glass about as wide as it is tall, because on long glass they bunch at 12 and 6. A number never
+  touches a tick: each one moves toward the middle until there is a clear gap around it.
+- **Classic**: a round watch dial with 1 to 12. On long glass the day stands beside it, on standing glass under it:
+  the weekday, the date large, the month, then the temperature and the entities one to a line, as many as fit. On
+  square glass the date stands in a small window at 3, as on a watch.
+- **Bauhaus**: the whole glass is a grid of squares, each a circle, a half or quarter circle, a half square or stripes
+  in red, yellow, blue, black and cream, with a round clock on top.
+
+For Glass, Classic and Bauhaus, **Look** is Dark, Light, or the screen's own Dark mode, and **Seconds hand** turns the
+seconds hand on or off. Glass and Bauhaus show the time alone: the temperature and the entities stand on Classic and
+Digital. Every size follows the glass and every letter is one of the screen's own font steps, so a face fills a small
+square screen and a wide 10-inch screen alike.
+
+A face never stands still long enough to mark the glass. Glass and Classic move up to a millimetre every minute, along
+a slow circle; you do not see it, but nothing stays on the same pixels for hours. Bauhaus gives one square a new shape
+every minute and paints a whole new picture every ten minutes, and its clock moves to another spot near the middle
+with each new picture. The seconds hand redraws only the strip of glass it passes. Boards with 4 MB of flash (the CYD
+and its kin) have no room for the faces and keep the digital clock, and so does a screen whose firmware predates them.
+
+**Photos** (app 0.4.89). The photos of a folder of Home Assistant's media, one after the other over the whole glass.
+In the drawer of Photos, **Folder** browses Home Assistant's media: an album, a person or a tag of Immich (its
+integration), a folder under Home Assistant's `/media`, Synology Photos, or any other media source. Then choose how long
+each photo stands (30 seconds to an hour), the order (shuffled, every photo once before any comes again, or the
+folder's own order) and how a photo fills the glass: **Auto** fills it with a photo of about its shape and shows a
+photo of another shape whole on its own colour, **Fill** always cuts, **Whole** never does. **Motion** set to **Slow**
+moves a photo that fills the glass slowly across it, a pixel every second and a half, from a corner of its own toward the
+opposite one; it reads as a still photo that breathes, and nothing stands on the same pixels for long. The 10-inch
+screens keep their photos still: the larger photo that moving needs does not fit their picture memory. A photo has no
+words over it. The next photo is fetched and read before its turn, so it changes at once. iPhone photos (HEIC) are read too.
+Google Photos cannot be used: Google lets an app read only the photos that app uploaded itself.
+
+**Faces and steps of plugins** (app 0.4.89, plugin API 0.14). A plugin can bring a face for a step (another clock,
+another player, another way to show a photo), picked under Face in that step's drawer, or a step of its own, added to
+the list with **Add from plugins**. A plugin's face or step shows only on a screen that has the plugin; anywhere else
+the step shows its own face. How to make one is in docs/PLUGINS.md, "A screensaver", and the plugins repository.
+
 The cover and the camera are a little darker everywhere, so the words always read. A camera has nothing else on it,
 and a cover only its three keys: no bar, no spinner.
 
@@ -108,6 +150,32 @@ has.
   measure and word each item, and `header_bar::centre`, beside the bar's `place`, centres the line with the bar's gaps
   (`tests/test_header_bar.cpp`). The editor uses the top bar's entity list (`EntityItemPicker.vue`) and its add, move
   and remove (`itemList` in `stores/topbar.ts`), and edits one entity in `SaverItemInspector.vue`.
+- **The clock's faces** are the module `clock_faces` (docs/MODULES.md), so only a board of the full tier compiles them.
+  The choice holds `face` (`digital`, `glass`, `classic` or `bauhaus`), `numerals` (0, 4 or 12), `seconds` and `look`
+  (`dark`, `light` or `auto`). A screen whose hello lists `clock_faces` gets them as `cf` in the clock's message
+  (`screen_saver.face`): `f`, `n`, `s` (1 or 0) and `l`. The firmware draws them in
+  `components/smart_display/module_clock_faces.h` with the colours of `theme.h` (`CLOCK_HAND` and `BAUHAUS_*`, read by
+  the face's own look), and the editor's picture of them is `SaverFace.vue` with the same rules in
+  `web/src/model/clock-faces.ts`, Bauhaus's composition from the same hash. The clock is drawn whole again every minute
+  (`apply_screen_settings`), which moves Glass and Classic (`clock_faces::drift`) and Bauhaus; `saver_tick` moves the
+  seconds hand every second and invalidates only its old and new box (`clock_faces::tick`).
+- **The photos** (app 0.4.89, `screen_manager/app/saver_photos.py`): the choice keeps `photos` (`source`, a
+  `media-source://` id; `every`; `order`, `shuffle` or `in_order`; `fit`). The app reads the folder through Home
+  Assistant's websocket (`media_source/browse_media`, three levels deep, at most 500 photos, again after an hour),
+  walks it per screen, and fetches the next photo before its turn: `media_source/resolve_media` names its address and
+  the app fetches it with its own token (`HomeAssistant.media_file`: a path of Home Assistant's, or a public address,
+  never a redirect, at most 25 MB). A photo that cannot be read is passed over; five in a row read the folder again.
+  With `motion: slow` the word carries `"mv": 1` and the app cuts a photo that fills the glass `MOTION_OVERSCAN` (8 %)
+  larger (`camera_feed.motion_box`, none where that does not fit the screen's picture cap); the screen shows the glass's
+  piece of it and moves it by `picture_motion.h` (`saver_motion_start`, `saver_motion_tick` every 250 ms, a new offset
+  only when a pixel is due), a photo at the glass's size standing still as before.
+  The word is `{"k": "photos", "e": "saver.photos", "x": {"pic": <mark>}}`, sent once the photo is here, to a screen
+  whose hello lists `saver_photos` (a board that draws pictures). The screen opens the full view under that name, asks
+  with `saver: photos`, and the app answers with a still link to `camera_feed.encode_photo`: exactly the screen's box,
+  not darkened, 8-bit. `photo_loop` starts a pass when a screen's next photo is due. Nothing of a photo is logged.
+- **Faces and steps of plugins** (plugin API 0.14): `media_face`, `photos_face` and `face` may name a plugin's saver,
+  `order` may hold up to four plugin steps, and `plugins` keeps their options and entities. The message gains `pf`;
+  docs/PLUGINS.md, "A screensaver", has the rest.
 - **The editor** (app 0.4.83): `ScreensaverCard.vue` lists the steps and `SaverInspector.vue` opens one in the drawer;
   both read and change the choice through `web/src/stores/screensaver.ts`, and drag their lists with
   `web/src/composables/useSortableRows.ts`.

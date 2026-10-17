@@ -22,9 +22,12 @@ import profiles  # noqa: E402
 sys.path.insert(0, str(ROOT / 'screen_manager/app'))
 sys.path.insert(0, str(ROOT / 'tests'))
 from core import ATTRS, cover_related, discover_screens, extras, state_message  # noqa: E402
+import core  # noqa: E402
+import page_layout  # noqa: E402
 
 HAS_AIOHTTP = importlib.util.find_spec('aiohttp') is not None
 RUNTIME = runtime_source()
+RECEIVER = (ROOT / 'components/smart_display/page_receiver.cpp').read_text()
 PROFILES = {name: profiles.text(name) for name in ('checkout/guition.yaml', 'checkout/cyd.yaml', 'packages/guition.yaml', 'packages/cyd.yaml')}
 BLIND = 'cover.venetianblind_0001'
 
@@ -103,6 +106,31 @@ class CoverSync(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(published, ['sensor.esp_screens_office_1'])
 
 
+class SlatsOpenAt(unittest.TestCase):
+    """Where a cover's slats stand open (tilt_open): Home Assistant's rule (0 closed, 100 fully open) is the default and
+    never stored; 50 is a tile's choice for a blind closed at 0 and at 100, one way and the other (catalogue/cover.yaml)."""
+
+    def test_the_app_keeps_50_and_stores_no_default(self):
+        def layout(entity, value):
+            return {'title': 'Home', 'tiles': [{'entity': entity, 'slot': 0, 'options': {'tilt_open': value}}]}
+        self.assertEqual(core.validate_layout(layout('cover.blind', '50'))['tiles'][0]['options'], {'tilt_open': '50'})
+        self.assertEqual(core.validate_layout(layout('cover.blind', 50))['tiles'][0]['options'], {'tilt_open': '50'})
+        self.assertEqual(core.validate_layout(layout('cover.blind', '100'))['tiles'][0].get('options', {}), {})
+        for bad in (layout('cover.blind', '30'), layout('light.a', '50')):
+            with self.assertRaises(ValueError):
+                core.validate_layout(bad)
+        self.assertEqual(list(core.COVER_TILT_OPEN), ['100', '50'])
+        # An event may set it too (esp_screens_add_tile and friends), and the page document carries it as an interaction.
+        self.assertEqual(core.tile_options({'tilt_open': '50'}), {'tilt_open': '50'})
+        self.assertEqual(page_layout.INTERACTION['tilt_open'], 'tilt_open')
+
+    def test_it_reaches_the_screen(self):
+        states = {'cover.blind': {'state': 'open', 'attributes': {'current_tilt_position': 50, 'supported_features': 255}}}
+        message = core.state_message(0, {'entity': 'cover.blind', 'name': '', 'options': {'tilt_open': '50'}}, states)
+        self.assertEqual(message['o']['tilt_open'], '50')
+        self.assertIn('tile.tilt_middle = string(options["tilt_open"], 4) == "50";', RECEIVER)
+
+
 class Firmware(unittest.TestCase):
     def test_a_tap_on_a_cover_opens_the_cover_card(self):
         event = RUNTIME[RUNTIME.index('inline void event(lv_event_t *event) {'):]
@@ -133,14 +161,23 @@ class Firmware(unittest.TestCase):
         for name, text in PROFILES.items():
             self.assertIn('runtime_tiles::hold_card(index);', text, f'{name}: the preview opens the card a hold opens')
 
+    def test_the_swap_key_starts_over_with_a_new_layout(self):
+        # The swap stands by tile index; a new layout may put another cover at that index (cancel_layout_input).
+        cancel = RUNTIME[RUNTIME.index('inline void cancel_layout_input(bool invalidate_widgets) {'):]
+        cancel = cancel[:cancel.index('\n}\n')]
+        self.assertIn('cover_swapped.fill(0);', cancel)
+        self.assertLess(cancel.index('if (invalidate_widgets) {'), cancel.index('cover_swapped.fill(0);'))
+
     def test_the_card_commits_on_release_and_keeps_its_status_line(self):
         # Both views dispatch through the capability-checked percentage helper.
         # Percentage direction and all feature masks are exercised in C++.
         event = RUNTIME[RUNTIME.index('inline void cover_slider_event('):RUNTIME.index('inline lv_obj_t *cover_slider(')]
         self.assertIn('code!=LV_EVENT_RELEASED', event)
-        self.assertIn('tile_controls::cover_position_action(t,lv_slider_get_value(slider),tilt)', event)
-        self.assertIn('if(call.valid())action(call.service,t.entity,call.key,call.value)', event)
-        self.assertIn('if(cmd>=70 && cmd<130){auto a=tile_controls::key_action(t,cmd-70);', RUNTIME)
+        self.assertIn('const int raw=lv_slider_get_value(slider);', event)
+        self.assertIn('tile_controls::cover_position_action(t,raw,tilt)', event)
+        # The command goes out as a travel (cover_travel.h): the card shows where the cover goes until it gets there.
+        self.assertIn('cover_go(t,call,tilt?percent:100-percent,0,tilt);', event)
+        self.assertIn('if(cmd>=70 && cmd<130){if(t.domain()=="cover")cover_key(t,cmd-70);}', RUNTIME)
         # The once-a-second tick of an open card must not replace "Open · 60% · Tilt 40%" with the raw state.
         tick = RUNTIME[RUNTIME.index('inline void tick() {'):]
         self.assertIn('card_status(t,detail_status_brief)', tick[:tick.index('if(!enabled)return;')])
@@ -160,6 +197,19 @@ class Firmware(unittest.TestCase):
             for number in ('setting_brightness', 'setting_standby_brightness', 'setting_night_brightness', 'setting_standby_seconds', 'setting_auto_home_seconds'):
                 self.assertIn(f'std::make_pair(id({number}),', script, f'{name}: {number}')
             self.assertNotRegex(script, r'if \(id\(setting_\w+\)\.state != ', name)
+
+
+class AwningWithoutFeedback(unittest.TestCase):
+    """An awning whose motor does not report back (Somfy RTS, 433 MHz): Home Assistant's state is "unknown" and
+    assumed_state is true, and its frontend keeps open, stop and close working (data/cover.ts canOpen, canClose)."""
+
+    def test_its_assumed_state_reaches_the_screen(self):
+        import core
+        states = {'cover.awning': {'state': 'unknown', 'attributes': {'friendly_name': 'Awning', 'supported_features': 11,
+                                                                     'device_class': 'awning', 'assumed_state': True}}}
+        message = core.state_message(0, {'entity': 'cover.awning', 'name': ''}, states)
+        self.assertEqual(message['state'], 'unknown')
+        self.assertIs(message['a']['assumed_state'], True)
 
 
 if __name__ == '__main__':

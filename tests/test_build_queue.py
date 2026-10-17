@@ -357,7 +357,7 @@ class RealESPHomeJobs(unittest.IsolatedAsyncioTestCase):
         from server import Manager, create_app
         from test_firmware_download import PROFILE, fake_cli
         from test_screen_owned_settings import fake_ha
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {**fake_cli(tmp), 'FAKE_SLEEP': '0.4',
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {**fake_cli(tmp), 'ESPHOME_FAKE_SLEEP': '0.4',
                                                                                 'ESPHOME_CONFIG': str(Path(tmp) / 'esphome')}):
             m = Manager(fake_ha(), Path(tmp) / 'screens.json')
             for name in ('kitchen', 'hall'):
@@ -419,7 +419,7 @@ class RealESPHomeJobs(unittest.IsolatedAsyncioTestCase):
         from server import Manager
         from test_firmware_download import PROFILE, fake_cli
         from test_screen_owned_settings import fake_ha
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {**fake_cli(tmp), 'FAKE_SLEEP': '5',
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {**fake_cli(tmp), 'ESPHOME_FAKE_SLEEP': '5',
                                                                                 'ESPHOME_CONFIG': str(Path(tmp) / 'esphome')}):
             m = Manager(fake_ha(), Path(tmp) / 'screens.json')
             for name in ('kitchen', 'hall'):

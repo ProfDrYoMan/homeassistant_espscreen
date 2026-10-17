@@ -100,7 +100,19 @@ static void clock_in_the_middle() {
   assert(l.time.w == 480 && l.date.w == 480);
 }
 
+// Nothing stands still for hours (clock faces, a plugin's saver): within a millimetre's circle, and every minute elsewhere.
+static void drift_moves_within_its_circle() {
+  const int radius = 6;
+  for (int minute = 0; minute < 1440; ++minute) {
+    const Offset a = drift(minute, radius), b = drift(minute + 1, radius);
+    assert(a.x * a.x + a.y * a.y <= (radius + 1) * (radius + 1));
+    assert(a.x != b.x || a.y != b.y || minute == 1439);
+  }
+  assert(drift(-1, radius).x == 0 && drift(-1, radius).y == 0);  // no clock yet: it stands where it is drawn
+}
+
 int main() {
+  drift_moves_within_its_circle();
   words_on_every_glass();
   keys_on_every_glass();
   clock_in_the_middle();

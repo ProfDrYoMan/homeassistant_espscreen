@@ -366,6 +366,34 @@ class Encoding(unittest.TestCase):
         self.assertEqual(camera_feed.fit((5000, 1), (224, 126)), (224, 1))
 
 
+class Photos(unittest.IsolatedAsyncioTestCase):
+    async def test_a_photo_at_the_internal_address_skips_the_certificate(self):
+        # Under the Supervisor a media source's file comes from Home Assistant's own internal address, by the signature
+        # resolve_media gave it, with no token: on https with the house's own certificate that certificate is not checked.
+        class Session(RecordingSession):
+            def __init__(self):
+                super().__init__()
+                self.options = []
+
+            def get(self, url, headers=None, timeout=None, allow_redirects=True, **options):
+                self.options.append(options)
+                return super().get(url, headers, timeout, allow_redirects)
+
+        session = Session()
+        ha = HomeAssistant(session, 'http://supervisor/core/api', 'token')
+        ha._internal_url = 'https://homeassistant.local:8123'
+        self.assertEqual(await ha.media_file('/media/local/a.jpg?authSig=x'), b'picture')
+        self.assertEqual(session.calls[-1], ('https://homeassistant.local:8123/media/local/a.jpg?authSig=x', None, False))
+        self.assertEqual(session.options[-1], {'ssl': False})
+        ha._internal_url = 'http://192.168.1.10:8123'
+        await ha.media_file('/media/local/a.jpg?authSig=x')
+        self.assertEqual(session.options[-1], {})
+        # Through the API itself, with the app's token, the certificate stays checked.
+        await ha.media_file('/api/image/serve/abc/512x512')
+        self.assertEqual(session.calls[-1], ('http://supervisor/core/api/image/serve/abc/512x512', 'Bearer token', False))
+        self.assertEqual(session.options[-1], {})
+
+
 class Clock:
     def __init__(self): self.now = 1000.0
     def __call__(self): return self.now

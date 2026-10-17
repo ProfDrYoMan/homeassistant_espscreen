@@ -76,6 +76,16 @@ static Metrics short_wide() {
   return m;
 }
 
+// The Waveshare P4: square glass at 255 dpi, the standard look at 150 %. Its text font, which the state line is written
+// in, is 31 px high (measured in the WASM preview), and climate_metrics() makes the line that tall (status_h).
+static Metrics dense_square() {
+  ui::configure(255, "standard");
+  Metrics m; m.number_h = 96; m.number_w = 225; m.small_number_h = 57; m.small_number_w = 135;
+  m.caption_h = 28; m.text_h = 31; m.status_h = m.text_h; m.icon_h = 42; m.side = 30;
+  m.bar = 90; m.bar_x = 24; m.bar_y = 24; m.touch = ui::touch_min();
+  return m;
+}
+
 int main() {
   // The Guition: the card it was designed on. Everything at its full size, in one column.
   {
@@ -152,6 +162,20 @@ int main() {
     assert(mode_keys_fit(m, 451, 6) >= 3);
     assert(mode_keys_fit(m, 200, 6) == 3);
     assert(mode_keys_fit(m, 40, 6) == 1);
+  }
+  // A heat pump with five modes and a fan row on the P4: the state line keeps the height of the font it is written in
+  // and stands clear of the setpoint card. With the old fixed 25 px the layout gave it six pixels too few, and once
+  // the gaps had given way the line ran into the card (seen on the glass).
+  {
+    Metrics m = dense_square();
+    const int width = 720, top = m.bar_y + m.bar + ui::px(8), bottom = 720 - m.margin();
+    Layout l = layout(m, width, top, bottom, 5, 1);
+    sound(m, l, width, top, bottom);
+    if (!l.status.empty()) assert(l.status.h == m.text_h && l.status.y + m.text_h <= l.setpoint.y);
+    else assert(l.caption_is_status);
+    Metrics old = m; old.status_h = 25;
+    Layout before = layout(old, width, top, bottom, 5, 1);
+    assert(!before.status.empty() && before.status.y + m.text_h > before.setpoint.y);  // the bug this guards
   }
   printf("test_climate_card: ok\n");
   return 0;

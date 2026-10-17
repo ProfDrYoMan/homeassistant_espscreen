@@ -3,15 +3,20 @@
 // or the clock, in the order the screen tries them. Since app 0.4.83 the card is a short list of those steps, each with
 // one line of what it shows and its switch, as calm as the other cards in a narrow column; a step opens in the drawer,
 // where its players, its camera or its clock are chosen. A row drags into its place, by the mouse or a finger.
+// Since app 0.4.89 the photos of a folder are a step too, where the screen takes them, and a plugin the screen runs can
+// add a step of its own (Add from plugins, at most four).
 import { computed, onMounted } from "vue";
 import { t } from "../i18n";
 import { glyph } from "../model/topbar";
 import { useSortableRows } from "../composables/useSortableRows";
-import type { SaverKind } from "../types";
+import { text } from "../model/plugins";
+import type { SaverStep } from "../types";
 import Icon from "./ui/Icon.vue";
+import UiMenu from "./ui/UiMenu.vue";
+import UiMenuItem from "./ui/UiMenuItem.vue";
 import UiSwitch from "./ui/UiSwitch.vue";
 import { useTopbarStore } from "../stores/topbar";
-import { SAVER_ICONS, SAVER_MIN_FIRMWARE, saverLabel, useScreensaverStore } from "../stores/screensaver";
+import { PLUGIN_STEPS_MAX, SAVER_MIN_FIRMWARE, useScreensaverStore } from "../stores/screensaver";
 import { useInspectorStore } from "../stores/inspector";
 
 const topbar = useTopbarStore();
@@ -20,12 +25,16 @@ const insp = useInspectorStore();
 
 onMounted(() => topbar.loadTopbarPreview(0));
 const pictures = computed(() => Boolean(screensaver.saver?.pictures));
-const steps = useSortableRows<SaverKind>({ rows: "#screensaver-steps > .saver-row", items: () => screensaver.savedOrder,
-  commit: (list) => screensaver.changeSaver({ order: list }), skip: ".ui-switch", grip: ".grip", enabled: () => screensaver.saverReady && pictures.value });
-const order = computed(() => screensaver.stepsShown(steps.live.value));
-const opened = (kind: SaverKind) => insp.inspector?.kind === "saver" && insp.inspector.step === kind;
-const line = (kind: SaverKind) => (screensaver.isOn(kind) ? screensaver.summary(kind) : { text: t("editor.screen_settings.screensaver.summary.off"), missing: false });
-function open(e: MouseEvent, kind: SaverKind) {
+// The rows are the steps this screen shows; a step it does not show keeps its place in the order (setOrder).
+const movable = computed(() => screensaver.saverReady && screensaver.stepsShown(null).length > 1);
+const steps = useSortableRows<SaverStep>({ rows: "#screensaver-steps > .saver-row", items: () => screensaver.stepsShown(null),
+  commit: (list) => screensaver.setOrder(list), skip: ".ui-switch", grip: ".grip", enabled: () => movable.value });
+const order = computed(() => steps.live.value || screensaver.stepsShown(null));
+// The clock stays marked while one of its entities or its + is open: they are the clock's own inspector (SaverClock.vue).
+const opened = (kind: SaverStep) => (insp.inspector?.kind === "saver" && insp.inspector.step === kind)
+  || (kind === "clock" && (insp.inspector?.kind === "saver-item" || insp.inspector?.kind === "saver-add"));
+const line = (kind: SaverStep) => (screensaver.isOn(kind) ? screensaver.summary(kind) : { text: t("editor.screen_settings.screensaver.summary.off"), missing: false });
+function open(e: MouseEvent, kind: SaverStep) {
   if (steps.click(e) || (e.target as HTMLElement).closest(".ui-switch")) return;
   insp.openSaverStep(kind);
 }
@@ -48,21 +57,32 @@ function open(e: MouseEvent, kind: SaverKind) {
       <p class="saver-caption">{{ pictures ? t("editor.screen_settings.screensaver.lead") : t("editor.screen_settings.screensaver.no_pictures") }}</p>
       <div class="saver-list" id="screensaver-steps" role="list" :aria-label="t('editor.screen_settings.screensaver.lead')">
         <div v-for="(kind, i) in order" :key="kind" class="saver-row" role="listitem" tabindex="0" :data-kind="kind"
-          :class="{ off: !screensaver.isOn(kind), opened: opened(kind), dragging: steps.drag.value.active && steps.drag.value.index === i, still: !pictures }"
+          :class="{ off: !screensaver.isOn(kind), opened: opened(kind), dragging: steps.drag.value.active && steps.drag.value.index === i, still: !movable }"
           @pointerdown="steps.down($event, i)" @click="open($event, kind)" @keydown.enter.self.prevent="insp.openSaverStep(kind)" @keydown="steps.key($event, i)">
           <span class="saver-av" aria-hidden="true">
-            <span class="mdi">{{ glyph(SAVER_ICONS[kind]) }}</span>
-            <Icon v-if="pictures" name="drag-vertical" class="saver-grip" />
+            <span class="mdi saver-glyph">{{ glyph(screensaver.stepIcon(kind)) }}</span>
+            <Icon v-if="movable" name="drag-vertical" class="saver-grip" />
           </span>
           <span class="saver-tx">
-            <b>{{ saverLabel(kind) }}</b>
+            <b>{{ screensaver.stepLabel(kind) }}</b>
             <small :class="{ missing: line(kind).missing }">{{ line(kind).text }}</small>
           </span>
-          <UiSwitch :model-value="screensaver.isOn(kind)" :aria-label="t('editor.screen_settings.screensaver.use', { name: saverLabel(kind) })"
+          <UiSwitch :model-value="screensaver.isOn(kind)" :aria-label="t('editor.screen_settings.screensaver.use', { name: screensaver.stepLabel(kind) })"
             @update:model-value="(on: boolean) => screensaver.toggleStep(kind, on)" />
           <Icon name="chevron-right" class="saver-chev" />
         </div>
       </div>
+      <!-- A step of its own from a plugin this screen runs, before the clock. -->
+      <UiMenu v-if="screensaver.addableSteps.length" align="start" width="240px">
+        <template #trigger>
+          <button type="button" class="ghost-btn" id="saver-add-step" :disabled="!screensaver.canAddStep"
+            :title="screensaver.canAddStep ? undefined : t('editor.screen_settings.screensaver.plugin_steps_full', { n: PLUGIN_STEPS_MAX })">
+            <Icon name="plus" />{{ t("editor.screen_settings.screensaver.plugin_add") }}</button>
+        </template>
+        <UiMenuItem v-for="item in screensaver.addableSteps" :key="item.key" :hint="text(item.plugin.name)" @select="screensaver.addPluginStep(item.key)">
+          <span class="mdi saver-menu-glyph" aria-hidden="true">{{ glyph(item.saver.icon || item.plugin.icon) }}</span>{{ text(item.saver.name) }}
+        </UiMenuItem>
+      </UiMenu>
     </template>
   </section>
 </template>
@@ -80,10 +100,11 @@ function open(e: MouseEvent, kind: SaverKind) {
 .saver-row.dragging { background: var(--accent-soft); cursor: grabbing; position: relative; z-index: 1; box-shadow: 0 6px 18px rgba(20, 24, 40, 0.14); }
 .saver-av { position: relative; width: 28px; height: 28px; border-radius: 8px; background: var(--seg); color: var(--ink-2); display: grid; place-items: center; flex: none; font-size: 16px; }
 .saver-av > * { grid-area: 1 / 1; transition: opacity 0.12s; }
-/* The row's icon gives way to a grip under the pointer: the row drags by it, or anywhere, without a column for it. */
+/* The row's icon gives way to a grip under the pointer: the row drags by it, or anywhere, without a column for it. The
+   grip is an editor icon, an .mdi itself, so only the row's own glyph hides. */
 .saver-grip { opacity: 0; font-size: 17px; color: var(--muted); }
 @media (hover: hover) {
-  .saver-row:not(.still):hover .saver-av .mdi { opacity: 0; }
+  .saver-row:not(.still):hover .saver-glyph { opacity: 0; }
   .saver-row:not(.still):hover .saver-grip { opacity: 1; }
 }
 .saver-tx { flex: 1; min-width: 0; display: grid; gap: 1px; }
@@ -91,5 +112,7 @@ function open(e: MouseEvent, kind: SaverKind) {
 .saver-tx small { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .saver-tx small.missing { color: var(--accent); }
 .saver-row.off .saver-av, .saver-row.off .saver-tx b { opacity: 0.5; }
+.saver-menu-glyph { margin-right: 8px; color: var(--ink-2); }
+#saver-add-step { margin-bottom: 10px; }
 .saver-chev { flex: none; margin-left: -4px; color: var(--muted); font-size: 16px; }
 </style>

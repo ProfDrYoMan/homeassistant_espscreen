@@ -50,6 +50,8 @@ constexpr const char *EXPAND = "\U000F084E", *COLLAPSE = "\U000F084C", *DOCK = "
 constexpr const char *LEFT = "\U000F0141", *RIGHT = "\U000F0142", *CLOSE = "\U000F0156", *POWER = "\U000F0425", *STANDBY = "\U000F0906", *FIRE = "\U000F0238";
 constexpr const char *SNOWFLAKE = "\U000F0717", *HEAT_COOL = "\U000F1A79", *AUTO = "\U000F1B17", *DRY = "\U000F058E", *FAN = "\U000F0210";
 constexpr const char *BLINDS_OPEN = "\U000F1011", *BLINDS = "\U000F00AC", *MORE = "\U000F01D8";
+// A cover card's swap key and a cover group's key (firmware 0.57.0): the slats (blinds-horizontal), the blind (roller-shade).
+constexpr const char *SLATS = "\U000F1A2B", *SHADE = "\U000F1A6B";
 }
 enum Command {
   NONE = 0, COVER_OPEN, COVER_STOP, COVER_CLOSE, VACUUM_START, VACUUM_PAUSE, VACUUM_STOP, VACUUM_DOCK,
@@ -90,11 +92,17 @@ inline bool cover_tilt_selected(const Tile &t) {
 inline bool climate_modes_selected(const Tile &t) {
   return thermostat(t) && t.controls=="setpoint_mode";
 }
+// A player's volume over its playback keys (Home Assistant's two media tile features stacked), where a taller card has
+// the room: the keys are its first group, the volume slider the second.
+inline bool media_volume_selected(const Tile &t) {
+  return t.domain()=="media_player" && t.controls=="volume_playback";
+}
 // A select's "stepper" is a pair of chevron keys; numbers and climate get the -/+ pill.
 inline std::string panel_kind(const Tile &t) {
   auto c = t.controls, d = t.domain();
   if(d=="cover"){if(c=="tilt")return {};if(c=="buttons_tilt")return "buttons";if(c=="position_tilt")return "position";}
   if((d=="climate"||d=="humidifier")&&c=="setpoint_mode")return "setpoint";
+  if(d=="media_player"&&c=="volume_playback")return "playback";
   // The small slider of a wide card is that domain's slider: the manager sends no control set beside it
   // (resolve_controls), so the kind comes from the domain.
   if (c.empty() && t.inline_control == "slider") return inline_kind(d);
@@ -121,25 +129,71 @@ inline bool alarm_class(const std::string &device_class) {
     if (device_class == alarm) return true;
   return false;
 }
-// Home Assistant's colour for a weather condition (--state-weather-<condition>-color); a condition it has none for
-// takes its --state-active-color.
+// Home Assistant's weather conditions (weather/const.py ATTR_CONDITION_*), named once: every colour of a condition in the
+// firmware, the tile's and the card's, asks this table, so no two of them can disagree on what "snowy-rainy" is.
+enum class Weather : uint8_t { SUNNY, CLEAR_NIGHT, PARTLY_CLOUDY, CLOUDY, FOG, RAINY, POURING, SNOWY, SNOWY_RAINY, HAIL,
+                               LIGHTNING, LIGHTNING_RAINY, WINDY, EXCEPTIONAL, UNKNOWN };
+inline Weather weather_kind(const std::string &condition) {
+  if (condition == "sunny") return Weather::SUNNY;
+  if (condition == "clear-night") return Weather::CLEAR_NIGHT;
+  if (condition == "partlycloudy") return Weather::PARTLY_CLOUDY;
+  if (condition == "cloudy") return Weather::CLOUDY;
+  if (condition == "fog") return Weather::FOG;
+  if (condition == "rainy") return Weather::RAINY;
+  if (condition == "pouring") return Weather::POURING;
+  if (condition == "snowy") return Weather::SNOWY;
+  if (condition == "snowy-rainy") return Weather::SNOWY_RAINY;
+  if (condition == "hail") return Weather::HAIL;
+  if (condition == "lightning") return Weather::LIGHTNING;
+  if (condition == "lightning-rainy") return Weather::LIGHTNING_RAINY;
+  if (condition == "windy" || condition == "windy-variant") return Weather::WINDY;
+  if (condition == "exceptional") return Weather::EXCEPTIONAL;
+  return Weather::UNKNOWN;
+}
+// Home Assistant's colour for a weather condition (--state-weather-<condition>-color), the tile's state colour; a
+// condition it has none for takes its --state-active-color.
 inline uint32_t weather_color(const std::string &condition) {
   using namespace theme::ha;
-  if (condition == "sunny") return AMBER;
-  if (condition == "clear-night") return DEEP_PURPLE;
-  if (condition == "partlycloudy") return BLUE_GREY;
-  if (condition == "cloudy") return LIGHT_GREY;
-  if (condition == "fog") return GREY;
-  if (condition == "rainy") return BLUE;
-  if (condition == "pouring") return INDIGO;
-  if (condition == "snowy") return ICE;
-  if (condition == "snowy-rainy") return LIGHT_BLUE;
-  if (condition == "hail") return CYAN;
-  if (condition == "lightning") return YELLOW;
-  if (condition == "lightning-rainy") return LIME;
-  if (condition == "windy" || condition == "windy-variant") return GREEN;
-  if (condition == "exceptional") return RED;
+  switch (weather_kind(condition)) {
+    case Weather::SUNNY: return AMBER;
+    case Weather::CLEAR_NIGHT: return DEEP_PURPLE;
+    case Weather::PARTLY_CLOUDY: return BLUE_GREY;
+    case Weather::CLOUDY: return LIGHT_GREY;
+    case Weather::FOG: return GREY;
+    case Weather::RAINY: return BLUE;
+    case Weather::POURING: return INDIGO;
+    case Weather::SNOWY: return ICE;
+    case Weather::SNOWY_RAINY: return LIGHT_BLUE;
+    case Weather::HAIL: return CYAN;
+    case Weather::LIGHTNING: return YELLOW;
+    case Weather::LIGHTNING_RAINY: return LIME;
+    case Weather::WINDY: return GREEN;
+    case Weather::EXCEPTIONAL: return RED;
+    case Weather::UNKNOWN: return AMBER;
+  }
   return AMBER;
+}
+// The sky of a condition on the weather card and in its chart (theme::ha SUNNY, RAIN, ...): softer than the tile's
+// state colour, a few conditions to a colour, and the same on the card's icon as on the chart's marks beside it. What
+// falls (rain, snow, hail, a bolt) is drawn in this colour too.
+inline uint32_t weather_sky(const std::string &condition) {
+  namespace h = theme::ha;
+  switch (weather_kind(condition)) {
+    case Weather::SUNNY: return h::SUNNY;
+    case Weather::CLEAR_NIGHT: return h::NIGHT_SKY;
+    case Weather::PARTLY_CLOUDY: return h::PARTLY_CLOUDY;
+    case Weather::RAINY: case Weather::POURING: return h::RAIN;
+    case Weather::SNOWY: case Weather::SNOWY_RAINY: case Weather::HAIL: return h::SNOW;
+    case Weather::LIGHTNING: case Weather::LIGHTNING_RAINY: return h::LIGHTNING;
+    default: return h::CLOUDY;
+  }
+}
+inline bool weather_falls(const std::string &condition) {
+  switch (weather_kind(condition)) {
+    case Weather::RAINY: case Weather::POURING: case Weather::SNOWY: case Weather::SNOWY_RAINY: case Weather::HAIL:
+    case Weather::LIGHTNING: case Weather::LIGHTNING_RAINY: return true;
+    default: return false;
+  }
 }
 // LVGL's lv_color_hsv_to_rgb (lv_color.c, LVGL 9) step for step, free of LVGL so the tests can reach it: a lamp's
 // colour comes out the same on its tile and on its group's lamp page, to the last bit.
@@ -603,8 +657,10 @@ inline unsigned cover_keys(const Tile &t, std::array<Key, 3> &out) {
   unsigned n = 0;
   const uint32_t f = t.supported ? t.supported : feature::COVER_OPEN | feature::COVER_STOP | feature::COVER_CLOSE;
   bool sideways = sideways_cover(t.device_class);
-  bool fully_open = std::isfinite(t.position) ? t.position >= 99.5f : t.state == "open";
-  bool fully_closed = std::isfinite(t.position) ? t.position <= 0.5f : t.state == "closed";
+  // A cover that only assumes its state (assumed_state, firmware 0.57.0) keeps open and close, as Home Assistant does.
+  const bool assumed = t.extra().assumed;
+  bool fully_open = !assumed && (std::isfinite(t.position) ? t.position >= 99.5f : t.state == "open");
+  bool fully_closed = !assumed && (std::isfinite(t.position) ? t.position <= 0.5f : t.state == "closed");
   if (f & feature::COVER_OPEN) out[n++] = Key{sideways ? glyph::EXPAND : glyph::UP, COVER_OPEN, "", t.state == "opening", fully_open && t.state != "closing"};
   if (f & feature::COVER_STOP) out[n++] = Key{glyph::STOP, COVER_STOP, "", false, false};
   if (f & feature::COVER_CLOSE) out[n++] = Key{sideways ? glyph::COLLAPSE : glyph::DOWN, COVER_CLOSE, "", t.state == "closing", fully_closed && t.state != "opening"};
@@ -612,10 +668,14 @@ inline unsigned cover_keys(const Tile &t, std::array<Key, 3> &out) {
 }
 inline unsigned cover_tilt_keys(const Tile &t, std::array<Key, 3> &out) {
   unsigned n = 0;
-  const float tilt = t.extra().tilt;
-  if (t.supported & feature::COVER_OPEN_TILT) out[n++] = Key{glyph::BLINDS_OPEN, COVER_OPEN_TILT, "", false, std::isfinite(tilt) && tilt >= 99.5f};
+  const float tilt = t.extra().assumed ? NAN : t.extra().tilt;
+  // Open at 100 (Home Assistant's rule) or, for a blind open at 50 (tilt_open), at 50 and closed at both ends.
+  const bool middle = t.tilt_middle, known = std::isfinite(tilt);
+  const bool open = known && (middle ? std::fabs(tilt - 50.0f) <= 0.5f : tilt >= 99.5f);
+  const bool closed = known && (tilt <= 0.5f || (middle && tilt >= 99.5f));
+  if (t.supported & feature::COVER_OPEN_TILT) out[n++] = Key{glyph::BLINDS_OPEN, COVER_OPEN_TILT, "", false, open};
   if (t.supported & feature::COVER_STOP_TILT) out[n++] = Key{glyph::STOP, COVER_STOP_TILT, "", false, false};
-  if (t.supported & feature::COVER_CLOSE_TILT) out[n++] = Key{glyph::BLINDS, COVER_CLOSE_TILT, "", false, std::isfinite(tilt) && tilt <= 0.5f};
+  if (t.supported & feature::COVER_CLOSE_TILT) out[n++] = Key{glyph::BLINDS, COVER_CLOSE_TILT, "", false, closed};
   return n;
 }
 // The same percentage direction and capability guard for overlay and tile. A cover whose features Home Assistant did

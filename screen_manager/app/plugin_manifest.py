@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 # The plugin API this core offers (components/smart_display/plugin_api.h, PLUGIN_API_MAJOR/MINOR; a test keeps them
 # equal). A plugin names the API it was written for; it builds on every core with the same major and at least its minor.
 # Something new raises the minor; a plugin builds on the same major from its own minor up. Only a break raises the major.
-PLUGIN_API = (0, 10)
+PLUGIN_API = (0, 14)
 # Major 0 is the time before that promise: a minor may still change a name or a signature. The minors that did are
 # listed here (and in __init__.py's PLUGIN_API_BREAKS; a test keeps them equal), so a plugin written before one is told
 # so in one sentence instead of failing in the compiler. 0.4: Plugin::on_tick became on_interval.
@@ -29,11 +29,14 @@ EVERY = re.compile(r'^(\d+)(s|m|h|d)$')
 HOST = re.compile(r'^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$')
 MDI = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
 PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)\}')
+# A placeholder of a fetch's URL and headers (0.12): `{name}`, or `{name|,}` for a list option, its values joined by the
+# separator after the bar (1 to 3 characters), as a service that takes several ids in one ask wants them.
+FETCH_PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)(?:\|([^{}]{1,3}))?\}')
 TEXT_KEY = re.compile(r'^[a-z][a-z0-9_]{0,47}$')
 
 TOP = {'id', 'version', 'api', 'icon', 'maintainer', 'license', 'stage', 'topics', 'requires', 'provides', 'boards',
        'flash_kb', 'permissions', 'attributes', 'privacy', 'inputs', 'parts', 'tiles', 'fetch', 'answers', 'cards',
-       'tap_actions', 'bar_items', 'settings'}
+       'tap_actions', 'bar_items', 'settings', 'savers'}
 ATTRIBUTES = ('cloud', 'commercial', 'ai-developed')
 # How far along a plugin is, in the maker's word: ready for every day, still finding its feet, or there to show what a
 # plugin can do and to learn from. The editor shows a badge for the last two; a manifest without it is beta.
@@ -92,10 +95,22 @@ MAX_ITEMS = 48              # a list from a fetch: 24 hourly prices fit twice
 MAX_FIELDS = 8
 MIN_EVERY = 30              # seconds between two asks for the same thing
 MAX_TILE_BYTES = 16384      # what one plugin tile may say it costs of the screen's tile memory
-MAX_TEXT = 64               # a text option's value
+MAX_TEXT = 64               # a text option's value, a pick's value and its label
+# A list option (0.12, `multiple`): how many values it keeps at most, and what a tile's options take together as JSON,
+# so the tile's data keeps most of the 4 KB message (core.PLUGIN_OPTIONS_BYTES and the editor keep the same number).
+MAX_MULTIPLE = 16
+OPTIONS_BYTES = 1280
+# The text a person types in a searched list of choices (0.12, `search`): the placeholder `{search}` of its fetch.
+SEARCH = 'search'
 # Places for pictures on one tile (0.10, `pictures`): the screen asks for them as one picture (tile_picture.h's
 # MAX_PARTS, a test keeps them equal), and the app paints at most this many frames for a tile.
 MAX_PICTURES = 8
+# A plugin's screensavers (0.14, docs/MANIFEST.md "savers"): a face of a step of the screensaver (the clock, the music,
+# the photos) or a step of its own. `when` says when a step of its own has something to show.
+MAX_SAVERS = 4
+SAVER_STEPS = ('clock', 'media', 'photos', 'own')
+SAVER_WHEN = ('always', 'data', 'state')
+SAVER_API = (0, 14)
 
 
 class ManifestError(ValueError):
@@ -214,12 +229,109 @@ def _features(value, where, strict, keep_unknown=False):
     return [name for name in names if keep_unknown or name in FEATURES]
 
 
+def check_savers(value, out, keys, fetch_ids, choice_lists, searched, options_of):
+    """The plugin's screensavers (0.14). A face draws a step the screen already has (`step: clock`, `media`, `photos`)
+    from the step's own contract; a step of its own (`step: own`) draws from a fetch (`data`) and/or an entity
+    (`domains`, `attributes`, `fields`, as a tile of an entity), and says when it has something to show (`when`)."""
+    savers = []
+    raw = _list(value, 'savers', MAX_SAVERS)
+    if raw:
+        match = API.match(out['api'])
+        if not match or (int(match.group(1)), int(match.group(2))) < SAVER_API:
+            raise ManifestError('savers', f'screensavers need plugin API {SAVER_API[0]}.{SAVER_API[1]} (api: "{SAVER_API[0]}.{SAVER_API[1]}")')
+    for i, item in enumerate(raw):
+        where = f'savers[{i}]'
+        item = _object(item, where, {'id', 'name', 'icon', 'step', 'memory', 'pictures', 'taps', 'moves', 'backdrop',
+                                     'options', 'example', 'data', 'domains', 'attributes', 'fields', 'when'},
+                       ('id', 'name', 'step', 'memory'))
+        saver = {'id': _id(item['id'], f'{where}.id'), 'name': _text_key(item['name'], f'{where}.name', keys)}
+        icon = item.get('icon', out['icon'])
+        if not isinstance(icon, str) or not MDI.match(icon):
+            raise ManifestError(f'{where}.icon', 'a Material Design Icons name')
+        saver['icon'] = icon
+        if item['step'] not in SAVER_STEPS:
+            raise ManifestError(f'{where}.step', f'one of {", ".join(SAVER_STEPS)}')
+        saver['step'] = item['step']
+        saver['memory'] = _number(item['memory'], f'{where}.memory', 64, MAX_TILE_BYTES, whole=True)
+        # Places for pictures (as a tile's); 'saver:picture' is the step's own picture (the cover, the photo).
+        saver['pictures'] = _number(item.get('pictures', 0), f'{where}.pictures', 0, MAX_PICTURES, whole=True)
+        for flag in ('taps', 'moves', 'backdrop'):
+            if flag in item and not isinstance(item[flag], bool):
+                raise ManifestError(f'{where}.{flag}', 'true or false')
+            saver[flag] = bool(item.get(flag, False))
+        # `backdrop` (0.14): the screen shows the step's own picture under the saver, over the whole glass and moving
+        # where the person chose so (the photos' motion), and the saver draws over it. Only a step with a picture.
+        if saver['backdrop'] and saver['step'] not in ('media', 'photos'):
+            raise ManifestError(f'{where}.backdrop', 'only a face of the music or the photos has the step\'s picture under it')
+        own = saver['step'] == 'own'
+        for field in ('data', 'domains', 'attributes', 'fields', 'when'):
+            if field in item and not own:
+                raise ManifestError(f'{where}.{field}', f'only a step of its own (step: own) has "{field}": a face draws '
+                                                        f'from its step')
+        domains = _strings(item.get('domains'), f'{where}.domains', 8)
+        if not all(re.match(r'^[a-z_]+$', domain) for domain in domains):
+            raise ManifestError(f'{where}.domains', 'Home Assistant domains, such as [weather]')
+        saver['domains'] = domains
+        attributes = _strings(item.get('attributes'), f'{where}.attributes', MAX_ATTRIBUTES)
+        if attributes and not domains:
+            raise ManifestError(f'{where}.attributes', 'only a step with "domains" belongs to an entity and gets attributes')
+        if not all(re.match(r'^[a-z_][a-z0-9_]{0,47}$', a) for a in attributes):
+            raise ManifestError(f'{where}.attributes', 'attribute names such as forecast')
+        saver['attributes'] = attributes
+        saver['has_attributes'] = []
+        if 'fields' in item:
+            if not domains:
+                raise ManifestError(f'{where}.fields', 'only a step with "domains" belongs to an entity and gets fields')
+            saver['fields'] = check_fields(item['fields'], f'{where}.fields')
+        else:
+            saver['fields'] = {}
+        if 'data' in item:
+            if item['data'] not in fetch_ids:
+                raise ManifestError(f'{where}.data', 'must name a fetch of this plugin')
+            saver['data'] = item['data']
+        if own and 'data' not in saver and not domains:
+            raise ManifestError(where, 'a step of its own draws from a fetch ("data") or an entity ("domains")')
+        when = item.get('when', 'always' if own else None)
+        if own:
+            if isinstance(when, dict):
+                when = _object(when, f'{where}.when', {'state'}, ('state',))
+                states = _strings(when['state'], f'{where}.when.state', 16)
+                if not states or not domains:
+                    raise ManifestError(f'{where}.when.state', 'the states of its entity in which the step shows, such '
+                                                               'as [rainy, pouring]; it needs "domains"')
+                saver['when'] = {'state': states}
+            elif when in ('always', 'data'):
+                if when == 'data' and 'data' not in saver:
+                    raise ManifestError(f'{where}.when', '"data" needs a fetch ("data")')
+                saver['when'] = when
+            else:
+                raise ManifestError(f'{where}.when', 'always, data, or {state: [...]}')
+        options = [check_option(option, f'{where}.options[{j}]', keys, fetch_ids)
+                   for j, option in enumerate(_list(item.get('options'), f'{where}.options', MAX_OPTIONS))]
+        _unique(options, f'{where}.options')
+        saver['options'] = options
+        for option in options:
+            if option.get('options_from'):
+                choice_lists.add(option['options_from'])
+                if option.get('search'):
+                    searched.add(option['options_from'])
+        if 'example' in item:
+            saver['example'] = _text_key(item['example'], f'{where}.example', keys)
+        saver['options_key'] = f'saver:{saver["id"]}'
+        options_of[saver['options_key']] = {option['id']: option for option in options}
+        savers.append(saver)
+    _unique(savers, 'savers')
+    return savers
+
+
 def plugin_type(manifest):
     """What a plugin adds, read from its manifest so a maker cannot say it wrong (the editor's tabs): `tiles` for one
     with tiles to put on a page, `hardware` for one that makes a part of a board work (it brings a feature, asks for a
     pin, or is made for certain boards), `functions` for the rest (the top bar, tap actions, a voice, a sound)."""
     if manifest['tiles']:
         return 'tiles'
+    if manifest.get('savers'):
+        return 'screensavers'
     if manifest['provides'] or manifest['boards'] != 'any' or any(i['kind'] == 'gpio' for i in manifest['inputs']):
         return 'hardware'
     return 'functions'
@@ -267,7 +379,7 @@ def _strings(value, where, most=32):
 
 def check_option(option, where, keys, fetch_ids):
     option = _object(option, where, {'id', 'kind', 'label', 'hint', 'default', 'choices', 'options_from', 'min',
-                                     'max', 'step', 'unit'}, ('id', 'kind', 'label'))
+                                     'max', 'step', 'unit', 'multiple', 'search'}, ('id', 'kind', 'label'))
     _id(option['id'], f'{where}.id')
     kind = option['kind']
     if kind not in OPTION_KINDS:
@@ -292,6 +404,11 @@ def check_option(option, where, keys, fetch_ids):
             if option['options_from'] not in fetch_ids:
                 raise ManifestError(f'{where}.options_from', 'must name a fetch of this plugin')
             out['options_from'] = option['options_from']
+        # A list found by searching (0.12): the editor sends what the person types as {search} of the fetch.
+        if 'search' in option:
+            if option['search'] is not True or 'options_from' not in option:
+                raise ManifestError(f'{where}.search', 'true, for a choice with "options_from" whose fetch uses {search}')
+            out['search'] = True
     elif kind == 'number':
         for key in ('min', 'max'):
             if key not in option:
@@ -307,17 +424,66 @@ def check_option(option, where, keys, fetch_ids):
             if not isinstance(option['unit'], str) or len(option['unit']) > 8:
                 raise ManifestError(f'{where}.unit', 'a unit of at most 8 characters')
             out['unit'] = option['unit']
-    for key in ('choices', 'options_from', 'min', 'max', 'step', 'unit'):
+    # A list (0.12): several texts, or several picks of a choice, in the order the person put them.
+    if 'multiple' in option:
+        if kind not in ('text', 'choice'):
+            raise ManifestError(f'{where}.multiple', 'only a text or a choice keeps several values')
+        out['multiple'] = _number(option['multiple'], f'{where}.multiple', 2, MAX_MULTIPLE, whole=True)
+    for key in ('choices', 'options_from', 'min', 'max', 'step', 'unit', 'search'):
         if key in option and key not in out:
             raise ManifestError(f'{where}.{key}', f'does not belong to an option of kind {kind}')
+    if out['id'] == SEARCH and out.get('search'):
+        raise ManifestError(f'{where}.id', f'"{SEARCH}" is what a searched list\'s fetch gets as the text typed')
+    if 'multiple' in out and 'default' not in option:
+        out['default'] = []
     if 'default' in option:
+        if keeps_picks(out) and option['default'] not in ([], ''):
+            raise ManifestError(f'{where}.default', 'a choice that keeps picks starts empty: [] or no default')
         out['default'] = option_value(out, option['default'], f'{where}.default')
     return out
 
 
+def keeps_picks(option):
+    """Whether an option keeps picks (0.12): {value, label}, the label being the words the person saw in the list. A
+    choice with several values, or one found by searching, keeps them: such a list may be gone or other later, so the
+    label is kept with the value. A plain choice keeps its value, as since 0.1."""
+    return option['kind'] == 'choice' and bool(option.get('multiple') or option.get('search'))
+
+
+def _pick(value, option, where):
+    if not isinstance(value, dict) or set(value) - {'value', 'label'} or 'value' not in value:
+        raise ManifestError(where, 'a pick is {"value": ..., "label": ...}')
+    word, label = value['value'], value.get('label', value['value'])
+    if not isinstance(word, str) or not 0 < len(word) <= MAX_TEXT:
+        raise ManifestError(f'{where}.value', f'a text of 1 to {MAX_TEXT} characters')
+    if not isinstance(label, str) or len(label) > MAX_TEXT:
+        raise ManifestError(f'{where}.label', f'a text of at most {MAX_TEXT} characters')
+    if option.get('choices') and word not in [c['value'] for c in option['choices']]:
+        raise ManifestError(f'{where}.value', 'is not one of the choices')
+    return {'value': word, 'label': label or word}
+
+
 def option_value(option, value, where='value'):
-    """A tile's value for one option, as the screen gets it; raises ManifestError when it does not fit the option."""
+    """A tile's value for one option, as the screen gets it; raises ManifestError when it does not fit the option.
+    A list option (0.12) is a list of texts or of picks, at most `multiple`, each once."""
     kind = option['kind']
+    if option.get('multiple'):
+        if not isinstance(value, list) or len(value) > option['multiple']:
+            raise ManifestError(where, f'a list of at most {option["multiple"]} values')
+        out = []
+        for i, item in enumerate(value):
+            if keeps_picks(option):
+                out.append(_pick(item, option, f'{where}[{i}]'))
+            else:
+                if not isinstance(item, str) or not 0 < len(item) <= MAX_TEXT:
+                    raise ManifestError(f'{where}[{i}]', f'a text of 1 to {MAX_TEXT} characters')
+                out.append(item)
+        words = [item['value'] if isinstance(item, dict) else item for item in out]
+        if len(set(words)) != len(words):
+            raise ManifestError(where, 'holds a value twice')
+        return out
+    if keeps_picks(option):
+        return '' if value == '' else _pick(value, option, where)
     if kind == 'toggle':
         if not isinstance(value, bool):
             raise ManifestError(where, 'must be true or false')
@@ -332,8 +498,9 @@ def option_value(option, value, where='value'):
     return value
 
 
-def check_fields(fields, where):
-    """The fields of a map, of a tile of an entity or of an answer: {name: {path, as, tz}}."""
+def check_fields(fields, where, each=False):
+    """The fields of a map, of a tile of an entity or of an answer: {name: {path, as, tz}}. In a fetch that asks once per
+    value of a list (`each`, 0.12), a field may be `{each: value}` or `{each: label}`: the pick that brought the item."""
     fields = _object(fields, where, set(fields) if isinstance(fields, dict) else ())
     if not fields or len(fields) > MAX_FIELDS:
         raise ManifestError(where, f'1 to {MAX_FIELDS} fields')
@@ -343,6 +510,14 @@ def check_fields(fields, where):
         _id(name, at)
         if isinstance(field, str):
             field = {'path': field}
+        if isinstance(field, dict) and 'each' in field:
+            _object(field, at, {'each'})
+            if not each:
+                raise ManifestError(f'{at}.each', 'only in a fetch with "each"')
+            if field['each'] not in ('value', 'label'):
+                raise ManifestError(f'{at}.each', 'value or label: what of the pick that brought the item')
+            out[name] = {'each': field['each'], 'as': 'text', 'path': [], 'tz': None}
+            continue
         field = _object(field, at, {'path', 'as', 'tz'}, ('path',))
         kind = field.get('as', 'text')
         if kind not in FIELD_KINDS:
@@ -357,7 +532,7 @@ def check_fields(fields, where):
     return out
 
 
-def check_map(spec, where, has_items):
+def check_map(spec, where, has_items, each=False):
     spec = _object(spec, where, {'items', 'fields', 'where', 'skip', 'sort', 'limit', 'value', 'label'})
     out = {}
     if 'items' in spec:
@@ -381,7 +556,7 @@ def check_map(spec, where, has_items):
         return out
     if 'fields' not in spec:
         raise ManifestError(where, '"fields" names what the screen gets')
-    out['fields'] = check_fields(spec['fields'], f'{where}.fields')
+    out['fields'] = check_fields(spec['fields'], f'{where}.fields', each)
     for key in ('where', 'skip'):
         if key in spec:
             rules = _object(spec[key], f'{where}.{key}', set(out['fields']))
@@ -397,18 +572,22 @@ def check_map(spec, where, has_items):
             raise ManifestError(f'{where}.sort', 'must name a field (with - in front for the other way round)')
         out['sort'] = sort
     out['limit'] = _number(spec.get('limit', MAX_ITEMS), f'{where}.limit', 1, MAX_ITEMS, whole=True)
-    if 'items' not in out and any(key in spec for key in ('where', 'skip', 'sort', 'limit')):
+    # A fetch that asks once per value (`each`) always gives a list: the items of every answer, or one item per answer
+    # for a map of one object, so "sort" and "limit" work on that list too.
+    if 'items' not in out and not each and any(key in spec for key in ('where', 'skip', 'sort', 'limit')):
         raise ManifestError(where, '"where", "skip", "sort" and "limit" work on "items"')
     return out
 
 
-def check_fetch(fetch, where, network, inputs, option_ids, choice_lists):
-    fetch = _object(fetch, where, {'id', 'url', 'headers', 'every', 'map'}, ('id', 'url', 'every', 'map'))
+def check_fetch(fetch, where, network, inputs, options, choice_lists, searched=()):
+    """One fetch. `options`: {id: option} of the tiles that use it (through `data` or `options_from`); `searched`: the
+    fetches that fill a list found by searching, which may use {search}."""
+    fetch = _object(fetch, where, {'id', 'url', 'headers', 'every', 'map', 'each'}, ('id', 'url', 'every', 'map'))
     _id(fetch['id'], f'{where}.id')
     url = fetch['url']
     if not isinstance(url, str) or len(url) > 512:
         raise ManifestError(f'{where}.url', 'a URL of at most 512 characters')
-    parts = urlsplit(url.replace('{', 'x').replace('}', 'x'))
+    parts = urlsplit(url.replace('{', 'x').replace('}', 'x').replace('|', 'x'))
     host = urlsplit(url).hostname or ''
     if parts.scheme not in ('https', 'http') or not host or '{' in host:
         raise ManifestError(f'{where}.url', 'an https URL with a fixed host')
@@ -422,15 +601,32 @@ def check_fetch(fetch, where, network, inputs, option_ids, choice_lists):
                                    for k, v in headers.items()):
         raise ManifestError(f'{where}.headers', 'at most 8 headers, each a text')
     secrets = {i['id'] for i in inputs if i['kind'] == 'secret'}
-    known = option_ids | {i['id'] for i in inputs}
-    used = set(PLACEHOLDER.findall(url))
-    for value in headers.values():
-        used |= set(PLACEHOLDER.findall(value))
+    option_ids = set(options)
+    lists = {key for key, option in options.items() if option.get('multiple')}
+    # Once per value of a list option (0.12): `{<each>}` in the URL is one of its values, and the answers come together.
+    each = fetch.get('each')
+    if each is not None:
+        if each not in lists:
+            raise ManifestError(f'{where}.each', 'must name an option with "multiple" of every tile that uses this fetch')
+        if fetch['id'] in choice_lists:
+            raise ManifestError(f'{where}.each', 'a fetch that fills a list of choices asks once')
+    known = option_ids | {i['id'] for i in inputs} | ({SEARCH} if fetch['id'] in searched else set())
+    found = FETCH_PLACEHOLDER.findall(url) + [m for v in headers.values() for m in FETCH_PLACEHOLDER.findall(v)]
+    used = {name for name, _ in found}
     unknown = sorted(used - known)
     if unknown:
         raise ManifestError(where, f'{{{unknown[0]}}} is no option of a tile that uses this fetch and no input')
+    mixed = sorted(name for name in used if options.get(name, {}).get('mixed'))
+    if mixed:
+        raise ManifestError(where, f'{{{mixed[0]}}} is a list in one tile that uses this fetch and one value in another')
+    for name, joiner in found:
+        if name in lists and name != each and not joiner:
+            raise ManifestError(where, f'{{{name}}} holds several values: {{{name}|,}} joins them, or "each: {name}" '
+                                       f'asks once per value')
+        if joiner and (name not in lists or name == each):
+            raise ManifestError(where, f'{{{name}|{joiner}}} joins a list option that is not this fetch\'s "each"')
     path = urlsplit(url).path
-    if any(name in secrets for name in PLACEHOLDER.findall(path)):
+    if any(name in secrets for name, _ in FETCH_PLACEHOLDER.findall(path)):
         raise ManifestError(f'{where}.url', 'a secret goes in a header or the query, never in the path')
     if parts.scheme == 'http' and used & secrets:
         raise ManifestError(f'{where}.url', 'a fetch that carries a secret must use https')
@@ -438,17 +634,21 @@ def check_fetch(fetch, where, network, inputs, option_ids, choice_lists):
     if every is None or every < MIN_EVERY:
         raise ManifestError(f'{where}.every', f'30s or more, written as 30s, 5m, 1h or 1d')
     out = {'id': fetch['id'], 'url': url, 'headers': dict(headers), 'every': every,
-           'map': check_map(fetch['map'], f'{where}.map', fetch['id'] in choice_lists),
+           'map': check_map(fetch['map'], f'{where}.map', fetch['id'] in choice_lists, each is not None),
            'placeholders': sorted(used)}
+    if each is not None:
+        out['each'] = each
+    # In `where`, `skip` and a step of `items`, a placeholder is one value: an option, an input, or the value of `each`.
+    single = known - (lists - {each})
     if out['map'].get('fields') is not None:
         for name, rules in [(n, r) for key in ('where', 'skip') for n, r in out['map'].get(key, {}).items()]:
             for value in rules:
                 for var in PLACEHOLDER.findall(value):
-                    if var not in known:
-                        raise ManifestError(f'{where}.map', f'{{{var}}} is no option or input')
+                    if var not in single:
+                        raise ManifestError(f'{where}.map', f'{{{var}}} is no option or input of one value')
     for step in out['map'].get('items', []):
-        if step[0] == 'var' and step[1] not in known:
-            raise ManifestError(f'{where}.map.items', f'{{{step[1]}}} is no option or input')
+        if step[0] == 'var' and step[1] not in single:
+            raise ManifestError(f'{where}.map.items', f'{{{step[1]}}} is no option or input of one value')
     return out
 
 
@@ -596,7 +796,7 @@ def check(manifest, english=None, strict=True):
         if isinstance(item, dict) and isinstance(item.get('id'), str):
             fetch_ids.add(item['id'])
 
-    tiles, choice_lists, option_ids_of = [], set(), {}
+    tiles, choice_lists, searched, options_of = [], set(), set(), {}
     for i, item in enumerate(_list(manifest.get('tiles'), 'tiles', MAX_TILES)):
         where = f'tiles[{i}]'
         item = _object(item, where, {'id', 'name', 'icon', 'sizes', 'memory', 'domains', 'data', 'options',
@@ -666,6 +866,8 @@ def check(manifest, english=None, strict=True):
         for option in options:
             if option.get('options_from'):
                 choice_lists.add(option['options_from'])
+                if option.get('search'):
+                    searched.add(option['options_from'])
         if 'example' in item:
             tile['example'] = _text_key(item['example'], f'{where}.example', keys)
         if 'preview' in item:
@@ -679,17 +881,25 @@ def check(manifest, english=None, strict=True):
             if 'value' in preview and 'countdown' in preview:
                 raise ManifestError(f'{where}.preview', 'either "value" or "countdown"')
             tile['preview'] = dict(preview)
-        option_ids_of[tile['id']] = {option['id'] for option in options}
+        options_of[tile['id']] = {option['id']: option for option in options}
         tiles.append(tile)
     _unique(tiles, 'tiles')
     out['tiles'] = tiles
+    out['savers'] = check_savers(manifest.get('savers'), out, keys, fetch_ids, choice_lists, searched, options_of)
 
     fetches = []
     for i, item in enumerate(raw_fetches):
-        users = [t for t in tiles if t.get('data') == (item or {}).get('id')
+        users = [t for t in (*tiles, *out['savers']) if t.get('data') == (item or {}).get('id')
                  or any(o.get('options_from') == (item or {}).get('id') for o in t['options'])]
-        option_ids = set().union(*(option_ids_of[t['id']] for t in users)) if users else set()
-        fetches.append(check_fetch(item, f'fetch[{i}]', network, inputs, option_ids, choice_lists))
+        # The options of the tiles that use it; an option is a list only when it is one in every tile that has it.
+        options = {}
+        for tile in users:
+            for key, option in options_of[tile.get('options_key', tile['id'])].items():
+                if key in options and bool(options[key].get('multiple')) != bool(option.get('multiple')):
+                    options[key] = {**option, 'multiple': None, 'mixed': True}
+                else:
+                    options.setdefault(key, option)
+        fetches.append(check_fetch(item, f'fetch[{i}]', network, inputs, options, choice_lists, searched))
     _unique(fetches, 'fetch')
     for fetch in fetches:
         if fetch['id'] in choice_lists and 'value' not in fetch['map']:
@@ -735,11 +945,13 @@ def check(manifest, english=None, strict=True):
     cards = []
     for i, item in enumerate(_list(manifest.get('cards'), 'cards', 8)):
         where = f'cards[{i}]'
-        item = _object(item, where, {'id', 'name', 'wide'}, ('id', 'name'))
+        item = _object(item, where, {'id', 'name', 'wide', 'pictures'}, ('id', 'name'))
         if 'wide' in item and not isinstance(item['wide'], bool):
             raise ManifestError(f'{where}.wide', 'true or false')
+        # Places for pictures on the card over the page (0.13), as a tile's: how many at most.
         cards.append({'id': _id(item['id'], f'{where}.id'), 'name': _text_key(item['name'], f'{where}.name', keys),
-                      'wide': bool(item.get('wide', False))})
+                      'wide': bool(item.get('wide', False)),
+                      'pictures': _number(item.get('pictures', 0), f'{where}.pictures', 0, MAX_PICTURES, whole=True)})
     _unique(cards, 'cards')
     out['cards'] = cards
     taps = []

@@ -120,7 +120,7 @@ export function footprintSize(tile: PageTile, grid: PageGrid): Size {
       if (span.columns !== columns || span.rows !== rows || !spanOffered(columns, rows, grid)) throw new Error(t("addon.errors.pages.footprint"));
       return presentation;
     }
-    const sizes = { single: [1, 1], wide: [Math.min(2, grid.columns), 1], tall: [1, 2], square: [2, 2], full: [grid.columns, grid.rows] };
+    const sizes: Partial<Record<Size, [number, number]>> = { single: [1, 1], wide: [Math.min(2, grid.columns), 1], tall: [1, 2], square: [2, 2], full: [grid.columns, grid.rows] };
     const size = sizes[presentation];
     if (!size || size[0] !== columns || size[1] !== rows) throw new Error(t("addon.errors.pages.footprint"));
     return presentation;
@@ -279,7 +279,8 @@ export function validatePages(layout: PageLayout, grid: PageGrid): PageLayout {
   for (const page of layout.pages) identity(page.id, true);
   for (const page of layout.pages) {
     const bar = page.topbar;
-    if (typeof page.navigation.excludeFromPagination !== "boolean") throw new Error(t("addon.errors.pages.navigation"));
+    if (typeof page.navigation.excludeFromPagination !== "boolean" || !["boolean", "undefined"].includes(typeof page.navigation.showInDock))
+      throw new Error(t("addon.errors.pages.navigation"));
     if (bar.leading.length > 1 || bar.trailing.length > barLimit(grid)) throw new Error(t("addon.errors.top_bar.full", barLimit(grid)));
     if (bar.title.source !== "screen" && (bar.title.source !== "text" || !bar.title.text.trim() || byteLength(bar.title.text) > 96))
       throw new Error(t("addon.errors.layout.page_title"));
@@ -412,7 +413,7 @@ export function arrangeTiles(layout: PageLayout, grid: PageGrid, entries: { tile
         if (options[wire] !== undefined) Object.assign(appearance, { [key]: clone(options[wire]) });
       }
       const interaction: PageTile["interaction"] = {};
-      for (const key of ["tap", "inline", "controls", "action", "guard", "play", "speaker", "shuffle", "repeat"] as const) {
+      for (const key of ["tap", "inline", "controls", "action", "guard", "play", "speaker", "shuffle", "repeat", "tilt_open"] as const) {
         if (options[key] !== undefined) Object.assign(interaction, { [key]: clone(options[key]) });
       }
       // A key keeps its id: an edit of one key is not a new key.

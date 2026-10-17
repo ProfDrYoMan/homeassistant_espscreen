@@ -191,7 +191,10 @@
       "hours_minutes": "{h} u {m}",
       "wifi": "Wifi",
       "tessera": "Tessera",
-      "plugins": "Plugins"
+      "plugins": "Plugins",
+      "microphone_gain": "Microfoongain",
+      "automatic_gain": "Automatische gain",
+      "echo_cancellation": "Echo-onderdrukking"
     },
     "tile": {
       "tap_to_open": "Tik om te openen",
@@ -239,7 +242,16 @@
       "resume": "Hervatten",
       "start_cleaning": "Schoonmaken starten",
       "clean": "Schoonmaken",
-      "dock": "Dock"
+      "dock": "Dock",
+      "stop": "Stoppen",
+      "by_room": "Per ruimte",
+      "routines": "Routines",
+      "suction_water": "Zuigen & dweilen",
+      "pick_rooms": "Kies een of meer ruimtes",
+      "order_hint": "Niet elke robot houdt deze volgorde aan",
+      "no_rooms": "Geen ruimtes gekoppeld",
+      "no_rooms_how": "Koppel ze in Home Assistant, bij de instellingen van de stofzuiger.",
+      "routines_note": "Gemaakt in de app van de robot"
     },
     "cover": {
       "position": "Positie",
@@ -379,7 +391,8 @@
         "cleaning": "Schoonmaken",
         "paused": "Gepauzeerd",
         "returning": "Terugkeren naar dock",
-        "idle": "Inactief"
+        "idle": "Inactief",
+        "error": "Fout"
       },
       "weather": {
         "sunny": "Zonnig",
@@ -912,7 +925,21 @@
       "extras": {
         "request": "Deze extra kan op dit scherm niet zo worden gewijzigd."
       },
-      "display_precision_unregistered": "Home Assistant bewaart geen instellingen voor deze sensor omdat hij geen unieke ID heeft, dus de weergaveprecisie kan alleen in zijn YAML worden ingesteld."
+      "display_precision_unregistered": "Home Assistant bewaart geen instellingen voor deze sensor omdat hij geen unieke ID heeft, dus de weergaveprecisie kan alleen in zijn YAML worden ingesteld.",
+      "build_server": {
+        "host": "Vul het IP-adres of de hostnaam van de buildserver in.",
+        "port": "De poort is een getal van 1 tot 65535. Een buildserver luistert op 6055, tenzij je dat hebt veranderd.",
+        "unreachable": "Op dat adres antwoordt niets. Controleer of de buildserver draait, of hij voor andere apparaten bouwt en of een firewall poort 6055 doorlaat.",
+        "protocol": "Op dat adres antwoordt iets, maar het is geen ESPHome-buildserver waar Tessera mee kan praten.",
+        "preview_first": "Zoek de buildserver eerst op en vergelijk dan zijn vingerafdruk.",
+        "no_window": "De buildserver neemt nu geen nieuwe apparaten aan. Open daar Pairing requests en koppel opnieuw.",
+        "no_window_key": "De buildserver nam die sleutel niet aan. Controleer de koppelsleutel, of start de buildserver opnieuw voor een nieuwe.",
+        "rejected": "De buildserver heeft het koppelen geweigerd.",
+        "mismatch": "Deze buildserver antwoordde met een andere vingerafdruk dan die je hebt gecontroleerd. Zoek hem opnieuw op.",
+        "not_paired": "Koppel eerst een buildserver.",
+        "unknown": "De buildserver kent Tessera niet meer. Koppel hem opnieuw.",
+        "pending": "De buildserver heeft Tessera nog niet geaccepteerd."
+      }
     },
     "status": {
       "first_tiles": "Kies je eerste tegels",
@@ -937,6 +964,8 @@
       "offline": "Scherm was offline; volgende keer opnieuw.",
       "unknown_target": "Profiel of IP-adres onbekend; werk dit scherm handmatig bij.",
       "build_failed": "Bouwen of installeren mislukt; bekijk het log onder Firmware & USB.",
+      "plugin_update_needed": "{name} bouwt niet met deze firmware. Werk de plugin {name} bij naar {version} op de pagina Plugins en werk het scherm daarna opnieuw bij.",
+      "plugin_failed": "{name} {version} bouwt niet met deze firmware en er is nog geen nieuwere versie. Verwijder de plugin {name} op de pagina Plugins om het scherm zonder die plugin bij te werken; het log staat onder Firmware & USB.",
       "build_memory": "Te weinig geheugen om de firmware te bouwen: er moet ongeveer {need} vrij zijn en dat is {free}. Stop een paar add-ons tijdelijk of geef de machine meer geheugen; zie Firmware & USB.",
       "build_memory_limit": "Te weinig geheugen om de firmware te bouwen, ook met één compiler tegelijk. Stop een paar add-ons tijdelijk of geef de machine meer geheugen; zie Firmware & USB.",
       "no_report": "Scherm meldde zich niet met firmware {version}; controleer het scherm.",
@@ -998,7 +1027,8 @@
         },
         "media_player": {
           "volume": "Volume en dempen",
-          "playback": "Vorige, play/pauze, volgende"
+          "playback": "Vorige, play/pauze, volgende",
+          "volume_playback": "Volume en vorige, play/pauze, volgende"
         },
         "number": {
           "stepper": "Waarde − / +",
@@ -1102,6 +1132,18 @@
         "wake_when_moved": {
           "label": "Wakker bij bewegen",
           "hint": "Het scherm wordt wakker uit stand-by als iemand het oppakt, verplaatst of erop tikt. Het voelt het scherm zelf, niet iemand die langsloopt."
+        },
+        "microphone_gain": {
+          "label": "Microfoongain",
+          "hint": "Analoge microfoonversterking. Begint op 30 dB; de versterking van de afspeelreferentie blijft vast."
+        },
+        "automatic_gain": {
+          "label": "Automatische gain",
+          "hint": "Laat de microfooncodec het opnameniveau bijregelen. Staat los van echo-onderdrukking."
+        },
+        "echo_cancellation": {
+          "label": "Echo-onderdrukking",
+          "hint": "Verminder de eigen speaker in het microfoonsignaal. Uit omzeilt de verwerking; microfoon en full-duplex blijven werken. Vereist het AEC-audiopad."
         }
       }
     },
@@ -1445,7 +1487,8 @@
       "remove": "Verwijderen",
       "loading": "Laden…",
       "back": "← Terug",
-      "copy": "Kopiëren"
+      "copy": "Kopiëren",
+      "done": "Klaar"
     },
     "nav": {
       "new_screen": "Nieuw scherm",
@@ -1987,7 +2030,8 @@
         "full_hint": "Onderaan de paginavullende tegel; een tik ergens anders werkt zoals hieronder ingesteld.",
         "wide_hint": "Rechts op de dubbelbrede tegel, zoals de rijen in Home Assistant. Tikken op de naam werkt zoals hieronder ingesteld.",
         "needs_firmware": "Het scherm toont directe bediening vanaf firmware 0.2.19; tot die tijd blijft de tegel zoals hij was.",
-        "tall_hint": "Kies de bediening in de extra hoogte. Vergroten behoudt je keuze en voegt nooit automatisch bediening toe.",
+        "tall_hint": "Kies de bediening in de extra hoogte. Een tegel die groter wordt stelt de rijkste set voor die past; je eigen keuze blijft staan.",
+        "room_hint": "Het scherm tekent ze waar de tegel er ruimte voor heeft (firmware 0.57.0 of nieuwer): onder de naam op een enkele tegel, ernaast op een dubbelbrede. Waar ze niet passen, ziet de tegel eruit zoals zonder.",
         "tilt": "Lamellenbediening",
         "tilt_hint": "Voegt de ondersteunde lamellenschuif of kantelknoppen toe als er genoeg ruimte is. Gebruik op kleinere tegels de detailweergave. Je keuze voor open/dicht blijft behouden."
       },
@@ -2017,6 +2061,13 @@
         "lock_only": "Nooit",
         "confirm_hint": "Een vergrendeld slot gaat pas open na een tweede tik op de tegel of de knop. Vergrendelen is altijd één tik.",
         "lock_only_hint": "Dit scherm kan vergrendelen, maar nooit ontgrendelen of openen. Handig voor een scherm in een portiek, garage of kinderkamer."
+      },
+      "tilt_open": {
+        "label": "Lamellen open bij",
+        "100": "100 %",
+        "50": "50 %",
+        "100_hint": "Zoals Home Assistant het doet: 0 % is dicht, 100 % helemaal open.",
+        "50_hint": "Voor lamellen die open zijn bij 50 % en dicht bij 0 % en 100 %, de ene en de andere kant op, zoals de SwitchBot Blind Tilt."
       },
       "sub": {
         "label": "Tweede regel",
@@ -2226,6 +2277,16 @@
           "grey": "Grijs",
           "blue-grey": "Blauwgrijs"
         }
+      },
+      "anchor_hint": "Klik op het icoon om een ander te kiezen, of op de naam om de tegel een andere naam te geven",
+      "grow": {
+        "title": "Ruimte voor meer bediening",
+        "applied": "Op {columns} × {rows} past meer bediening. Kies wat deze tegel laat zien; later aanpassen kan bij Bediening.",
+        "offered": "Op {columns} × {rows} past dit op deze tegel. Kies wat hij laat zien; later aanpassen kan bij Bediening.",
+        "suggested": "Voorgesteld",
+        "none": "Geen bediening",
+        "never": "Niet meer tonen",
+        "done": "Klaar"
       }
     },
     "precision": {
@@ -2289,28 +2350,21 @@
       "screen_name": "Titel van het scherm",
       "screen_name_hint": "Elke pagina zonder eigen titel zegt dit.",
       "no_title_hint": "Laat leeg om alleen het logo te tonen.",
-      "right": "Rechts: tijd, sensoren of een klok",
       "item_label": "{name}, plek {slot}. Enter: instellen, pijltjes: verplaatsen",
-      "remove_named": "{name} uit de bovenbalk halen",
       "max": "Maximaal 1 onderdeel | Maximaal {n} onderdelen",
       "add_title": "Tijd, datum, analoge klok of een entiteit toevoegen",
-      "add_button": "Tijd, datum of entiteit toevoegen",
       "hint": {
         "overflow": "Niet alles past naast de naam: het scherm laat de gestreepte onderdelen weg. Haal er een weg of kies een kortere naam.",
-        "reorder": "Sleep om de volgorde te wijzigen; tik op een onderdeel om het in te stellen.",
         "needs_firmware": "Sensoren, de datum en de analoge klok verschijnen vanaf firmware {version}; tot die update toont dit scherm de naam en, als de tijd in de balk staat, de klok."
       },
       "detail": {
         "hidden": "Verborgen: nu niet actief",
         "overflow": "Past niet naast de naam",
-        "dial": "Wijzerplaat",
         "hidden_signal": "Verborgen zolang het signaal goed is",
         "hidden_link": "Verborgen zolang alles verbonden is",
         "hidden_battery": "Verborgen zolang de accu boven 20 % is"
       },
       "live": {
-        "hidden": "Nu verborgen: niet actief",
-        "overflow": "Past nu niet naast de naam",
         "looks": "Zo staat het op het scherm"
       },
       "analog_sample": "Kleine wijzerplaat met de tijd",
@@ -2327,8 +2381,6 @@
       "clock_12": "12-uursklok · wijzigen onder {settings}",
       "clock_settings": "Instellingen → Taal & regio",
       "date_hint": "Vandaag is het {date}. De datum volgt de eigen klok van het scherm.",
-      "up": "Omhoog",
-      "down": "Omlaag",
       "add": {
         "title": "Toevoegen aan de bovenbalk",
         "slots": "{used} van {n} plek gebruikt | {used} van {n} plekken gebruikt",
@@ -2341,7 +2393,6 @@
         "none_found": "Geen entiteiten gevonden.",
         "plugins": "Van plugins"
       },
-      "left": "Links",
       "left_hint": "Titel en thuisknop: in de pagina-instellingen",
       "wifi_sample": "Het signaal van dit scherm zelf",
       "link_sample": "Alleen als Home Assistant of Tessera weg is",
@@ -2352,7 +2403,18 @@
       "battery_hint": "Het scherm leest zijn eigen accu, dus dit item blijft in de balk als Home Assistant weg is. Het icoon volgt het niveau zoals Home Assistant het tekent, met een bliksemschicht tijdens het laden.",
       "battery_show_hint": "Alleen als laag houdt de balk leeg tot de accu op 20 % of minder staat.",
       "status_firmware": "Dit item verschijnt vanaf firmware {version}. Tot die update laat het scherm het weg.",
-      "plugin_item": "Toont wat de plugin zegt, alleen als hij iets te zeggen heeft. Op een scherm zonder die plugin blijft het weg."
+      "plugin_item": "Toont wat de plugin zegt, alleen als hij iets te zeggen heeft. Op een scherm zonder die plugin blijft het weg.",
+      "left_move": "Naar links",
+      "right_move": "Naar rechts",
+      "strip": {
+        "left_title": "Titel en Home-knop",
+        "left_hint": "Linkerkant · in te stellen bij {page}",
+        "place": "Item {place} van {count}",
+        "hint": "Tik een item in de balk om het in te stellen. Sleep het naar links of rechts om het te verplaatsen, of uit de balk om het te verwijderen.",
+        "copy": "Deze balk naar andere pagina's kopiëren",
+        "copy_hint": "De items, of de hele balk met de titel",
+        "page_settings": "Instellingen van {page}"
+      }
     },
     "screen_settings": {
       "groups": {
@@ -2421,6 +2483,7 @@
         "use": "{name} gebruiken",
         "kinds": {
           "media": "Muziek die speelt",
+          "photos": "Foto's",
           "camera": "Camera",
           "clock": "Klok"
         },
@@ -2429,7 +2492,10 @@
           "camera_none": "Nog geen camera",
           "temperature": "Buitentemperatuur",
           "time_date": "Tijd en datum",
-          "off": "Uit"
+          "off": "Uit",
+          "photos_none": "Kies een map",
+          "plugin_gone": "De plugin staat niet op dit scherm",
+          "plugin_entity": "Kies een entiteit"
         },
         "on": "Tonen op de screensaver",
         "place": "{n} van {count}",
@@ -2439,15 +2505,15 @@
         "players": "Spelers, de eerste bovenaan",
         "players_hint": "De eerste die speelt, verschijnt met zijn hoes.",
         "player_add": "Speler toevoegen",
+        "player_search": "Spelers zoeken",
+        "player_none": "Geen speler gevonden",
         "remove_player": "{name} weghalen",
         "keys_hint": "Afspelen, pauze en het volume werken op de screensaver. Een tik ergens anders maakt het scherm wakker.",
         "choose_camera": "Kies een camera",
         "camera_hint": "Het beeld, elke 15 seconden",
-        "glass": "Op het scherm",
         "temperature": "Temperatuur",
         "weather_auto": "Automatisch",
         "weather_none": "Geen temperatuur",
-        "beside": "Ernaast",
         "items_add": "Voeg een entiteit toe",
         "items_hint": "Naast de temperatuur, op één regel: een sensor, een deur, een lamp.",
         "items_full": "De klok heeft ruimte voor {n} entiteiten.",
@@ -2460,7 +2526,66 @@
         "item_both": "Beide",
         "item_look": "Toont",
         "item_hint": "Zwart-wit op de screensaver, welke kleur de entiteit ook heeft.",
-        "items_add_title": "Aan de klok toevoegen"
+        "items_add_title": "Aan de klok toevoegen",
+        "clock_part": "Tijd, datum en temperatuur",
+        "row_hint": "Tik een entiteit in de rij om haar in te stellen. Sleep haar naar links of rechts om haar te verplaatsen, of uit de rij om haar te verwijderen.",
+        "face": "Wijzerplaat",
+        "faces": {
+          "digital": "Digitaal",
+          "glass": "Glas",
+          "classic": "Klassiek",
+          "bauhaus": "Bauhaus"
+        },
+        "look": "Uiterlijk",
+        "look_dark": "Donker",
+        "look_light": "Licht",
+        "look_auto": "Als het scherm",
+        "numerals": "Cijfers",
+        "numerals_none": "Geen",
+        "seconds": "Secondewijzer",
+        "face_alone_hint": "Deze wijzerplaat toont alleen de tijd. De temperatuur en de entiteiten staan op Klassiek en Digitaal.",
+        "face_moves_hint": "De wijzerplaat schuift elke minuut een fractie op en Bauhaus schildert elke tien minuten een nieuw beeld, zodat niets lang op dezelfde pixels staat.",
+        "plugin_add": "Toevoegen uit plugins",
+        "plugin_steps_full": "Ruimte voor {n} stappen van plugins",
+        "plugin_gone": "De plugin staat niet op dit scherm, dus deze stap toont niets. Voeg de plugin opnieuw toe of verwijder de stap.",
+        "plugin_entity_search": "Entiteiten zoeken",
+        "plugin_entity_none": "Geen entiteit gevonden",
+        "plugin_entity_choose": "Kies een entiteit",
+        "plugin_entity_change": "Andere entiteit kiezen",
+        "face_standard": "Standaard",
+        "photos_folder": "Map",
+        "photos_hint": "Een map van de media van Home Assistant: een map onder /media, Immich, Synology Photos.",
+        "photos_sources": "Media",
+        "photos_untitled": "Zonder titel",
+        "photos_loading": "Laden…",
+        "photos_failed": "Home Assistant kon deze map niet openen.",
+        "photos_here": "{n} foto hier | {n} foto's hier",
+        "photos_none_here": "Direct in deze map staan geen foto's. Open een van de mappen erin.",
+        "photos_empty": "Hier staat niets.",
+        "photos_choose": "Kies deze map",
+        "photos_change": "Wijzigen",
+        "photos_show": "Diavoorstelling",
+        "photos_every": "Elke",
+        "photos_every_30": "30 s",
+        "photos_every_60": "1 min",
+        "photos_every_300": "5 min",
+        "photos_every_900": "15 min",
+        "photos_every_3600": "1 uur",
+        "photos_order": "Volgorde",
+        "photos_order_shuffle": "Willekeurig",
+        "photos_order_in_order": "Op volgorde",
+        "photos_fit": "Passend",
+        "photos_fit_auto": "Auto",
+        "photos_fit_fill": "Vullen",
+        "photos_fit_whole": "Geheel",
+        "photos_fit_auto_hint": "Een foto van ongeveer de vorm van het scherm vult het. Andere staan er geheel op, op hun eigen kleur.",
+        "photos_fit_fill_hint": "Elke foto vult het scherm, aan de randen bijgesneden.",
+        "photos_fit_whole_hint": "Elke foto staat er geheel op, op zijn eigen kleur.",
+        "photos_motion": "Beweging",
+        "photos_motion_still": "Stil",
+        "photos_motion_slow": "Langzaam",
+        "photos_motion_still_hint": "Elke foto staat stil.",
+        "photos_motion_slow_hint": "Een foto die het glas vult schuift er langzaam overheen, een pixel tegelijk. De 10-inch schermen houden hun foto's stil: een grotere foto past niet in hun geheugen."
       },
       "plugins": {
         "title": "Plugins",
@@ -2548,6 +2673,63 @@
       "alerts": {
         "text": "Een kaart over het hele scherm vanuit een automatisering, op één scherm of op allemaal. De cheatsheet heeft de actienamen, velden, iconen en kleuren, en een formulier om er een te proberen.",
         "detail": "Meldingen over het hele scherm, vanuit een automatisering"
+      },
+      "build_server": {
+        "title": "Buildserver",
+        "intro": "Bouw firmware op een snellere computer. Tessera stuurt de YAML van het scherm naar een ESPHome-buildserver en installeert wat terugkomt. Lukt dat de server niet, dan bouwt Tessera hier zoals voorheen.",
+        "connect": "Buildserver koppelen",
+        "how_title": "Zo start je een buildserver",
+        "how_desktop": "ESPHome Desktop op een computer: die bouwt meteen voor andere apparaten.",
+        "how_builder": "ESPHome Device Builder: Settings → Build server → Enable remote build.",
+        "how_headless": "Op een server zonder scherm: voer {command} uit en gebruik de sleutel die het toont.",
+        "how_link": "Meer over buildservers",
+        "address": "Adres",
+        "address_hint": "Het IP-adres of de hostnaam van de computer. Home Assistant-apps kunnen hem niet zelf op het netwerk zoeken.",
+        "port": "Poort",
+        "look_up": "Opzoeken",
+        "looking": "Zoeken…",
+        "check_title": "Is dit jouw buildserver?",
+        "check_text": "{name} · ESPHome {version}",
+        "check_hint": "De buildserver toont zijn vingerafdruk waar je bouwen voor andere apparaten hebt aangezet, of in het venster waarin je hem startte. Koppel alleen als deze emoji overeenkomen.",
+        "server_emoji": "Zijn vingerafdruk",
+        "own_emoji": "Vingerafdruk van Tessera",
+        "own_emoji_hint": "De buildserver toont deze als je Tessera accepteert.",
+        "key": "Koppelsleutel",
+        "key_hint": "De sleutel die deze buildserver bij het starten toonde, zoals ABCD-EFGH-JKLM-NPQR. Hij werkt één keer.",
+        "pair": "Ze kloppen, koppelen",
+        "pairing": "Koppelen…",
+        "back": "Terug",
+        "cancel": "Annuleren",
+        "wait_title": "Accepteer Tessera op {name}",
+        "wait_text": "Open Pairing requests op de buildserver, controleer dat die deze emoji voor Tessera toont en accepteer.",
+        "paired": "Gekoppeld met {name}. Schermen worden voortaan daar gebouwd.",
+        "status": {
+          "connecting": "Verbinden…",
+          "online": "Klaar",
+          "busy": "Bezig met een andere build",
+          "offline": "Niet bereikbaar",
+          "pending": "Wacht op jouw akkoord",
+          "refused": "Niet meer gekoppeld",
+          "mismatch": "Vingerafdruk veranderd"
+        },
+        "offline_text": "Tot hij terug is, wordt hier gebouwd.",
+        "refused_text": "{name} kent Tessera niet meer, of niemand heeft op tijd geaccepteerd. Koppel opnieuw om daar te bouwen.",
+        "mismatch_text": "{name} antwoordde met een andere vingerafdruk dan die je hebt gecontroleerd. Heb je hem opnieuw geïnstalleerd, koppel dan opnieuw.",
+        "send": "Schermen op deze server bouwen",
+        "send_hint": "Uit, of als de server onbereikbaar is: dan wordt hier gebouwd.",
+        "version_same": "Bouwt met ESPHome {version}, dezelfde als Tessera.",
+        "version_other": "Bouwt met ESPHome {ours}, die Tessera gebruikt. De server installeert die één keer, naast zijn eigen {theirs}.",
+        "building": "{file} bouwen · {step}",
+        "last_server": "Laatste build: {file} op deze server in {time}.",
+        "last_here": "Laatste build: {file} hier gebouwd, {reason}.",
+        "last_failed": "Laatste build: {file} mislukte op deze server. Het log zegt waarom.",
+        "minutes": "{m} min {s} s",
+        "seconds": "{s} s",
+        "pair_again": "Opnieuw koppelen",
+        "forget": "Vergeten",
+        "forget_confirm": "{name} vergeten? Schermen worden dan weer hier gebouwd. Om Tessera ook daar te verwijderen, haal je het weg uit de gekoppelde apparaten van de buildserver.",
+        "forget_go": "Vergeten",
+        "unavailable": "Deze Tessera kan niet met een buildserver praten."
       }
     },
     "firmware": {
@@ -2966,6 +3148,16 @@
       "start_fresh_confirm": "Beginnen met één lege pagina op dit scherm? De oorspronkelijke indeling blijft in de migratieback-up bewaard. Andere schermen blijven ongewijzigd.",
       "offline_notice": "Wachten tot het scherm weer verbonden is. De editor gebruikt de laatst gecontroleerde mogelijkheden.",
       "include_navigation_hint": "Als dit uit staat, blijft de pagina bereikbaar via directe links. Terug verschijnt in de onderbalk, of vervangt Thuis als die balk verborgen is.",
+      "dock_picture": "Afbeelding van de pagina",
+      "in_dock": "In het Dock",
+      "in_dock_hint": "Het Dock opent met een veeg omhoog vanaf de onderrand en toont elke pagina om naartoe te springen.",
+      "dock_mode_picture": "Afbeelding",
+      "dock_mode_icon": "Icoon",
+      "dock_mode_hidden": "Verborgen",
+      "dock_hint_picture": "Het Dock toont een kleine afbeelding van deze pagina.",
+      "dock_hint_icon": "Het Dock toont dit icoon voor de pagina in plaats van de afbeelding.",
+      "dock_hint_hidden": "De pagina blijft in vegen en paginabolletjes; alleen het Dock laat hem weg.",
+      "wizard_home": "Thuisknop",
       "home_control": "Toon een thuisknop op deze pagina",
       "clock_control": "Tijd",
       "edit_topbar": "Bewerk de topbalk van deze pagina",
@@ -3047,7 +3239,10 @@
       "bar_entities": "Ook rechts in de balk",
       "actions_blocked": "Home Assistant laat dit scherm nog geen acties uitvoeren, dus een tik op een tegel doet niets.",
       "allow_actions": "Acties toestaan",
-      "actions_allowed": "{name} mag je apparaten nu bedienen."
+      "actions_allowed": "{name} mag je apparaten nu bedienen.",
+      "part_page": "De pagina: titel en navigatie",
+      "part_page_hint": "Titel, startpagina en hoe je hier komt",
+      "home_control_hint": "Zet de Home-knop links in de topbar van deze pagina. Hij gaat naar de startpagina."
     },
     "feedback": {
       "question": "Werkt je scherm zoals je verwacht?",
@@ -3170,9 +3365,9 @@
       "remove": "Het voorbeeld en de opgeslagen indeling in deze browser.",
       "save": "Voorbeeld opslaan",
       "saved": "Opgeslagen in deze browser",
-      "hint": "De eigen firmware van het scherm, getekend uit de indeling die je bewerkt. Tik, houd vast en veeg zoals op het scherm. Er wordt niets opgeslagen.",
+      "hint": "De eigen firmware van het scherm, getekend uit de indeling die je bewerkt. Tik, houd vast en veeg zoals op het scherm. Wijzigingen aan de indeling worden niet opgeslagen.",
       "control": "Tikken bedienen apparaten",
-      "control_hint": "Aan: een tik op een tegel voert zijn actie uit in Home Assistant, net als op het scherm. Uit: het voorbeeld laat alleen zien wat een tik doet.",
+      "control_hint": "Als dit aan staat, kunnen tikken Home Assistant-apparaten bedienen en de instellingen van dit paneel wijzigen. Als dit uit staat, zijn hardware-instellingen alleen-lezen en blijven andere wijzigingen in de preview.",
       "skipped": "Voorbeeldscherm {names} kon niet worden geladen en is overgeslagen.",
       "not_kept": "Deze browser kon het voorbeeldscherm niet bewaren: de opslag is vol of geblokkeerd."
     },
@@ -3181,7 +3376,8 @@
         "tile": "Tegel",
         "page": "Pagina",
         "bar": "Bovenbalk"
-      }
+      },
+      "back": "Terug naar {name}"
     },
     "confirm": {
       "leave_question": "Je hebt niet-opgeslagen wijzigingen. Toch naar het overzicht?",
@@ -3314,6 +3510,7 @@
         "on_screens": "Op {n} scherm | Op {n} schermen",
         "fits_none": "Past op geen van je schermen",
         "failed": "Bouwen mislukt",
+        "not_running": "Draait niet op het scherm",
         "queued": "Wacht op zijn beurt"
       },
       "source": {
@@ -3386,7 +3583,7 @@
         "network_none": "Maakt geen verbindingen buiten Home Assistant",
         "read": "Leest deze entiteiten uit Home Assistant"
       },
-      "warning": "Een plugin draait op je scherm met volledige toegang ertoe, ook tot de Wi-Fi en de acties die het scherm in Home Assistant mag uitvoeren. Voeg alleen plugins toe van makers die je vertrouwt, of lees eerst de code.",
+      "warning": "Een plugin draait op je scherm met volledige toegang ertoe, ook tot de Wi-Fi en de acties die het scherm in Home Assistant mag uitvoeren, en zijn build draait in deze app, waar hij bij je Home Assistant-configuratie kan. Voeg alleen plugins toe van makers die je vertrouwt, of lees eerst de code.",
       "room": {
         "title": "Ruimte op {screen}",
         "small": "{kb} KB extra: de firmware gaat van {before} naar {after} van zijn ruimte.",
@@ -3540,12 +3737,14 @@
       },
       "tabs": {
         "tiles": "Tegels",
+        "screensavers": "Screensavers",
         "functions": "Functies",
         "hardware": "Hardware",
         "in_use": "In gebruik"
       },
       "types": {
         "tiles": "Tegels",
+        "screensavers": "Screensaver",
         "functions": "Functie",
         "hardware": "Hardware"
       },
@@ -3574,6 +3773,7 @@
       },
       "none_in_tab": {
         "tiles": "Nog geen plugins met tegels.",
+        "screensavers": "Nog geen screensaver-plugins.",
         "functions": "Nog geen plugins voor het hele scherm.",
         "hardware": "Nog geen hardware-plugins."
       },
@@ -3652,7 +3852,17 @@
       "now": "nu",
       "minutes": "{n} min",
       "live": "De editor tekent hem met de eigen data van de plugin; het scherm tekent hem zelf en telt af op zijn eigen klok.",
-      "entity": "Entiteit"
+      "entity": "Entiteit",
+      "add": "Toevoegen",
+      "change": "Kies een andere",
+      "find": "Zoeken…",
+      "search": "Zoeken…",
+      "search_more": "Typ twee letters of meer",
+      "none_found": "Niets gevonden",
+      "remove": "{name} weghalen",
+      "type": "Typ en druk op Enter",
+      "full": "Het scherm neemt niet meer aan voor deze tegel: de opties zijn vol.",
+      "count": "{n} van {max}"
     },
     "build": {
       "plugins": "Bouwt met zijn plugins",
@@ -3665,7 +3875,27 @@
       "update_failed": "Bijwerken van {name} is mislukt",
       "build_failed": "Bouwen van {name} is mislukt",
       "show_log": "Log tonen",
-      "waiting_place": "Wacht op zijn beurt, 1 build eerst | Wacht op zijn beurt, {n} builds eerst"
+      "waiting_place": "Wacht op zijn beurt, 1 build eerst | Wacht op zijn beurt, {n} builds eerst",
+      "server": {
+        "bundle": "YAML inpakken",
+        "send": "Versturen naar {name}",
+        "queued": "Wachten op {name}",
+        "build": "Bouwen op {name}",
+        "fetch": "Firmware ophalen",
+        "here": "Hier bouwen · {reason}",
+        "fallback": {
+          "offline": "de buildserver is niet bereikbaar",
+          "refused": "de buildserver is niet gekoppeld",
+          "mismatch": "de vingerafdruk van de buildserver is veranderd",
+          "unavailable": "hier is geen buildserver",
+          "lost": "de verbinding met de buildserver viel weg",
+          "refused_job": "de buildserver nam hem niet aan",
+          "provision": "de buildserver kon ESPHome niet installeren",
+          "cancelled": "hij is op de buildserver gestopt",
+          "fetch": "de firmware kwam niet terug",
+          "bundle": "de YAML kon niet worden ingepakt"
+        }
+      }
     },
     "grid": {
       "title": "Raster",
@@ -3700,6 +3930,12 @@
       "copy": "Kopiëren",
       "hint": "{copy} kopieert de tegels met al hun instellingen. Kies een pagina of een cel, hier of op een ander scherm, en druk op {paste}.",
       "remove": "Tegel verwijderen | {n} tegels verwijderen"
+    },
+    "menu": {
+      "cut": "Knippen",
+      "move_to": "Verplaatsen naar pagina",
+      "add_here": "Hier een tegel toevoegen",
+      "paste_here": "Hier plakken"
     }
   }
 }

@@ -67,6 +67,9 @@ class Build:
         self.installed = False
         self.stepped = False  # whether it ran an ESPHome step: then the firmware's job and log are its own
         self.logs, self.memory = [], None
+        # Where its compile ran (build_server.py): 'server' or 'here' after a fallback (its reason in `fallback`), None for
+        # a build that never asked the server.
+        self.where, self.server, self.fallback = None, None, None
         self.ends = []      # called with the build once it ended, whatever the outcome
         self.done = asyncio.Event()
 
@@ -234,7 +237,9 @@ class BuildQueue:
             if build.stepped:
                 # Its last step's log and the memory that build had (build_memory): why it was slow, or why it stopped.
                 build.logs = list(getattr(self.firmware, 'logs', None) or [])
-                build.memory = (getattr(self.firmware, 'job', None) or {}).get('memory')
+                job = getattr(self.firmware, 'job', None) or {}
+                build.memory = job.get('memory')
+                build.where, build.server, build.fallback = job.get('where'), job.get('server'), job.get('fallback')
             self.ended.append(build)
             for end in build.ends:
                 try:
@@ -285,9 +290,13 @@ class BuildQueue:
             out['after'] = self.running.file if self.running else None
         job = getattr(self.firmware, 'job', None) or {}
         if build.state == RUNNING and build.stepped and job.get('state') == 'running':
-            out.update(stage=job.get('stage'), memory=job.get('memory'))
+            # On the build server: its name and the step it is at (`remote`: bundle, send, queued, build, fetch), or the
+            # reason it builds here after all (`fallback`).
+            out.update(stage=job.get('stage'), memory=job.get('memory'), where=job.get('where'), server=job.get('server'),
+                       remote=job.get('remote'), fallback=job.get('fallback'))
         elif build.state in ENDS:
-            out.update(reason=shown(build.reason) if build.reason else None, memory=build.memory)
+            out.update(reason=shown(build.reason) if build.reason else None, memory=build.memory, where=build.where,
+                       server=build.server, fallback=build.fallback)
         return out
 
     def payload(self):

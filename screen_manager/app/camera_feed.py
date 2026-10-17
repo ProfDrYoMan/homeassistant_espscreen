@@ -312,6 +312,19 @@ def cover_request(request):
     return size, int(background, 16)
 
 
+def vacuum_map_request(request):
+    """(width, height, background) a vacuum card asked its map at (`vmap` "WxH" within the cap, `bg` six hex digits),
+    or None."""
+    found = re.fullmatch(r'(\d{2,4})x(\d{2,4})', str(request.get('vmap') or ''))
+    background = request.get('bg')
+    if not found or not isinstance(background, str) or not re.fullmatch(r'[0-9A-Fa-f]{6}', background):
+        return None
+    width, height = int(found[1]), int(found[2])
+    if not (16 <= width <= PICTURE_LARGE_SIDE and 16 <= height <= PICTURE_LARGE_SIDE) or width * height * 2 > PICTURE_LARGE_BYTES:
+        return None
+    return width, height, int(background, 16)
+
+
 def fit(size, box):
     """The largest size with the proportions of `size` that fits `box`, at least one pixel each way."""
     width, height = size
@@ -386,6 +399,63 @@ def encode_saver(raw, box, kind, ground=0):
             picture = Image.new('RGB', box, tuple((ground >> shift) & 0xFF for shift in (16, 8, 0)))
             picture.paste(ImageOps.fit(image, (side, side), Image.Resampling.LANCZOS), (0, 0))
         picture = Image.blend(picture, Image.new('RGB', box), SAVER_DIM)
+    return tile_art.bmp(picture, compact=True)
+
+
+# A photo of the screensaver's photos step (app 0.4.89, saver_photos.py): exactly the screen's full box, not darkened
+# (no words stand over it, and the standby level dims the glass already). `fit` 'auto' fills the glass with a photo about
+# its shape (neither a quarter wider nor taller than the glass, the five-to-four rule of a cover) and shows a photo of
+# another shape whole, on its own colour darkened; 'fill' always cuts, 'whole' never does. 8-bit on the photo's own
+# palette, dithered, as every picture of the screensaver.
+PHOTO_GROUND_DIM = 0.55
+# A photo that moves (photos `motion: slow`, picture_motion.h) is cut this much larger than the glass on either side, the
+# room the screen moves it in: 38 pixels on a 480 glass, a minute from one corner to the other at a pixel a second and a half.
+MOTION_OVERSCAN = 0.08
+
+
+def motion_box(box, cap=None):
+    """The box a moving photo is cut to for glass of `box`: MOTION_OVERSCAN larger, or None when that does not fit the
+    screen's picture memory (the 10-inch's 1280 x 800 does not: its photos stand still)."""
+    big = (round(box[0] * (1 + MOTION_OVERSCAN)), round(box[1] * (1 + MOTION_OVERSCAN)))
+    return big if capped(big, cap=cap) == big else None
+
+
+def photo_fills(size, box, fit):
+    """Whether a photo of `size` fills the glass of `box` (cut to it), or shows whole."""
+    if fit == 'fill':
+        return True
+    if fit == 'whole':
+        return False
+    (pw, ph), (bw, bh) = size, box
+    return pw * bh * SAVER_SQUARE[1] <= bw * ph * SAVER_SQUARE[0] and bw * ph * SAVER_SQUARE[1] <= pw * bh * SAVER_SQUARE[0]
+
+
+def encode_photo(raw, box, fit='auto', moving=None):
+    """The photos step's picture as a BMP of exactly `box`, or of `moving` (motion_box) for a photo that fills the glass
+    and moves: the screen shows the glass's piece of it."""
+    from PIL import Image, ImageOps, ImageStat
+    import saver_photos
+    import tile_art
+    saver_photos.heif()
+    with Image.open(io.BytesIO(raw)) as source:
+        if source.width * source.height > saver_photos.pixel_limit(source):
+            raise ValueError('photo too large')
+        source.draft('RGB', box)
+        image = ImageOps.exif_transpose(source)
+        if image.mode in ('RGBA', 'LA', 'P', 'PA'):
+            image = image.convert('RGBA')
+            flat = Image.new('RGB', image.size)
+            flat.paste(image, mask=image.getchannel('A'))
+            image = flat
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+        if photo_fills(image.size, box, fit):
+            picture = ImageOps.fit(image, moving or box, Image.Resampling.LANCZOS)
+        else:
+            whole = ImageOps.contain(image, box, Image.Resampling.LANCZOS)
+            colour = tuple(int(c * (1 - PHOTO_GROUND_DIM)) for c in ImageStat.Stat(whole.resize((16, 16))).mean[:3])
+            picture = Image.new('RGB', box, colour)
+            picture.paste(whole, ((box[0] - whole.width) // 2, (box[1] - whole.height) // 2))
     return tile_art.bmp(picture, compact=True)
 
 
@@ -489,14 +559,15 @@ class Watch:
 
 
 class Link:
-    __slots__ = ('entity', 'box', 'still', 'etag', 'used', 'lifetime', 'cover', 'live', 'saver')
+    __slots__ = ('entity', 'box', 'still', 'etag', 'used', 'lifetime', 'cover', 'live', 'saver', 'vacuum')
 
-    def __init__(self, entity, box, now, still=None, cover=None, live=None, saver=None):
+    def __init__(self, entity, box, now, still=None, cover=None, live=None, saver=None, vacuum=None):
         self.entity, self.box, self.used = entity, box, now
         self.still = still
         self.cover = cover  # (size, background) of a media player's cover, else None
         self.live = live    # (entities, size, grounds, paces[, {atlas, modes, compact}]) of a page's live tiles, else None
         self.saver = saver  # (kind, ground) of a screensaver's picture, else None
+        self.vacuum = vacuum  # (map entity, mark, background, dark) of a vacuum card's map, else None
         self.etag = f'"{hashlib.sha1(still).hexdigest()[:16]}"' if still else ''
         self.lifetime = STILL_SECONDS if still else LINK_SECONDS
 
@@ -510,6 +581,9 @@ class CameraFeed:
         self.fetch_cover, self.picture = fetch_cover, picture
         self.watches, self.links = {}, {}
         self.strips = {}
+        # A vacuum card's map (vacuum_map.py), per map entity: the mark it was fetched at, the map read once, and the
+        # pictures made of it per size and look. A new mark (the robot drew its map again) fetches it again.
+        self.vacuum_maps = {}
 
     # ----- fetching -----
     # A camera is fetched in the screen's own rhythm: a load sets the next fetch for just before the next load (ahead),
@@ -842,6 +916,57 @@ class CameraFeed:
             cached = watch.frames[key] = (digest, image)
         return f'"{digest[:16]}-s{box[0]}x{box[1]}"', cached[1]
 
+    def vacuum_map_warm(self, entity, mark):
+        """Fetch and read a vacuum's map ahead, in both looks, when its card's tile goes out with a new mark: the card
+        that opens then only waits for its own size. Once per mark; a fetch on its way is not started twice."""
+        held = self.vacuum_maps.get(entity)
+        if held is not None and held['mark'] == mark:
+            return
+        pending = self.__dict__.setdefault('_vacuum_warming', {})
+        task = pending.get(entity)
+        if task is not None and not task.done():
+            return
+
+        async def warm():
+            import vacuum_map
+            if await self.vacuum_map(entity, mark, (16, 16), 0, False) is None:
+                return
+            drawing = self.vacuum_maps[entity]['drawing']
+            await asyncio.get_running_loop().run_in_executor(None, drawing.styled, True)
+        try:
+            pending[entity] = asyncio.ensure_future(warm())
+        except RuntimeError:
+            pass
+
+    async def vacuum_map(self, entity, mark, box, background, dark):
+        """(etag, BMP) of a vacuum's map at `box` on `background`, in the light or dark look (vacuum_map.render), or None
+        when it cannot be fetched or read. Fetched once per mark, read once, made once per size and look."""
+        import vacuum_map
+        held = self.vacuum_maps.get(entity)
+        if held is None or held['mark'] != mark:
+            try:
+                raw = await self.fetch(entity)
+                drawing = await asyncio.get_running_loop().run_in_executor(None, vacuum_map.read, raw)
+            except Exception as error:  # noqa: BLE001 - a map that cannot be had leaves the card without one
+                LOG.info('The map %s cannot be read (%s)', entity, type(error).__name__)
+                return None
+            held = self.vacuum_maps[entity] = {'mark': mark, 'drawing': drawing, 'frames': {},
+                                               'digest': hashlib.sha1(raw).hexdigest()[:12]}
+            while len(self.vacuum_maps) > 8:
+                del self.vacuum_maps[next(iter(self.vacuum_maps))]
+        key = (tuple(box), background, bool(dark))
+        image = held['frames'].get(key)
+        if image is None:
+            try:
+                image = await asyncio.get_running_loop().run_in_executor(None, vacuum_map.render, held['drawing'], tuple(box), background, bool(dark))
+            except Exception as error:  # noqa: BLE001
+                LOG.info('The map %s cannot be drawn (%s)', entity, type(error).__name__)
+                return None
+            held['frames'][key] = image
+            while len(held['frames']) > 6:
+                del held['frames'][next(iter(held['frames']))]
+        return f'"{held["digest"]}-v{box[0]}x{box[1]}-{background:06X}{"d" if dark else ""}"', image
+
     # ----- links -----
     def prune(self):
         now = self.clock()
@@ -850,12 +975,13 @@ class CameraFeed:
         while len(self.links) >= MAX_LINKS:
             del self.links[min(self.links, key=lambda token: self.links[token].used)]
 
-    def link(self, entity, box, still=None, cover=None, live=None, saver=None):
+    def link(self, entity, box, still=None, cover=None, live=None, saver=None, vacuum=None):
         """A new random token for one camera at one size; `still` makes it one fixed image (an alert's), `cover`
-        (size, background) a media player's cover, `live` (entities, size, grounds, paces) a page's live tiles."""
+        (size, background) a media player's cover, `live` (entities, size, grounds, paces) a page's live tiles,
+        `vacuum` (map entity, mark, background, dark) a vacuum card's map."""
         self.prune()
         token = secrets.token_urlsafe(18)
-        self.links[token] = Link(entity, box, self.clock(), still, cover, live, saver)
+        self.links[token] = Link(entity, box, self.clock(), still, cover, live, saver, vacuum)
         return token
 
     async def serve(self, token, etag=None):
@@ -875,7 +1001,10 @@ class CameraFeed:
             # online_image warns at every load about a missing one.
             found = await self.live(*link.live[:4], **(link.live[4] if len(link.live) > 4 else {}))
             return (503, None, '') if found is None else (200, found[1], found[0])
-        if link.saver:
+        if link.vacuum:
+            map_entity, mark, background, dark = link.vacuum
+            found = await self.vacuum_map(map_entity, mark, link.box, background, dark)
+        elif link.saver:
             found = await self.saver(link.entity, link.box, *link.saver)
         else:
             found = await self.cover(link.entity, *link.cover) if link.cover else await self.frame(link.entity, link.box)

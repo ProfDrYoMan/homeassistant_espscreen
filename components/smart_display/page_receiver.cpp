@@ -311,6 +311,8 @@ std::string receive(const std::string &payload) {
         next.title = string(root["title"], 96);
         next.home_control = root["home_control"].as<bool>();
         next.excluded = root["excluded"].as<bool>();
+        if (root["dock"].is<bool>()) next.dock = root["dock"].as<bool>();
+        if (root["icon"].is<const char *>()) next.icon = tile_icon::codepoint(root["icon"].as<std::string>());
         if (!transfer.page(index)) return false;
         model.page_data.records[index] = std::move(next);
       } else {
@@ -362,13 +364,18 @@ std::string receive(const std::string &payload) {
       // "live" (app 0.2.91+): a page's pictures, asked per tile (tile_picture.h); `e` names the tile's entity.
       // "lib" (app 0.4.42+, firmware 0.24.0+): the covers of a page of a player's library, one picture.
       // "saver" (app 0.4.48, firmware 0.29.0+): the screensaver's picture of the whole glass, as a full view's.
-      if (view == "live" ? !valid_entity_list(entity) : !valid_entity(entity) || (view != "full" && view != "alert" && view != "cover" && view != "lib" && view != "saver")) return false;
+      // "vmap" (module vacuum): a vacuum card's map, cleaned up by the app (vacuum_map.py).
+      // "pcard" (plugin API 0.13): the pictures of a plugin's card over the page; `e` names the card (plugin:<p>.<card>).
+      // "psaver" (plugin API 0.14): the pictures of a plugin's screensaver; `e` names it (plugin:<p>.<saver>).
+      if (view == "live" ? !valid_entity_list(entity) : (!valid_entity(entity) && entity != SAVER_PHOTOS) || (view != "full" && view != "alert" && view != "cover" && view != "lib" && view != "saver" && view != "vmap" && view != "pcard" && view != "psaver")) return false;
       if (!url.empty() && url.rfind("http://", 0) != 0) return false;
       // Every answer but an alert's carries the number of its question; one to an older question is dropped. A tile's
       // picture is the answer to that tile's last question (tile_picture::Questions).
       const uint32_t number = root["view"].is<unsigned>() ? root["view"].as<unsigned>() : 0;
       const bool current = view == "live" ? tile_questions.answered(number) >= 0
-                           : number == (view == "cover" ? cover_view_id : view == "lib" ? library_art_view_id : camera_view_id);
+                           : view == "pcard" ? plugin_host::card_question(number)
+                           : view == "psaver" ? plugin_host::saver_question(number)
+                           : number == (view == "cover" ? cover_view_id : view == "lib" ? library_art_view_id : view == "vmap" ? vacuum_map_view_id : camera_view_id);
       if (view != "alert" && (!root["view"].is<unsigned>() || !current)) {
         ESP_LOGD("picture", "answer %u (%s) to an older question: dropped", (unsigned) number, view.c_str());
         result = "Synced"; return true;
@@ -405,14 +412,36 @@ std::string receive(const std::string &payload) {
     if (op == "saver") {
       // What the screensaver shows (app 0.4.48, firmware 0.29.0+, screen_saver.py): "media", "camera", "clock" or ""
       // for none. A player brings its words and the marks of its picture; the picture is asked for as camera "saver".
+      // "photos" (app 0.4.89): a photo of a folder, its mark in `x.pic`; "plugin" (plugin API 0.14): a plugin's step of
+      // its own, all of it in `pf`.
       SaverChoice next;
       next.kind = string(root["k"], 8);
-      if (!next.kind.empty() && next.kind != "media" && next.kind != "camera" && next.kind != "clock") return false;
-      if (next.kind == "media" || next.kind == "camera") {
+      if (!next.kind.empty() && next.kind != "media" && next.kind != "photos" && next.kind != "camera" && next.kind != "clock" &&
+          next.kind != "plugin") return false;
+      if (next.kind == "media" || next.kind == "camera" || next.kind == "photos") {
         next.entity = string(root["e"], 120);
-        if (!valid_entity(next.entity)) return false;
+        if (next.kind == "photos" ? next.entity != SAVER_PHOTOS : !valid_entity(next.entity)) return false;
         next.name = string(root["n"], 80);
       }
+      if (next.kind == "photos") {
+        next.picture = string(root["x"]["pic"], 16);
+        // It moves slowly (app 0.4.89): a photo larger than the glass moves a pixel at a time (picture_motion.h).
+        next.motion = root["x"]["mv"].is<int>() && root["x"]["mv"].as<int>() == 1;
+      }
+      // A plugin's face of the step, or its step of its own (plugin API 0.14): which saver, and its options and what it
+      // draws from, kept as the app sent them for the plugin. One that is not readable leaves the step's own face.
+      if (root["pf"].is<JsonObject>()) {
+        auto pf = root["pf"];
+        const std::string key = string(pf["p"], 72);
+        if (key.rfind("plugin:", 0) == 0 && valid_entity(key)) {
+          next.plugin = key;
+          JsonDocument data;
+          data["o"] = pf["o"];
+          data["x"] = pf["x"];
+          serializeJson(data, next.plugin_data);
+        }
+      }
+      if (next.kind == "plugin" && next.plugin.empty()) return false;
       if (next.kind == "media") {
         auto extra = root["x"];
         next.title = string(root["t"], 80);
@@ -438,6 +467,19 @@ std::string receive(const std::string &payload) {
         }
         next.row = std::move(row);
       }
+#ifdef SD_MOD_CLOCK_FACES
+      // The clock's face (module clock_faces, app `cf`): which one, its numerals, its seconds hand and its look. A face
+      // this firmware does not know leaves the digital clock.
+      if (next.kind == "clock" && root["cf"].is<JsonObject>()) {
+        auto cf = root["cf"];
+        const std::string face = string(cf["f"], 12), look = string(cf["l"], 8);
+        next.face.kind = face == "glass" ? SaverFace::GLASS : face == "classic" ? SaverFace::CLASSIC : face == "bauhaus" ? SaverFace::BAUHAUS : SaverFace::DIGITAL;
+        const int numerals = cf["n"].is<int>() ? cf["n"].as<int>() : 4;
+        next.face.numerals = numerals == 0 || numerals == 12 ? numerals : 4;
+        next.face.seconds = !cf["s"].is<int>() || cf["s"].as<int>() != 0;
+        next.face.look = look == "light" ? SaverFace::LIGHT : look == "auto" ? SaverFace::FOLLOW : SaverFace::DARK;
+      }
+#endif
       saver_receive(next);
       result = model.ready() ? "Synced" : "Loading tiles";
       return true;
@@ -667,6 +709,8 @@ std::string receive(const std::string &payload) {
     tile.display = string(options["display"]); if (tile.display.empty()) tile.display="standard";
     // How far a lock's tile may go (firmware 0.5.0+): "confirm" unlocks after a second tap, "lock_only" never unlocks.
     tile.guard = string(options["guard"], 16); if (tile.guard.empty()) tile.guard="confirm";
+    // Where a cover's slats stand open: "50" for a blind closed at 0 and at 100, else Home Assistant's 100.
+    tile.tilt_middle = string(options["tilt_open"], 4) == "50";
     // A live picture's pace (0.2.91+): 5, 10, 15 or 30 s (5 and 10 from app 0.3.13); a missing or odd value keeps the
     // default. 0 is Live (firmware dev, live_view.h): a camera that streams on its tile, which only a screen whose hello
     // says `live` is sent. Firmware before it read 0 as 15.
@@ -772,8 +816,9 @@ std::string receive(const std::string &payload) {
     if (tile.is_plugin()) {
       if (initial && root["o"]["plugin"].is<JsonObject>()) serializeJson(root["o"]["plugin"], next.plugin_options);
       if (initial) {
+        // Of any domain the plugin's manifest names, also one Tessera draws no tile for (plant.*): the app checked it.
         const std::string bound = string(root["o"]["pe"], 120);
-        if (valid_entity(bound) && bound.rfind("plugin:", 0) != 0 && bound.rfind("screen.", 0) != 0) next.plugin_entity = bound;
+        if (entity_id(bound) && bound.rfind("screen.", 0) != 0) next.plugin_entity = bound;
       }
       if (extra.is<JsonObject>()) serializeJson(extra, next.plugin_state);
     }
@@ -983,6 +1028,22 @@ std::string receive(const std::string &payload) {
       if (!(lamp.high > lamp.low)) lamp.low = lamp.high = 0;
       next.lamps.push_back(std::move(lamp));
     }
+    // A cover group's covers (firmware 0.57.0, app's cover_groups.py): what its page shows, in Home Assistant's order.
+#ifdef SD_MOD_COVER_GROUPS
+    if (tile.domain() == "cover" && extra["covers"].is<JsonArray>()) for (JsonVariant c : extra["covers"].as<JsonArray>()) {
+      if (next.blinds.size() == MAX_LAMPS) break;
+      Blind blind; blind.entity = string(c["e"], 120);
+      if (!valid_entity(blind.entity) || blind.entity.rfind("cover.", 0) != 0) continue;
+      blind.name = string(c["n"], 32);
+      blind.state = string(c["s"], 16);
+      blind.device_class = string(c["dc"], 16);
+      blind.unavailable = (c["u"] | 0) == 1;
+      blind.supported = c["f"] | 0u;
+      blind.position = number(c["p"]);
+      blind.tilt = number(c["t"]);
+      next.blinds.push_back(std::move(blind));
+    }
+#endif
     if (!std::isfinite(tile.battery)) tile.battery = number(extra["bat"]);
     next.charging = extra["chg"].is<int>() && extra["chg"].as<int>() == 1;
     next.room = string(extra["room"], 32);
@@ -1073,6 +1134,44 @@ std::string receive(const std::string &payload) {
       }
       next.calendar = std::move(d);
     }
+#ifdef SD_MOD_VACUUM_CARD
+    // A vacuum's card of the module (module_vacuum_card.h, vacuum_model.h, app vacuum_card.py): its map and its mark, the areas
+    // linked to its segments with their icons and floors, its routines, and why it stopped or how far it is.
+    if (tile.domain() == "vacuum" && extra["vc"].is<JsonObject>()) {
+      JsonVariant c = extra["vc"];
+      auto d = std::make_shared<vacuum_model::Data>();
+      if (c["map"].is<JsonObject>()) {
+        d->map_entity = string(c["map"]["e"], 120);
+        if (!valid_entity(d->map_entity)) d->map_entity.clear();
+        d->map_mark = string(c["map"]["m"], 40);
+      }
+      if (c["floors"].is<JsonArray>()) for (JsonVariant f : c["floors"].as<JsonArray>()) {
+        if (d->floors.size() == vacuum_model::MAX_FLOORS) break;
+        d->floors.push_back(string(f, 24));
+      }
+      if (c["rooms"].is<JsonArray>()) for (JsonVariant r : c["rooms"].as<JsonArray>()) {
+        if (d->rooms.size() == vacuum_model::MAX_ROOMS) break;
+        vacuum_model::Room room;
+        room.area = string(r[0], 40);
+        if (!vacuum_model::area_id(room.area)) continue;
+        room.name = string(r[1], 24);
+        room.icon = tile_icon::codepoint(string(r[2], 8));
+        room.floor = (uint8_t) std::clamp(r[3] | 0, 0, (int) vacuum_model::MAX_FLOORS - 1);
+        if (room.floor >= d->floors.size() && d->floors.size() > 1) room.floor = 0;
+        d->rooms.push_back(std::move(room));
+      }
+      d->unmapped = c["unmapped"].is<int>() && c["unmapped"].as<int>() == 1;
+      if (c["rt"].is<JsonArray>()) for (JsonVariant r : c["rt"].as<JsonArray>()) {
+        if (d->routines.size() == vacuum_model::MAX_ROUTINES) break;
+        vacuum_model::Routine routine{string(r[0], 120), string(r[1], 32)};
+        if (routine.entity.rfind("button.", 0) == 0 && valid_entity(routine.entity)) d->routines.push_back(std::move(routine));
+      }
+      d->error = string(c["err"], 48);
+      d->progress = c["pg"].is<int>() ? std::clamp(c["pg"].as<int>(), 0, 100) : -1;
+      d->area = c["ar"].is<float>() ? c["ar"].as<float>() : NAN;
+      next.vacuum = std::move(d);
+    }
+#endif
     // An alarm panel (app 0.3.8+, firmware 0.3.3+): how it takes codes, who changed it, and a delay's end.
     if (tile.domain() == "alarm_control_panel") {
       next.code_format = string(a["code_format"], 8);
@@ -1098,6 +1197,8 @@ std::string receive(const std::string &payload) {
     wish_reported(tile);
     // A held slider keeps its value in front of the fade (after the wish: an off light a slider turned on stays on).
     tile.slider_reported(esphome::millis());
+    // A cover on its way keeps its target in front of the reports from the way (cover_travel.h).
+    tile.travel_reported(esphome::millis());
     // Home Assistant reports the edited value: the -/+ pill follows its state again.
     if(tile_controls::climate_range(tile)){
       // A range: each end follows Home Assistant again once it reports what was sent.

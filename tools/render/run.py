@@ -95,6 +95,7 @@ ALERT = re.compile(r'alert on=(\d) ' + ' '.join(f'{part}=(-?\\d+),(-?\\d+),(-?\\
                                               for part in ('card', 'frame', 'icon', 'title', 'subtitle', 'button', 'button2')))
 # A page's own title (app 0.2.123): a long one among them, the kind that stood in dots after a page change (GitHub #27).
 PAGE_TITLES = ['Demo cards', 'Living room downstairs', 'Kitchen']
+DOCK_TITLES = ['Home', 'Living room', 'Kitchen', 'Bedroom', 'Garden', 'Climate', 'Media', 'Energy']
 MEDIA = re.compile(r'media open=(\d) back=(\S*) pill=(\S*) libkey=(\S*) knob=(\S*) keys=(\S*) faults=(.*?) \| (.*)$')
 SAVER = re.compile(r'saver dimmed=(\d) keys=(\S*) words_right=(-?\d+)$')
 ALARM = re.compile(r'alarm open=(\d) pad=(\d) back=(\S*) title=\[(.*?)\] status=\[(.*?)\] line=\[(.*?)\] modes=(\S*) keys=(\S*) faults=(.*?) locked=(\d+)$')
@@ -364,6 +365,95 @@ class Run:
             await asyncio.sleep(0.05)
         return seen
 
+    async def finger(self, points, rest=0.15, step=0.005):
+        """One finger along `points`, resting on the first a moment, `step` seconds between two of them."""
+        await self.call('render_finger', x=points[0][0], y=points[0][1], down=True)
+        await asyncio.sleep(rest)
+        for x, y in points[1:]:
+            await self.call('render_finger', x=x, y=y, down=True)
+            await asyncio.sleep(step)
+        await self.call('render_finger', x=points[-1][0], y=points[-1][1], down=False)
+
+    async def dock(self, pages):
+        """Up from the bottom edge (docs/MODULES.md): on a board with the dock module the drawer with every
+        page opens, is rendered, and a tap above it, or a drag down on it, leaves the page as it was; on a lite board
+        the swipe goes home."""
+        shapes = json.loads((REPO / 'screen_manager/app/boards.json').read_text())[self.item.board]
+        self.client.switch_command(self.swipe_switch.key, True)
+        await asyncio.sleep(0.3)
+        await self.call('render_page', page=0)
+        await self.page_done(0)
+        before = await self.render('_dock-before', keep=False)
+        width, height = self.canvas
+        up = [(width // 2, int(height * (0.995 - 0.5 * i / 28))) for i in range(29)]
+        start = len(self.lines)
+        await self.finger(up)
+        if 'dock' not in shapes['modules']:
+            await self.until(lambda l: 'edge swipe up: close everything' in l, 6, 'swipe up on a lite board never went home', start)
+            return
+        await self.until(lambda l: 'edge swipe up: dock' in l, 6, 'swipe up never opened the dock', start)
+        # Every page the screen holds (a large grid may hold fewer than eight pages of the demo's tiles), but the one left
+        # out of the dock in its page settings when the run shows the dock full (--only dock, which sets showInDock off).
+        left_out = 1 if self.only == 'dock' else 0
+        shows = next((re.search(r'shows (\d+) of (\d+) pages', l) for l in self.lines[start:] if re.search(r'shows \d+ of \d+ pages', l)), None)
+        if not shows or int(shows[1]) != int(shows[2]) - left_out:
+            why = 'the page left out of it still counts' if left_out else 'it does not show every page'
+            self.failures.append(f'dock: {why} ({shows[0] if shows else "no count logged"})')
+        # The way in, as it moves: snapshots as fast as the host takes them, made into dock-open.gif.
+        frames, clock = [], time.monotonic()
+        while time.monotonic() - clock < 1.0:
+            frames.append((time.monotonic() - clock, await self.snapshot(self.out / '_frame.ppm')))
+        (self.out / '_frame.ppm').unlink(missing_ok=True)
+        await self.render('dock')
+        if len(frames) > 1:
+            durations = [max(20, int(1000 * (b[0] - a[0]))) for a, b in zip(frames, frames[1:])] + [1200]
+            frames[0][1].save(self.out / 'dock-open.gif', save_all=True, append_images=[f for _, f in frames[1:]],
+                              duration=durations, loop=0)
+        # A tap above the drawer closes it.
+        await self.finger([(width // 2, 4), (width // 2, 4)], rest=0.1)
+        await asyncio.sleep(0.5)
+        if (await self.render('_dock-after', keep=False)).tobytes() != before.tobytes():
+            self.failures.append('dock: page 1 looks different after a tap above the drawer closed it')
+        # Open again, and drag it down: it follows the finger and goes.
+        start = len(self.lines)
+        await self.finger(up)
+        await self.until(lambda l: 'edge swipe up: dock' in l, 6, 'swipe up never opened the dock again', start)
+        await asyncio.sleep(0.8)
+        # From low in the Dock (a single row of pages still reaches above 0.78 of the glass) to the bottom edge.
+        grip = [(width // 2, int(height * 0.78) + int(height * 0.215 * i / 20)) for i in range(21)]
+        start = len(self.lines)
+        await self.finger(grip, step=0.02)  # a hand's pace: some 0.4 s, which every board's touch read follows
+        await self.until(lambda l: 'dock: dragged away' in l, 6, 'a drag down never closed the drawer', start)
+        await asyncio.sleep(0.5)
+        if (await self.render('_dock-dragged', keep=False)).tobytes() != before.tobytes():
+            self.failures.append('dock: page 1 looks different after the drawer was dragged away')
+        # One page (a large grid holds the whole demo): no page bar with dots to tap, and no page 2 to come home from.
+        if pages < 2:
+            self.warnings.append('dock: one page, so the page dots and the way home from page 2 were not tried')
+            return
+        # A tap on the page dots in the middle of the page bar opens it too; a tap above it closes it again.
+        start = len(self.lines)
+        await self.finger([(width // 2, height - 12), (width // 2, height - 12)], rest=0.1)
+        await self.until(lambda l: 'page dots: dock' in l, 6, 'a tap on the page dots never opened the dock', start)
+        await asyncio.sleep(0.8)
+        await self.finger([(width // 2, 4), (width // 2, 4)], rest=0.1)
+        await asyncio.sleep(0.5)
+        if (await self.render('_dock-dots', keep=False)).tobytes() != before.tobytes():
+            self.failures.append('dock: page 1 looks different after the Dock opened from the dots closed again')
+        # Up once more over the open Dock goes home: from page 2, the Dock opens and a second swipe up lands on page 1.
+        await self.call('render_page', page=1)
+        await self.page_done(1)
+        start = len(self.lines)
+        await self.finger(up)
+        await self.until(lambda l: 'edge swipe up: dock' in l, 6, 'swipe up never opened the dock from page 2', start)
+        await asyncio.sleep(0.8)
+        await self.finger(up)
+        await self.until(lambda l: 'edge swipe up over the Dock: back home' in l, 6, 'a second swipe up never went home', start)
+        await self.page_done(0)
+        await asyncio.sleep(0.5)
+        if (await self.render('_dock-home', keep=False)).tobytes() != before.tobytes():
+            self.failures.append('dock: a second swipe up did not leave page 1 as it was, Dock closed')
+
     async def moments(self, pages):
         """A page change by a finger, forward and back to page 1, with the title read back in the moment after it."""
         if pages < 2:
@@ -603,7 +693,9 @@ class Run:
         # The probe's own lines carry its tag; nothing else on the log is read as a moment of the plugin.
         probe = lambda line, text: '[probe:' in line and text in line
         said = lambda start, text: sum(probe(line, text) for line in self.lines[start:])
-        tiles = [dict(entity='plugin:host_probe.probe', name='Probe', slot=0, options={'plugin': {'word': 'Hello'}}),
+        # Lists (plugin API 0.12): texts, and picks of a choice with the words the person saw.
+        lists = {'words': ['a', 'b'], 'picks': [{'value': '1', 'label': 'One'}, {'value': '3', 'label': 'Three'}]}
+        tiles = [dict(entity='plugin:host_probe.probe', name='Probe', slot=0, options={'plugin': {'word': 'Hello', **lists}}),
                  dict(entity='sensor.hall', name='Hall', slot=1, options={'tap': 'plugin:host_probe.open'}),
                  dict(entity='plugin:host_probe.probe', name='Second', slot=grid.slots, options={'plugin': {'word': 'Two'}})]
         record = send_layout.migrate_legacy(dict(title='Plugins', tiles=tiles), grid)
@@ -630,6 +722,7 @@ class Run:
         await self.page_done(0)
         # The life of the tile on page 1: made with its options, fed, ticked, in that order.
         await self.until(lambda l: probe(l, 'tile=0 create') and 'word=[Hello]' in l, 10, 'tile 0 created', start)
+        await self.until(lambda l: probe(l, 'tile=0 lists words=[a,b] picks=[1:One,3:Three]'), 10, 'the list options', start)
         await self.until(lambda l: probe(l, 'tile=0 state n=1'), 10, 'tile 0 fed', start)
         await self.until(lambda l: probe(l, 'tile=0 tick'), 10, 'tile 0 ticked', start)
         order = [next(k for k, word in enumerate(('create', 'state', 'tick')) if f'tile=0 {word}' in l)
@@ -774,27 +867,114 @@ class Run:
         await self.send({'v': 2, 'op': 'plugin', 'p': 'host_probe', 'm': {'re': body['re'], 'ok': True, 'result': {
             'prices': days[1]['prices'], 'start': 1791410400}}})
         await self.until(lambda l: probe(l, f'message re={body["re"]} ok=1 prices=96'), 10, 'a mapped answer of 96 prices', start)
-        # A tap on the plugin tile: through the touch guard to on_tap and on_touch; the plugin opens its card.
+        # A tap on the plugin tile: on_press as the finger lands (plugin API 0.11), then through the touch guard to on_tap
+        # and on_touch; the plugin opens its card.
         start = len(self.lines)
         tile = (await self.navigation_state())['tile']
+        since = len(calls)
         await self.tap(*tile)
         tapped = await self.until(lambda l: probe(l, 'tile=0 tap'), 10, 'on_tap', start)
+        # The action of several fields (plugin API 0.12) as Home Assistant's ESPHome integration gets it: the texts in
+        # `data` as they are, the rest in `data_template` as literals Home Assistant reads back into their types, and
+        # none of it a template, though two texts hold Jinja.
+        await self.until(lambda l: probe(l, 'tile=0 action sent=1 refused=1'), 10, 'the action of several fields', start)
+        for _ in range(20):
+            played = [c for c in calls[since:] if c.service == 'music_assistant.play_media']
+            if played:
+                break
+            await asyncio.sleep(0.25)
+        assert len(played) == 1, f'the action of several fields reached Home Assistant {len(played)} times'
+        data, rendered = dict(played[0].data), dict(played[0].data_template)
+        assert data == {'entity_id': 'media_player.probe', 'media_id': '1989', 'media_type': 'album',
+                        'artist': "{{ states('lock.door') }}"}, f'the texts of the action: {data}'
+        def home_assistant_reads(text):
+            # helpers/template: a template only with {{, {% or {#; else the text read as a Python literal (_parse_result).
+            import ast
+            assert not any(mark in text for mark in ('{{', '{%', '{#')), f'{text} would run as a template'
+            try:
+                return ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                return text
+        read = {key: home_assistant_reads(text) for key, text in rendered.items()}
+        assert read == {'volume': 0.4, 'radio_mode': False, 'ids': ['a', '{% b %}'], 'extra': {'none': None}}, \
+            f'Home Assistant reads the values of the action as {read} (from {rendered})'
+        self.warnings.append(f'action of several fields: {len(data)} texts and {len(rendered)} values, typed as sent')
         # Where the finger was (plugin API 0.10): in the tile's own pixels, so within its drawing area.
         made = next(l for l in self.lines if probe(l, 'tile=0 create'))
         tw, th = (int(v) for v in re.search(r'create (\d+)x(\d+)', made).groups())
         tx, ty = (int(v) for v in re.search(r'at=(-?\d+),(-?\d+)', tapped).groups())
         if not (0 <= tx < tw and 0 <= ty < th):
             self.failures.append(f'the tap point {tx},{ty} is not within the tile\'s {tw}x{th}: {tapped}')
+        await self.until(lambda l: probe(l, 'press'), 10, 'on_press', start)
         await self.until(lambda l: probe(l, 'touch'), 10, 'on_touch', start)
         await self.until(lambda l: probe(l, 'card open') and 'tile=0' in l, 10, 'the card opened', start)
         await self.until(lambda l: probe(l, 'card tick'), 10, 'the card ticked', start)
+        # Pictures on the card (plugin API 0.13): its place asks for its picture as a plugin tile's do, marked as a
+        # card's (`card`, `for`), the harness answers as the app does ("pcard"), and the piece lands on the place. A board
+        # without pictures lays the card out without the place and asks for nothing.
+        kept = os.environ.get('KEPT_PAGES_HOST') == '1'
+        card_shows = await self.until(lambda l: probe(l, 'card pictures='), 10, 'whether the card shows pictures', start)
+        async def card_picture(since, of):
+            for _ in range(24):
+                asked = [c for c in calls[since:] if c.service == 'esphome.screen_camera' and dict(c.data).get('card') == '1']
+                if asked:
+                    break
+                await asyncio.sleep(0.5)
+            assert asked, 'the card did not ask for its picture'
+            data = dict(asked[-1].data)
+            assert data.get('tiles') == 'plugin:host_probe.detail' and data.get('for') == of, f'the card asked as {data}'
+            question = plugin_pictures.parse(data, self.canvas)
+            assert question and question.card and question.sources == ['https://image.tmdb.org/t/p/w342/probe-card.jpg'], \
+                f'the card asked for {data}'
+            raw = porch(400, 400)
+            body = tile_art.layers([raw], question.ground, question.atlas, question.styles(), compact=True)
+            url = self.pictures.url(f'{self.item.key}-card-{since}.bmp', body)
+            await self.send({'v': 1, 'op': 'camera', 't': 'pcard', 'e': data['tiles'], 'u': url, 'view': int(data['view'])})
+        if 'pictures=0' in card_shows:
+            await asyncio.sleep(2)
+            asked = [c for c in calls[since:] if c.service == 'esphome.screen_camera' and dict(c.data).get('card') == '1']
+            assert not asked, f'a board without pictures asked for the card\'s picture: {asked}'
+            self.warnings.append('card pictures: none on this board (pictures=0), no question asked')
+        else:
+            await card_picture(since, '')
+            await self.until(lambda l: 'card plugin:host_probe.detail: its pictures are shown' in l, 10, 'the card\'s picture shown', start)
+            await asyncio.sleep(0.8)
+            shot = await self.render('plugin-card-picture')
+            at = await self.until(lambda l: probe(l, 'card place '), 10, 'where the card\'s place lies', start)
+            x1, y1, x2, y2 = (int(n) for n in at.rsplit(' ', 1)[1].split(','))
+            colours = shot.convert('RGB').crop((x1 + 2, y1 + 2, x2 - 1, y2 - 1)).getcolors(1 << 16) or []
+            assert len(colours) > 12, f'the card\'s place shows {len(colours)} colours at {x1},{y1}-{x2},{y2}, not its picture'
+            if kept:
+                stored = await self.until(lambda l: 'store:' in l and 'pcard' in l, 10, 'the card\'s picture in the store', start)
+                self.warnings.append(f'card picture kept: {stored.split("store:", 1)[1].strip()[:80]}')
+            self.warnings.append('card pictures: asked once, answered as pcard, shown on its place')
         await self.render('plugin-card')
+        # A tap on the card's room (plugin API 0.12): on_tap through the touch filter, where in the card's own pixels;
+        # a tap on another spot right after it counts too (a list's next row), the same spot again is a bounce.
+        room = await self.until(lambda l: probe(l, 'card room '), 10, 'where the card\'s room lies', start)
+        x1, y1, x2, y2 = (int(n) for n in room.rsplit(' ', 1)[1].split(','))
+        start = len(self.lines)
+        await self.tap((x1 + x2) // 2, (y1 + y2) // 2)
+        await self.tap((x1 + x2) // 2, y1 + (y2 - y1) // 4)
+        await asyncio.sleep(1.0)
+        taps = [re.search(r'card tap at=(-?\d+),(-?\d+)', l) for l in self.lines[start:] if probe(l, 'card tap at=')]
+        assert len(taps) == 2, f'the card heard {len(taps)} taps of two on two spots'
+        for tap in taps:
+            cx, cy = int(tap.group(1)), int(tap.group(2))
+            if not (0 <= cx <= x2 - x1 and 0 <= cy <= y2 - y1):
+                self.failures.append(f'the card\'s tap point {cx},{cy} is not within its room {x2 - x1}x{y2 - y1}')
+        self.warnings.append(f'card taps: {[(t.group(1), t.group(2)) for t in taps]} in a room of {x2 - x1}x{y2 - y1}')
         start = len(self.lines)
         await self.call('render_close_cards')
         await self.until(lambda l: probe(l, 'card destroy'), 10, 'the card closed', start)
         await self.until(lambda l: probe(l, 'cards_closed'), 10, 'on_cards_closed', start)
+        # The card's picture leaves the store with the card (plugin API 0.13).
+        if kept and 'pictures=1' in card_shows:
+            gone = await self.until(lambda l: 'store:' in l and 'pcard' not in l, 10, 'the card\'s picture freed', start)
+            self.warnings.append(f'card closed, store: {gone.split("store:", 1)[1].strip()[:80]}')
         # The tap action on the sensor tile: a short tap runs the plugin's action with the tile's entity.
         start = len(self.lines)
+        since_action = len(calls)
         await self.call('render_tile_center', index=sensor)
         line = await self.until(lambda l: f'tile_center index={sensor}' in l, 5, 'the sensor tile', start)
         x, y = (int(v) for v in re.search(r'x=(-?\d+) y=(-?\d+)', line).groups())
@@ -802,8 +982,17 @@ class Run:
         await self.tap(x, y)
         await self.until(lambda l: probe(l, 'tap_action entity=[sensor.hall]'), 10, 'the tap action', start)
         await self.until(lambda l: probe(l, 'card open') and 'entity=[sensor.hall]' in l, 10, 'the action opened the card', start)
+        # Opened again, for an entity this time: it asks again, naming it (the app lets it show that entity's pictures).
+        if 'pictures=1' in card_shows:
+            await card_picture(since_action, 'sensor.hall')
+            await self.until(lambda l: 'card plugin:host_probe.detail: its pictures are shown' in l, 10, 'the card\'s picture shown again', start)
+            if kept:
+                await self.until(lambda l: 'store:' in l and 'pcard' in l, 10, 'the card\'s picture in the store again', start)
+                start = len(self.lines)
         await self.call('render_close_cards')
         await self.until(lambda l: probe(l, 'card destroy'), 10, 'the card closed again', start)
+        if kept and 'pictures=1' in card_shows:
+            await self.until(lambda l: 'store:' in l and 'pcard' not in l, 10, 'the card\'s picture freed again', start)
         # Page 2 and back: the tile there lives, and the one on page 1 ticks again afterwards; on a board without
         # PSRAM the card is made anew, on one with it the kept card simply shows again.
         start = len(self.lines)
@@ -900,7 +1089,130 @@ class Run:
         await self.page_done(0)
         await self.until(lambda l: probe(l, f'tile={moved} tick'), 10, 'the moved tile ticked after page 2', start)
         assert said(start, 'tile=0 ') == 0, 'the plugin tile that went still hears its moments'
+        if 'render_standby' in self.services:
+            await self.plugin_savers(calls, probe, said)
         return await self.self_test()
+
+    async def plugin_savers(self, calls, probe, said):
+        """A plugin's screensaver (plugin API 0.14, docs/PLUGINS.md "A screensaver") on the real firmware: the probe's
+        face of the clock, its face of the music with the cover as a place and a key that takes taps, and its step of its
+        own, each as the app's word says it (screen_saver.message's `pf`). The hello names them; each shows, hears its
+        state and its clock, and goes when the next comes; a tap on the key wishes play or pause, sends the action and
+        stays in standby, and without a word from Home Assistant the face goes back; a hold holds; a tap beside it wakes
+        the screen and the saver leaves the glass. Every count from the probe's own lines."""
+        import plugin_pictures
+        import tile_art
+        mine = next((p for p in self.sender.plugins if p['id'] == 'host_probe'), None)
+        assert mine and mine.get('savers') == ['deck', 'dial', 'alarm', 'frame'], f'the hello names the savers {mine}'
+        pictured = 'camera' in json.loads((REPO / 'screen_manager/app/boards.json').read_text())[self.item.board]
+        async def dimmed():
+            if 'render_saver' not in self.services:
+                return None
+            begin = len(self.lines)
+            await self.call('render_saver')
+            return SAVER.search(await self.until(lambda l: SAVER.search(l), 10, 'render_saver', begin))[1] == '1'
+        await self.call('render_standby', enter=1)
+        start = len(self.lines)
+        await self.send({'v': 1, 'op': 'saver', 'k': 'clock', 'w': '21°',
+                         'pf': {'p': 'plugin:host_probe.dial', 'o': {}, 'x': {'temperature': '21°', 'items': []}}})
+        shown = await self.until(lambda l: probe(l, 'saver=dial show'), 10, 'the clock face shown', start)
+        assert 'dark=1' in shown, f'a saver is drawn in the dark look whatever the screen\'s: {shown}'
+        await self.until(lambda l: probe(l, 'saver=dial state') and '21' in l, 10, 'the clock face hears the temperature', start)
+        await self.until(lambda l: probe(l, 'saver=dial tick'), 10, 'the clock face ticks', start)
+        await asyncio.sleep(0.6)
+        await self.render('plugin-saver-dial')
+        if pictured:
+            start = len(calls)
+            lines = len(self.lines)
+            entity = 'media_player.living_room'
+            word = {'k': 'media', 'e': entity, 'n': 'Living room', 't': 'Evening Drive', 'x': {'artist': 'Nova Coast', 'pic': 'c0ffee1234'},
+                    's': 'playing', 'f': 1 | 4 | 8 | 1024 | 16384}
+            contract = {'entity': entity, 'name': 'Living room', 'title': 'Evening Drive', 'artist': 'Nova Coast', 'state': 'playing',
+                        'features': 1 | 4 | 8 | 1024 | 16384, 'muted': False, 'picture': 'saver:picture', 'mark': 'c0ffee1234'}
+            await self.send({'v': 1, 'op': 'saver', **word, 'pf': {'p': 'plugin:host_probe.deck', 'o': {}, 'x': contract}})
+            await self.until(lambda l: probe(l, 'saver=dial destroy'), 10, 'the clock face left for the music', lines)
+            key = await self.until(lambda l: probe(l, 'saver=deck key '), 10, 'the music face and its key', lines)
+            x1, y1, x2, y2 = (int(n) for n in key.rsplit(' ', 1)[1].split(','))
+            # Its cover: asked as a saver's (`saver`), the address the step's own, answered as the app does ("psaver").
+            for _ in range(24):
+                asked = [c for c in calls[start:] if c.service == 'esphome.screen_camera' and dict(c.data).get('saver') == '1']
+                if asked:
+                    break
+                await asyncio.sleep(0.5)
+            assert asked, 'the music face did not ask for its cover'
+            data = dict(asked[-1].data)
+            question = plugin_pictures.parse(data, self.canvas)
+            assert question and question.saver and question.sources == ['saver:picture'], f'the face asked as {data}'
+            import media_art
+            body = tile_art.layers([media_art.png(0, 640)], question.ground, question.atlas, question.styles(), compact=True)
+            url = self.pictures.url(f'{self.item.key}-psaver.bmp', body)
+            await self.send({'v': 1, 'op': 'camera', 't': 'psaver', 'e': data['tiles'], 'u': url, 'view': int(data['view'])})
+            await asyncio.sleep(1.5)
+            await self.render('plugin-saver-deck')
+            # The key: a tap wishes the pause, the action goes, the face hears "paused" at once and the screen stays dark.
+            since, lines = len(calls), len(self.lines)
+            await self.tap((x1 + x2) // 2, (y1 + y2) // 2)
+            await self.until(lambda l: probe(l, 'saver=deck tap') and 'wish=1' in l, 10, 'the tap on the face\'s key', lines)
+            await self.until(lambda l: probe(l, 'saver=deck state') and '"state":"paused"' in l, 10, 'the wish shown at once', lines)
+            for _ in range(40):
+                if any(c.service == 'media_player.media_play_pause' for c in calls[since:]):
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                raise RuntimeError('saver: the face\'s key sent no media_play_pause')
+            if await dimmed() is False:
+                raise RuntimeError('saver: the tap on the face\'s key woke the screen')
+            # No word from Home Assistant: the old value comes back (optimistic.h's cap), as Tessera's own keys do.
+            await self.until(lambda l: probe(l, 'saver=deck state') and '"state":"playing"' in l, 10, 'the wish back without a word', lines)
+            lines = len(self.lines)
+            await self.call('render_finger', x=(x1 + x2) // 2, y=(y1 + y2) // 2, down=True)
+            await asyncio.sleep(2.0)
+            await self.call('render_finger', x=(x1 + x2) // 2, y=(y1 + y2) // 2, down=False)
+            await self.until(lambda l: probe(l, 'saver=deck hold'), 10, 'a hold on the face\'s key', lines)
+            self.warnings.append('saver face of the music: cover as psaver, a tap wishes and stays in standby, no word puts it back, a hold')
+        if pictured:
+            # A face over the step's own photo (`backdrop`): the screen asks for the photo as its own face does, the
+            # face draws over it on a clear glass, and the photo moves (`mv`).
+            start, lines = len(calls), len(self.lines)
+            import camera_feed
+            await self.send({'v': 1, 'op': 'saver', 'k': 'photos', 'e': 'saver.photos', 'n': '', 'x': {'pic': 'beef00beef', 'mv': 1},
+                             'pf': {'p': 'plugin:host_probe.frame', 'o': {}, 'x': {'picture': 'saver:picture', 'mark': 'beef00beef',
+                                                                                     'index': 2, 'count': 9, 'album': 'Family'}}})
+            await self.until(lambda l: probe(l, 'saver=frame show'), 10, 'the photo face over its photo', lines)
+            for _ in range(24):
+                asked = [c for c in calls[start:] if c.service == 'esphome.screen_camera' and dict(c.data).get('saver') == 'photos']
+                if asked:
+                    break
+                await asyncio.sleep(0.5)
+            assert asked, 'the photo under the face was not asked for'
+            data = dict(asked[-1].data)
+            box = camera_feed.capped(self.canvas)
+            moving = camera_feed.motion_box(box, camera_feed.picture_cap(data))
+            body = camera_feed.encode_photo(porch(1600, 1200), box, 'fill', moving)
+            url = self.pictures.url(f'{self.item.key}-frame.bmp', body)
+            await self.send({'v': 1, 'op': 'camera', 't': 'saver', 'e': 'saver.photos', 'u': url, 'view': int(data['view'])})
+            await asyncio.sleep(1.5)
+            first = await self.render('plugin-saver-frame')
+            await asyncio.sleep(2 * 1.6)
+            later = await self.render('plugin-saver-frame-later')
+            if moving and first.convert('RGB').tobytes() == later.convert('RGB').tobytes():
+                raise RuntimeError('saver: the photo under the face did not move')
+            self.warnings.append(f'saver face over its photo: photo {moving or box}, {"moving" if moving else "still"}')
+        lines = len(self.lines)
+        await self.send({'v': 1, 'op': 'saver', 'k': 'plugin',
+                         'pf': {'p': 'plugin:host_probe.alarm', 'o': {}, 'x': {'state': 'on', 'name': 'Alarm'}}})
+        await self.until(lambda l: probe(l, 'saver=alarm show'), 10, 'the step of its own shown', lines)
+        await asyncio.sleep(0.6)
+        await self.render('plugin-saver-alarm')
+        lines = len(self.lines)
+        await self.tap(8, 8)
+        await self.until(lambda l: probe(l, 'saver=alarm destroy'), 10, 'a tap beside wakes and the saver goes', lines)
+        if await dimmed():
+            raise RuntimeError('saver: a tap on the glass did not wake the screen')
+        made, gone = said(0, 'saver=') and sum(probe(l, ' show ') and 'saver=' in l for l in self.lines), \
+            sum(probe(l, 'saver=') and l.rstrip().endswith('destroy') for l in self.lines)
+        assert made == gone, f'{made} savers shown, {gone} deleted'
+        self.warnings.append(f'plugin savers: {made} shown and deleted, the clock face, the step of its own')
 
     async def rectangular_tiles(self, grid):
         """Real cards in multi-row cells, beside ordinary neighbors, on every board."""
@@ -936,6 +1248,80 @@ class Run:
                 await self.call('render_page', page=page)
                 await self.page_done(page)
                 await self.render(f'{size}-{page + 1}')
+        return checks
+
+    async def media_tiles(self, grid):
+        """A player's tile on taller cards (`--only mediatiles`), as a sheet per board (media-sheet.png): every size of
+        two rows or more the grid takes up to 3 x 3, its keys alone as before beside its volume and keys (volume_playback,
+        media_rows: over the keys on a narrow card, standing at the right on a wide one), and the pair paused, at no volume
+        and at full volume, with a long title and its artist, and in Dark mode."""
+        from core import span_offered
+        if grid.rows < 2: return 0
+        sizes = ['tall', *(['square'] if grid.columns >= 2 else [])]
+        sizes += [f'{c}x{r}' for r in (2, 3) for c in (1, 2, 3) if span_offered(c, r, grid) and f'{c}x{r}' not in ('1x2', '2x2')]
+        def player(state='playing', volume=0.42, title='Evening Drive', artist='Nova Coast', muted=False):
+            return {'state': state, 'attributes': {'friendly_name': 'Living room', 'volume_level': volume, 'is_volume_muted': muted,
+                    'media_title': title, 'media_artist': artist, 'media_album_name': 'Low Sun', 'supported_features': 8321599}}
+        long_title = 'Songs for the Long Way Home, Part Two'
+        cases = [(f'{size} keys', size, 'playback', player()) for size in sizes]
+        cases += [(f'{size} volume+keys', size, 'volume_playback', player()) for size in sizes]
+        for size in sizes[:2]:
+            cases += [(f'{size} paused', size, 'volume_playback', player('paused')),
+                      (f'{size} no volume', size, 'volume_playback', player(volume=0.0)),
+                      (f'{size} full volume', size, 'volume_playback', player(volume=1.0)),
+                      (f'{size} long title', size, 'volume_playback', player(title=long_title, artist='Harbour Lights'))]
+        shots = []
+        region = dict(keepalive=120, clock_24h=True, numbers='point', group_min=1, percent_space=False)
+        checks = 0
+        for start in range(0, len(cases), grid.pages):
+            batch = cases[start:start + grid.pages]
+            states, tiles = {}, []
+            for page, (_, size, controls, state) in enumerate(batch):
+                entity = f'media_player.player_{page}'
+                states[entity] = state
+                tiles.append(dict(entity=entity, name='Living room', slot=page * grid.slots, options={'size': size, 'controls': controls, 'icon': 'speaker'}))
+            record = send_layout.migrate_legacy(dict(title='Music', tiles=tiles), grid)
+            values = [send_layout.state_message(index, tile, states, send_layout.extras(tile, states)) for index, tile in enumerate(send_layout.compile_tiles(record['layout'], grid))]
+            bars = [[{'k': 'clock'}] for _ in record['layout']['pages']]
+            await self.sender.synchronize(self.inbox.object_id, record, region, values, bars)
+            checks += await self.self_test()
+            for page, (label, *_ ) in enumerate(batch):
+                await self.call('render_page', page=page)
+                await self.page_done(page)
+                name = 'media-' + label.replace(' ', '-').replace('+', '-')
+                await self.render(name)
+                shots.append((label, name))
+        # Dark mode, the pair on the first two sizes.
+        dark = [(f'{size} dark', size) for size in sizes[:2]]
+        if dark:
+            states = {f'media_player.player_{i}': player() for i in range(len(dark))}
+            tiles = [dict(entity=f'media_player.player_{i}', name='Living room', slot=i * grid.slots, options={'size': size, 'controls': 'volume_playback', 'icon': 'speaker'})
+                     for i, (_, size) in enumerate(dark)]
+            record = send_layout.migrate_legacy(dict(title='Music', tiles=tiles), grid)
+            values = [send_layout.state_message(index, tile, states, send_layout.extras(tile, states)) for index, tile in enumerate(send_layout.compile_tiles(record['layout'], grid))]
+            await self.sender.synchronize(self.inbox.object_id, record, region, values, [[{'k': 'clock'}] for _ in record['layout']['pages']])
+            self.client.switch_command(self.dark_switch.key, True)
+            await asyncio.sleep(1.5)
+            for page, (label, _) in enumerate(dark):
+                await self.call('render_page', page=page)
+                await self.page_done(page)
+                name = 'media-' + label.replace(' ', '-')
+                await self.render(name)
+                shots.append((label, name))
+            self.client.switch_command(self.dark_switch.key, False)
+            await asyncio.sleep(1.0)
+        # One sheet of them all, four across, each with its label.
+        images = [(label, Image.open(self.out / f'{name}.png').convert('RGB')) for label, name in shots]
+        w, h = images[0][1].size
+        across, pad, top = 4, 16, 22
+        rows = (len(images) + across - 1) // across
+        sheet = Image.new('RGB', (across * (w + pad) + pad, rows * (h + pad + top) + pad), (250, 250, 250))
+        draw = ImageDraw.Draw(sheet)
+        for i, (label, image) in enumerate(images):
+            x, y = pad + (i % across) * (w + pad), pad + (i // across) * (h + pad + top)
+            draw.text((x, y), label, fill=(40, 40, 40))
+            sheet.paste(image, (x, y + top))
+        sheet.save(self.out / 'media-sheet.png')
         return checks
 
     async def bedside_clock(self, grid):
@@ -1496,6 +1882,218 @@ class Run:
             await asyncio.sleep(1.0)
         return 1
 
+    async def vacuum_probe(self):
+        start = len(self.lines)
+        await self.call('render_vacuum')
+        line = await self.until(lambda l: 'vacuum open=' in l, 10, 'render_vacuum', start)
+        m = re.search(r'vacuum open=(\d) view=(-?\d+) keys=(\S*)', line)
+        keys = {}
+        for item in (m[3] if m else '').split(';'):
+            if '@' in item:
+                cmd, point = item.split('@')
+                keys.setdefault(int(cmd), []).append(tuple(int(n) for n in point.split(',')))
+        return {'open': bool(m and m[1] == '1'), 'view': int(m[2]) if m else -1, 'keys': keys}
+
+    async def vacuum_panel(self, grid):
+        """The vacuum card of the module (module_vacuum_card.h) the way it is used: a tap opens it with the robot's map
+        (cleaned up and in the screen's look by the add-on's own vacuum_map), rooms picked in the order of the taps with
+        Start counting them, the views of the rooms, the routines and suction and water, and the card of robots that offer
+        less: no map, no pause, no battery, no dock, unavailable. A map from VACUUM_MAP (a PNG) replaces the drawn one."""
+        import vacuum_map
+        from core import state_message
+        calls = []
+        self.client.subscribe_service_calls(calls.append)
+        ENTITY = 'vacuum.robot'
+        FULL = 4 | 8 | 16 | 32 | 512 | 4096 | 8192 | 16384
+        region = dict(keepalive=120, clock_24h=True, numbers='point', group_min=1, percent_space=False)
+        def drawn_map():
+            """A floor plan as a robot's integration draws it: a grid of 4-pixel cells, loud room colours, a hatched
+            carpet, specks and the robot at its dock. Nobody's home."""
+            from PIL import Image, ImageDraw
+            g, w, h = 4, 160, 84
+            cells = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+            d = ImageDraw.Draw(cells)
+            wall = (93, 109, 126, 255)
+            rooms = [((2, 2, 60, 22), (165, 105, 189, 255)), ((2, 22, 50, 82), (217, 136, 128, 255)),
+                     ((50, 50, 96, 82), (240, 178, 122, 255)), ((60, 2, 158, 82), (133, 193, 233, 255)), ((50, 22, 60, 50), (133, 193, 233, 255))]
+            for box, colour in rooms:
+                d.rectangle(box, fill=colour, outline=wall)
+            d.rectangle((60, 30, 96, 50), fill=wall)
+            for x in range(110, 140):
+                for y in range(18, 34):
+                    if (x + y) % 2:
+                        cells.putpixel((x, y), (169, 247, 169, 255))
+            for x, y in ((20, 40), (30, 60), (120, 70), (140, 50)):
+                cells.putpixel((x, y), wall)
+            image = cells.resize((w * g, h * g), Image.NEAREST)
+            dd = ImageDraw.Draw(image)
+            dd.ellipse((400, 10, 432, 42), fill=(255, 255, 255, 255), outline=(0, 0, 0, 255), width=2)
+            out = io.BytesIO()
+            image.save(out, 'PNG')
+            return out.getvalue()
+        own = os.environ.get('VACUUM_MAP')
+        drawing = vacuum_map.read(Path(own).read_bytes() if own else drawn_map())
+        rows = {'mode': {'e': 'select.robot_cleaning_mode', 's': 'vac_and_mop', 'o': ['vacuum', 'vac_and_mop', 'mop'],
+                         'l': ['Vacuum', 'Vac & mop', 'Mop'], 'r': 'vbm'},
+                'water': {'e': 'select.robot_mop_intensity', 's': 'standard', 'o': ['mild', 'standard', 'intense'], 'l': ['Mild', 'Standard', 'Intense']},
+                'fan': {'o': ['quiet', 'balanced', 'turbo', 'max'], 'l': ['Quiet', 'Normal', 'Turbo', 'Max']}}
+        four = [['hall', 'Hall', 'F081A', 0], ['kitchen', 'Kitchen', 'F0B7C', 0], ['bedroom', 'Bedroom', 'F02E3', 0], ['living_room', 'Living room', 'F04B9', 0]]
+        ten = [['hall', 'Hall', 'F081A', 0], ['living_room', 'Living room', 'F04B9', 0], ['kitchen', 'Kitchen', 'F0B7C', 0],
+               ['dining_room', 'Dining room', 'F0A70', 0], ['toilet', 'Toilet', 'F09AB', 0], ['landing', 'Landing', 'F04CD', 1],
+               ['bedroom', 'Bedroom', 'F02E3', 1], ['nursery', 'Nursery', 'F18FB', 1], ['bathroom', 'Bathroom', 'F09A0', 1], ['study', 'Study', 'F1239', 1]]
+        routines = [['button.robot_kitchen_clean', 'Kitchen clean'], ['button.robot_deep', 'Deep'], ['button.robot_vac_then_mop', 'Vac followed by mop']]
+        card_map = {'e': 'image.robot_home', 'm': '2026-09-15T08:00:00+00:00'}
+        def scene(state, features=FULL, battery=100, charging=True, more=None, vc=None, room=None, extra=True):
+            attributes = {'friendly_name': 'Robot', 'supported_features': features, 'fan_speed': 'turbo'}
+            if features & 32:
+                attributes['fan_speed_list'] = rows['fan']['o']
+            x = dict(rows) if extra else {}
+            if not features & 32:
+                x.pop('fan', None)
+            if battery is not None:
+                x['bat'] = battery
+                if charging:
+                    x['chg'] = 1
+            if room:
+                x['room'] = room
+            if vc is not None:
+                x['vc'] = vc
+            return {'state': state, 'attributes': attributes}, x
+        served = [0]
+        async def answer_maps(since=0):
+            # Every question not answered yet, as the add-on answers each: a card built again after a change of look
+            # asks before the next tap.
+            for call in calls:
+                data = dict(call.data)
+                if call.service != 'esphome.screen_camera' or data.get('_answered') or 'vmap' not in data:
+                    continue
+                width, height = (int(n) for n in data['vmap'].split('x'))
+                body = vacuum_map.render(drawing, (width, height), int(data['bg'], 16), data.get('dark') == '1')
+                url = self.pictures.url(f'{self.item.key}-vmap-{served[0]}.bmp', body)
+                served[0] += 1
+                await self.send({'v': 1, 'op': 'camera', 't': 'vmap', 'e': ENTITY, 'u': url, 'view': int(data['view'])})
+                call.data['_answered'] = '1'
+        record = send_layout.migrate_legacy(dict(title='Robot', tiles=[dict(entity=ENTITY, name='Robot', options={}, slot=0)]), grid)
+        tiles = send_layout.compile_tiles(record['layout'], grid)
+        bars = [[{'k': 'clock'}] for _ in record['layout']['pages']]
+        async def push(state, x):
+            states = {ENTITY: state}
+            await self.sender.synchronize(self.inbox.object_id, record, region, [state_message(0, tiles[0], states, x)], bars)
+            await asyncio.sleep(0.8)
+        async def until_open(want=True, timeout=8):
+            end = time.monotonic() + timeout
+            while True:
+                card = await self.vacuum_probe()
+                if card['open'] == want:
+                    return card
+                if time.monotonic() > end:
+                    raise RuntimeError(f'vacuum: the card never {"opened" if want else "closed"}: {card}')
+                await asyncio.sleep(0.15)
+        async def settle(since):
+            await asyncio.sleep(0.6)
+            await answer_maps(since)
+            await asyncio.sleep(1.6)
+            await answer_maps(since)
+            await asyncio.sleep(0.6)
+        async def tap_cmd(cmd, index=0):
+            card = await self.vacuum_probe()
+            spots = card['keys'].get(cmd)
+            if not spots:
+                self.warnings.append(f'vacuum: no key {cmd} on {card["view"]}: {sorted(card["keys"])}')
+                return False
+            since = len(calls)
+            await self.tap(*spots[min(index, len(spots) - 1)])
+            await settle(since)
+            return True
+        async def back():
+            card = await self.alarm_probe()
+            if card['back']:
+                await self.tap(*card['back'][:2])
+                await asyncio.sleep(0.8)
+        only = os.environ.get('VACUUM_ONLY')  # one scene by its name's end, for a quick look at one change
+        async def show(name, state, x, then=None, dark=False):
+            if only and not name.endswith(only):
+                return
+            await push(state, x)
+            await self.call('render_page', page=0)
+            await self.page_done(0)
+            await asyncio.sleep(0.6)
+            spots = await self.slots()
+            since = len(calls)
+            # An unavailable tile opens no card: the card is opened while the robot is there, and then it goes.
+            gone = state['state'] == 'unavailable'
+            if gone:
+                await push({**state, 'state': 'docked'}, x)
+            await self.tap(*spots[ENTITY])
+            await until_open()
+            if gone:
+                await push(state, x)
+            await settle(since)
+            await self.render(name)
+            if dark:
+                self.client.switch_command(self.dark_switch.key, True)
+                since = len(calls)
+                await settle(since)
+                await self.render(name + '-dark')
+                self.client.switch_command(self.dark_switch.key, False)
+                await asyncio.sleep(1.5)
+            card = await self.alarm_probe()
+            if card['faults']:
+                self.warnings.append(f'vacuum {name}: {card["faults"]}')
+            if then:
+                await then()
+            card = await self.vacuum_probe()
+            while card['open'] and card['view'] > 0:
+                await back()
+                card = await self.vacuum_probe()
+            await back()
+            await until_open(False)
+        async def full_round():
+            if await tap_cmd(810 + 1):
+                await tap_cmd(810 + 3)
+                await self.render('vacuum-card-picked')
+            if await tap_cmd(840):
+                await tap_cmd(810 + 0)
+                await self.render('vacuum-rooms')
+                await back()
+            if await tap_cmd(841):
+                await self.render('vacuum-routines')
+                await back()
+            if await tap_cmd(842):
+                await self.render('vacuum-how')
+                await back()
+        await show('vacuum-card', *scene('docked', vc={'map': card_map, 'rooms': four, 'rt': routines}), then=full_round, dark=True)
+        await show('vacuum-card-cleaning', *scene('cleaning', battery=64, charging=False, room='Living room',
+                                                  vc={'map': card_map, 'rooms': four, 'rt': routines, 'pg': 45, 'ar': 18}))
+        await show('vacuum-card-error', *scene('error', battery=38, charging=False, vc={'map': card_map, 'rooms': four, 'rt': routines, 'err': 'Main brush jammed'}))
+        async def ten_round():
+            if await tap_cmd(840):
+                await self.render('vacuum-rooms-floors')
+                await back()
+        await show('vacuum-card-ten', *scene('docked', vc={'map': card_map, 'rooms': ten, 'floors': ['Ground floor', 'First floor'], 'rt': routines}), then=ten_round)
+        async def unmapped_round():
+            if await tap_cmd(840):
+                await self.render('vacuum-rooms-unmapped')
+                await back()
+        many_routines = [[f'button.robot_routine_{n}', name] for n, name in enumerate(
+            ['Kitchen after dinner', 'Hall quick', 'Deep clean', 'Bedrooms', 'Living room twice', 'Mop only', 'Vacuum only',
+             'Around the table', 'Under the bed', 'Bathroom', 'Weekly', 'Before guests', 'Pet hair', 'Night run', 'Edges',
+             'Carpet boost', 'Spot clean', 'Hallway mop', 'Office', 'Everything'])]
+        async def routines_round():
+            if await tap_cmd(841):
+                await self.render('vacuum-routines-20')
+                await tap_cmd(850)
+                await self.render('vacuum-routines-20-page2')
+                await back()
+        await show('vacuum-card-routines20', *scene('docked', vc={'map': card_map, 'rooms': four, 'rt': many_routines}), then=routines_round)
+        await show('vacuum-card-unmapped', *scene('docked', vc={'map': card_map, 'unmapped': 1}), then=unmapped_round)
+        await show('vacuum-card-nomap', *scene('docked', vc={'rooms': four, 'rt': routines}))
+        await show('vacuum-card-switchbot', *scene('cleaning', features=1 | 16 | 4096 | 8192, battery=72, charging=False, extra=False))
+        await show('vacuum-card-cloud', *scene('docked', features=4 | 16 | 32 | 4096 | 8192, battery=None, extra=False))
+        await show('vacuum-card-miele', *scene('cleaning', features=4 | 8 | 32 | 4096 | 8192, battery=55, charging=False, extra=False))
+        await show('vacuum-card-unavailable', *scene('unavailable', features=0, battery=None, vc={'map': card_map, 'rooms': four, 'rt': routines}))
+        return 1
+
     async def humidifier_panel(self, grid):
         """Humidifiers and dehumidifiers (firmware 0.42.0+) as tiles of every size and as their card, in the states Home
         Assistant has for them: drying, humidifying, idle, off, without a humidity sensor, unavailable. Each scene is its own layout; the cards a finger
@@ -1809,17 +2407,22 @@ class Run:
         self.client.subscribe_service_calls(calls.append)
         pictured = 'camera' in json.loads((REPO / 'screen_manager/app/boards.json').read_text())[self.item.board]
         served = [0]
-        async def answer(since, timeout=8):
+        async def answer(since, entity=None, timeout=8):
             end = time.monotonic() + timeout
             while time.monotonic() < end:
                 for call in calls[since:]:
                     data = dict(call.data)
                     if call.service != 'esphome.screen_camera' or data.get('_answered'):
                         continue
+                    # The question of this step: a question left from the step before (a wake that opened it) is not.
+                    if entity and data.get('entity') != entity:
+                        continue
                     # The screensaver's picture as ESP Screens makes it: the screen's full box, within the picture cap.
                     kind, box = data.get('saver'), camera_feed.capped(self.canvas)
                     raw = media_art.png(0, 640) if kind == 'media' else porch(*self.camera)
-                    body = camera_feed.encode_saver(raw, box, kind, int(ground.split(',')[0], 16) if ground else 0)
+                    # A photo of the photos step (app 0.4.89): a standing one, shown whole on its own colour.
+                    body = camera_feed.encode_photo(porch(900, 1200), box) if kind == 'photos' else \
+                        camera_feed.encode_saver(raw, box, kind, int(ground.split(',')[0], 16) if ground else 0)
                     url = self.pictures.url(f'{self.item.key}-saver-{served[0]}.bmp', body)
                     served[0] += 1
                     await self.send({'v': 1, 'op': 'camera', 't': 'saver', 'e': data['entity'], 'u': url, 'view': int(data['view'])})
@@ -1832,9 +2435,18 @@ class Run:
         row = [{'k': 'text', 't': '21°'}, {'k': 'text', 't': 'Open'}, {'k': 'text', 'i': 'F0335', 't': ''},
                {'k': 'text', 'i': 'F140B', 't': '412 W'}, {'k': 'ago', 'i': 'F0D91', 'e': int(MOMENT.timestamp()) - 300}]
         steps = [('clock', {'k': 'clock'}), ('clock-row', {'k': 'clock', 'w': '21°', 'wi': row})]
+        # The clock's faces (module clock_faces) on a board of the full tier, as the app sends them (screen_saver.face).
+        if 'clock_faces' in json.loads((REPO / 'screen_manager/app/boards.json').read_text())[self.item.board].get('modules', ()):
+            steps += [('face-glass', {'k': 'clock', 'cf': {'f': 'glass', 'n': 4, 's': 1, 'l': 'dark'}}),
+                      ('face-glass-light', {'k': 'clock', 'cf': {'f': 'glass', 'n': 12, 's': 1, 'l': 'light'}}),
+                      ('face-classic', {'k': 'clock', 'w': '21°', 'wi': row, 'cf': {'f': 'classic', 'n': 4, 's': 1, 'l': 'dark'}}),
+                      ('face-classic-light', {'k': 'clock', 'w': '21°', 'wi': row, 'cf': {'f': 'classic', 'n': 4, 's': 0, 'l': 'light'}}),
+                      ('face-bauhaus', {'k': 'clock', 'cf': {'f': 'bauhaus', 'n': 4, 's': 1, 'l': 'light'}}),
+                      ('face-bauhaus-dark', {'k': 'clock', 'cf': {'f': 'bauhaus', 'n': 4, 's': 1, 'l': 'dark'}})]
         if pictured:
             steps = [('media', {'k': 'media', 'e': 'media_player.living_room', 'n': 'Living room', 't': 'Evening Drive',
                                 'x': {'artist': 'Nova Coast', 'album': 'Low Sun', 'pic': 'c0ffee1234', 'g': ground}}),
+                     ('photos', {'k': 'photos', 'e': 'saver.photos', 'n': '', 'x': {'pic': 'f0f0f0f0f0'}}),
                      ('camera', {'k': 'camera', 'e': 'camera.front_door', 'n': 'Front door'}), *steps]
         async def probe():
             start = len(self.lines)
@@ -1852,8 +2464,8 @@ class Run:
         for name, message in steps:
             start = len(calls)
             await self.send({'v': 1, 'op': 'saver', **message})
-            if not name.startswith('clock'):
-                await answer(start)
+            if not name.startswith('clock') and not name.startswith('face'):
+                await answer(start, message.get('e'))
             await asyncio.sleep(1.5)
             await self.render(f'saver-{name}')
             if name != 'media':
@@ -2818,7 +3430,7 @@ class Run:
         if self.only != 'plugin':
             await self.render('starting')
         # Each step of it as the screen says it (firmware 0.38.0), from Wi-Fi to an update, then back as it was.
-        if 'render_boot' in self.services and self.only != 'plugin':
+        if 'render_boot' in self.services and self.only not in ('plugin', 'dock'):  # the Dock's round needs no boot screens
             for name, given in BOOT_STATES:
                 await self.call('render_boot', **{**BOOT_DEFAULTS, **given})
                 await self.render(name)
@@ -2826,7 +3438,15 @@ class Run:
         side = json.loads((REPO / 'screen_manager/app/boards.json').read_text())[self.item.board]['orientations']
         side = side['portrait' if self.item.rotation else 'landscape']
         grid = send_layout.Grid(side['columns'], side['rows'])
-        record, values, bars, region = send_layout.configuration(grid, now=MOMENT, titles=PAGE_TITLES)
+        many = self.only == 'dock'  # every page the screen holds, to see the dock full
+        record, values, bars, region = send_layout.configuration(grid, now=MOMENT, titles=DOCK_TITLES if many else PAGE_TITLES,
+                                                                 pages=len(DOCK_TITLES) if many else None)
+        if many:  # the third page left out of the Dock in its page settings: the Dock shows the other seven
+            record['layout']['pages'][2]['navigation']['showInDock'] = False
+            # Some pages with an icon of their own (Living room, Bedroom, Garden): the Dock shows those instead of a picture.
+            for page, icon in ((1, 'sofa'), (3, 'bed'), (4, 'flower')):
+                if page < len(record['layout']['pages']):
+                    record['layout']['pages'][page]['icon'] = icon
         self.sender = send_layout.api_sender(self.client, services)
         await self.sender.synchronize(self.inbox.object_id, record, region, values, bars)
         tiles = len(values)
@@ -2852,20 +3472,27 @@ class Run:
             return 1, await self.bedside_clock(grid)
         if self.only == 'media':
             return 1, await self.media_panel(grid)
+        if self.only == 'mediatiles':
+            return 1, await self.media_tiles(grid)
         if self.only == 'saver':
             return 1, await self.saver_panel()
         if self.only == 'humidifier':
             return 1, await self.humidifier_panel(grid)
+        if self.only == 'vacuum':
+            return 1, await self.vacuum_panel(grid)
         if self.only == 'bars':
             return 1, await self.bars_round(grid)
         if self.only == 'weather':
             return 1, await self.weather_panel(grid)
         if self.only == 'calendar':
             return 1, await self.calendar_panel(grid)
+        if self.only == 'dock':
+            return 1, await self.dock(pages)
         if self.only == 'plugin':
             return 1, await self.plugin_round(grid)
         checks = await self.self_test()
         await self.moments(pages)
+        await self.dock(pages)
         for page in range(pages):
             await self.call('render_page', page=page)
             await self.page_done(page)
@@ -2951,7 +3578,7 @@ def main():
     parser.add_argument('--out', type=Path, default=REPO / '.esphome' / 'render' / 'out')
     parser.add_argument('--work', type=Path, help='where the host builds go (default: .esphome/render/build)')
     parser.add_argument('--camera', default='960x540', help='the camera picture of the camera alert, WxH')
-    parser.add_argument('--only', choices=['alarm', 'lock', 'automation', 'remote', 'bedside', 'media', 'saver', 'humidifier', 'weather', 'calendar', 'bars'], help='after the demo layout arrives, run only this stage')
+    parser.add_argument('--only', choices=['alarm', 'lock', 'automation', 'remote', 'bedside', 'media', 'mediatiles', 'saver', 'humidifier', 'weather', 'calendar', 'bars', 'dock', 'vacuum'], help='after the demo layout arrives, run only this stage')
     parser.add_argument('--plugin', type=Path, help='a plugin folder (docs/PLUGINS.md) to build into the variants, then run the plugin '
                         'round alone: tests/fixtures/plugins/host_probe proves the plugin host on the real firmware')
     parser.add_argument('--port-base', type=int, help='the first API port (default host.PORT_BASE); another worktree may use it')

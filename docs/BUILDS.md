@@ -68,6 +68,76 @@ In the editor, the builds store (`web/src/stores/builds.ts`) is the one place th
 USB and the YAML check use it. A view keeps only which build it follows. Never follow a build by "the firmware job that
 runs now": the next build starts at once, and its job is another one.
 
+## On a build server
+
+A Raspberry Pi takes a long time over a screen's firmware and can run short of memory. When a faster computer on the
+same network runs an ESPHome build server, the app sends its builds there instead. The build server is ESPHome's own
+remote build: the app speaks the sending side of it, as an ESPHome Device Builder does when it sends builds.
+
+### Setting one up
+
+1. Start a build server on the faster computer, one of these:
+   - **ESPHome Desktop.** It builds for other devices from the start.
+   - **ESPHome Device Builder** (in Docker, or the ESPHome app of another Home Assistant): Settings → Build server →
+     Enable remote build.
+   - **Without a screen:** `esphome-device-builder --remote-build-only <folder>`. It prints its fingerprint and a
+     one-time pairing key.
+   The build server listens on TCP port 6055. A firewall has to let that port through (Windows blocks it by default).
+2. In Tessera: **Settings → Build server → Connect a build server**. Type the computer's IP address or host name (an
+   app in Home Assistant cannot look for it on the network) and press **Look it up**.
+3. Compare the seven emoji with the fingerprint the build server shows. Pair only when they match.
+   - A headless build server asks for its one-time key, and lets Tessera in at once.
+   - ESPHome Desktop and Device Builder: open **Pairing requests** there, check that Tessera's emoji match, and accept
+     it. The card waits for that and then shows the server as Ready.
+4. **Build screens on this server** is on from then on. Every build goes there: updates, plugin builds, New screen and
+   Firmware & USB.
+
+The build server and Tessera must reach each other on the local network. Over a VPN or across networks it may work,
+but ESPHome does not support remote builds there, and neither does Tessera.
+
+### What happens in a build
+
+- The app packs the screen's YAML with `esphome bundle` (its includes, the secrets it uses, local components) and
+  sends it. Plugins kept in a folder beside the ESPHome folder go into the bundle too, which `esphome bundle` alone
+  leaves out. Packages and plugins from GitHub are fetched by the build server itself.
+- The build server compiles with the ESPHome version this app builds with: it installs that version once, beside its
+  own, so a screen is the same firmware wherever it was built. The first build of a new version takes a few minutes
+  longer there.
+- The images come back into the app's build folder (`/data/build/<screen>/server`), and everything after the build
+  runs here as before: the update over Wi-Fi, USB, the download for the browser, the bridge and the wide partition
+  table on boards with 4 MB of flash (`esphome upload --file`).
+- The page says where a build runs and at which step (packing, sending, waiting, building, fetching), and the Build
+  server card says how the last build went.
+
+### When it builds here instead
+
+A build runs here, as without a build server, and its log and the page say why, when:
+
+- the build server is switched off, not paired, or not reachable;
+- it forgot Tessera (pair it again) or answers with another fingerprint than the one you checked;
+- the link drops during the build, the server does not take the build, cannot install the ESPHome version, or the
+  firmware does not come back.
+
+When the log says the server could not install ESPHome, the build server's own log says why. On an Intel Mac, a
+package of ESPHome 2026.9 has no ready-made build and needs Rust to be compiled there
+(github.com/esphome/esphome/issues/20286): install Rust on that computer, or use another one as the build server.
+
+A build that fails on the server itself (a compile error) fails: the same YAML fails here too, after a much longer
+wait. Its log is the server's.
+
+### For developers
+
+- `screen_manager/app/build_server.py` is the pairing, the link and the build; `Firmware.compile_on_server` and
+  `Firmware.served_file` put it into a job; the build line carries `where`, `server`, `remote` and `fallback` to the
+  page (`BuildQueue.view`, `Manager.builds`). The editor's card is `web/src/components/BuildServerCard.vue`, the steps'
+  words `serverStep` in `web/src/model/screen-status.ts`.
+- The protocol is Device Builder's peer link (github.com/esphome/device-builder, docs/ARCHITECTURE.md "Remote build"
+  and docs/API.md): a WebSocket on port 6055, a Noise XX handshake (`Noise_XX_25519_ChaChaPoly_SHA256`), then
+  encrypted JSON frames. It has no version number; a frame the app does not know is ignored, and anything it cannot
+  read ends the session, which means a build here. Asked upstream: github.com/orgs/esphome/discussions/3910.
+- `tests/test_build_server.py` runs a small server in the test that speaks the server's side. To try the real one:
+  `uvx --from 'esphome-device-builder[esphome]' esphome-device-builder --remote-build-only <folder>`.
+
 ## Adding a kind of build
 
 1. Give its steps as a coroutine that takes the build and returns `'success'`, `'failed'` or `'skipped'`. Every ESPHome

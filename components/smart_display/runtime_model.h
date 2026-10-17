@@ -7,12 +7,14 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "cover_travel.h"
 #include "screen_text.h"
 #include "ui_scale.h"
 #include "page_protocol.h"
 #include "optimistic.h"
 #include "energy_card.h"
 #include "calendar_card.h"
+#include "vacuum_model.h"
 #include "roomy.h"
 #include <cmath>
 #include <cstdint>
@@ -176,15 +178,21 @@ inline bool plugin_key(const std::string &entity) {
   }
   return true;
 }
-inline bool valid_entity(const std::string &entity) {
+// An entity id as Home Assistant writes it (domain.object_id: lowercase letters, digits, underscores), of any domain.
+inline bool entity_id(const std::string &entity) {
   if (entity.size() > 120) return false;
-  if (entity.rfind("plugin:", 0) == 0) return plugin_key(entity);
   auto dot = entity.find('.');
   if (dot == std::string::npos || dot == 0 || dot + 1 == entity.size()) return false;
   for (size_t i = 0; i < entity.size(); ++i)
     if (i != dot && !(entity[i] >= 'a' && entity[i] <= 'z') &&
         !(entity[i] >= '0' && entity[i] <= '9') && entity[i] != '_') return false;
-  std::string domain = entity.substr(0, dot);
+  return true;
+}
+inline bool valid_entity(const std::string &entity) {
+  if (entity.size() > 120) return false;
+  if (entity.rfind("plugin:", 0) == 0) return plugin_key(entity);
+  if (!entity_id(entity)) return false;
+  std::string domain = entity.substr(0, entity.find('.'));
   // screen.* are built-in cards without a Home Assistant entity behind them; screen.page_<n> (firmware 0.2.62+)
   // only goes to page n. Several pages may each carry the same one (firmware 0.2.65+, Model::set_layout).
   if (domain == "screen") {
@@ -269,6 +277,16 @@ struct Lamp {
   uint16_t hue = 0, kelvin = 0, low = 0, high = 0;
 };
 constexpr size_t MAX_LAMPS = 24;
+// A cover of a cover group (firmware 0.57.0): what the group's page shows of it and may change, as a lamp of a light
+// group. The add-on sends at most MAX_LAMPS of them, only to a screen whose hello says group_covers. `supported` is the
+// cover's own supported_features (tile_controls::cover_card reads it as a tile's); position and tilt NAN where it reports
+// none.
+struct Blind {
+  std::string entity, name, state, device_class;
+  uint32_t supported = 0;
+  float position = NAN, tilt = NAN;
+  bool unavailable = false;
+};
 struct Extra {
   // The effect a light runs (its `effect` attribute), and the rows of its effects page.
   std::string effect;
@@ -276,6 +294,8 @@ struct Extra {
   std::vector<NumberRow> number_rows;
   // The lamps of a light group, for its lamp page.
   std::vector<Lamp> lamps;
+  // The covers of a cover group, for its page (firmware 0.57.0).
+  std::vector<Blind> blinds;
   // Climate: the modes as JSON lists, the current fan and swing mode, and what it is doing now.
   std::string hvac_modes, fan_modes, swing_modes, fan_mode, swing_mode, hvac_action;
   // A humidifier (firmware 0.42.0+) keeps its modes (available_modes) in hvac_modes and what it does (action) in
@@ -313,6 +333,8 @@ struct Extra {
   std::shared_ptr<const energy_card::Data> energy;
   // A calendar card's events (firmware 0.56.0+, calendar_card.h): its own block too, shared with the card that paints it.
   std::shared_ptr<const calendar_card::Data> calendar;
+  // A vacuum card's map, rooms and routines (module vacuum, vacuum_model.h): its own block too.
+  std::shared_ptr<const vacuum_model::Data> vacuum;
   uint32_t media_duration = 0, media_position = 0, media_position_at = 0;
   // More of a media player (firmware 0.24.0+, app 0.4.42+): the speaker it plays on and the ones it may (source_list,
   // sixteen at most), shuffle (-1 for a player without it) and repeat ("" without it), the features it reported at its
@@ -385,7 +407,7 @@ struct Extra {
            media_picture.empty() && map_mark.empty() && !media_duration && !media_position && !media_position_at && fan_speeds.empty() && fan_speed.empty() &&
            choices.empty() && room.empty() && !charging && std::isnan(tilt) && action.empty() && action_data.empty() &&
            action_templates.empty() && state_word.empty() && subtitle.empty() && !subtitle_at && effect.empty() &&
-           option_rows.empty() && number_rows.empty() && lamps.empty() && code_format.empty() && changed_by.empty() && !arm_code_free &&
+           option_rows.empty() && number_rows.empty() && lamps.empty() && blinds.empty() && code_format.empty() && changed_by.empty() && !arm_code_free &&
            !code_saved && !alarm_end && !alarm_delay && !assumed && activity.empty() && keypad.empty() &&
            media_source.empty() && media_repeat.empty() && media_sources.empty() && media_shuffle < 0 && !media_features &&
            speaker_flags.empty() && speaker_volumes.empty() && media_inputs.empty() && media_input.empty() && media_target.empty() &&
@@ -551,6 +573,12 @@ struct Tile {
   // reported meanwhile, and when the last of those came.
   float slider_sent = NAN, slider_real = NAN;
   uint32_t slider_sent_at = 0, slider_state_at = 0;
+  // A cover on its way (cover_travel.h): the target and the way show from the command until Home Assistant reports the
+  // cover there or stopped, and its sliders take no finger meanwhile.
+  cover_travel::Travel travel;
+  // Where the slats stand open (the tile's tilt_open option): at 100 as Home Assistant's rule has it, or at 50 for a blind
+  // that reports 0 and 100 as closed one way and the other.
+  bool tilt_middle = false;
   // A sensor's graph: 24 samples over `history_hours`, empty without one.
   unsigned history_hours = 24;
   std::vector<float> history;
@@ -659,6 +687,29 @@ struct Tile {
     if (!slider_holding(now)) { slider_sent = NAN; return; }
     *field = slider_sent;
   }
+  // A cover's command went out: `to` the position or tilt asked for (NAN for open or close without positions), `dir`
+  // +1 open, -1 close, 0 from the positions.
+  void travel_start(uint32_t now, float to, int dir, bool tilt = false) {
+    const float real = tilt ? extra().tilt : position;
+    if (cover_travel::start(travel, now, to, dir, real, state, tilt)) show_travel();
+  }
+  bool travelling() const { return travel.active(); }
+  void show_travel() {
+    if (!travel.tilt) { position = cover_travel::shown_position(travel); state = cover_travel::shown_state(travel); }
+    else if (extra_ptr()) edit_extra().tilt = cover_travel::shown_position(travel);
+  }
+  // A state came in with position, tilt and state already parsed: the travel stays in front, or ends on it.
+  void travel_reported(uint32_t now) {
+    if (travel.active() && cover_travel::reported(travel, now, travel.tilt ? extra().tilt : position, state)) show_travel();
+  }
+  // The travel ended without a report (the clock, a refusal, the stop key): what Home Assistant last said shows again.
+  void release_travel() {
+    if (!travel.active()) return;
+    cover_travel::end(travel);
+    if (travel.tilt) { if (extra_ptr()) edit_extra().tilt = travel.real; return; }
+    position = travel.real;
+    if (travel.real_state != cover_travel::State::OTHER) state = cover_travel::state_word(travel.real_state);
+  }
   // The hold ran out without a report that ended it: what Home Assistant last said shows again.
   void release_slider() {
     float *field = slider_field();
@@ -687,7 +738,10 @@ struct Tile {
     if (builtin()) return true;
     if (!received || state.empty() || state == "unavailable") return false;
     auto d = domain();
-    return state != "unknown" || d == "scene" || d == "button" || d == "input_button";
+    // A cover that cannot tell whether it is open (an awning or a blind without feedback: Home Assistant's is_closed is
+    // None) reports "unknown" and still takes its keys, as in Home Assistant, where only "unavailable" turns them off
+    // (frontend data/cover.ts canOpen, canClose, canStop).
+    return state != "unknown" || d == "scene" || d == "button" || d == "input_button" || d == "cover";
   }
   // Home Assistant's stateActive() (frontend src/common/entity/state_active.ts), the rule its cards colour by: an
   // entity it calls inactive is grey, such as an airco that is off, a closed blind, a docked robot, a player in

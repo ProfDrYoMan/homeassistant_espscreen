@@ -36,9 +36,52 @@ words alone don't say it. Help icons work with keyboard focus, pointer hover and
 help closes it. Errors, compatibility notices and unsaved-change status remain visible.
 
 Menus, lists to pick from and switches use Reka UI (app 0.3.19), wrapped in `web/src/components/ui/` so every
-panel uses the same few building blocks. The inspector groups a tile's settings in five cards (Text, Look,
+panel uses the same few building blocks. Build a new control from Reka's rich parts, never from a hand-made list or
+popup: `UiMenu` for a few fixed actions, `UiSelect` for one value from a short fixed list, and `UiPicker` (a Reka
+Popover with a Combobox) for anything picked from the user's own Home Assistant, such as entities, players or areas.
+Such a list can run to dozens of items, so it needs a search field and a list that scrolls inside the window. When
+Reka has a part for what you need (Combobox, Popover, Tooltip, Dialog, Tabs, Slider, ...), wrap it in
+`web/src/components/ui/` first and use that wrapper. The inspector groups a tile's settings in five cards (Text, Look,
 Size and place, Controls, Icon and color) and a page's in three (Title, Navigation, Top bar). The icons of the
 editor's own controls are Material Design Icons, listed in `web/src/model/ui-icons.json`.
+
+### The address
+
+What is open is in the page's address, and nowhere else: the editor has one router (vue-router with a hash history,
+`web/src/router.ts`, since the page lives in Home Assistant's ingress iframe where only the hash is the page's own).
+`#/` is the overview, `#/screens/<inbox id>` a screen, `#/settings`, `#/new-screen`, `#/firmware`, `#/alerts` and
+`#/plugins` the pages of the app, and `#/override/<profile>` a screen's Override YAML. A reload opens the same again
+once the inventory has arrived (the session follows the address, `followAddress`), the browser's Back and Forward
+walk through what was open, a link to a screen can be kept, and the addresses from before the router (`#settings`)
+still work. Home Assistant's sidebar shows the editor in a frame whose address nobody sees, and makes it anew on a
+reload at the bare address: the route is mirrored into the hash of Home Assistant's own address
+(`/app/<slug>#/screens/...`, which can be copied), kept in the tab as well (`sessionStorage`), and a frame that starts
+at the overview goes back to what that hash or the tab says (`restoreKeptRoute`). Leaving a screen with unsaved changes by the address bar asks the same question as the sidebar does
+(`router.beforeEach` in the session store), and a no leaves the page and the address where they were. Code never reads
+or writes `location.hash`: a view is opened with `ui.go()` (the route names the pages know, `""` being the open screen
+or the overview), a screen with `session.select()`, an override with `ui.openOverride()`; what is open is read from
+`ui.route`, `scr.selected` and `ui.overrideProfile`.
+
+### Menus
+
+Everything you do to a thing as a whole, as opposed to its settings, is in one menu, and that menu is the same in two
+places: behind the thing's ··· and on the right mouse button on it (`UiContextMenu`). Its items live in one component,
+so the two never differ: `TileMenuItems` for a tile, `PageMenuItems` for a page. A new action goes in that component
+and shows in both places. The mockup holds one menu per page (`DevicePage`), which shows the items of what is under
+the pointer, so a page of many tiles carries one menu, not one per card.
+
+- The right mouse button chooses the thing first, as a file manager does: a tile that isn't chosen opens in the
+  inspector, and a right click on one of several chosen tiles keeps them all and offers what works on all of them
+  (copy, cut, remove).
+- What a thing gets: a tile, the tiles chosen together, an empty cell (add a tile there, or paste there), the page
+  anywhere else on it, the top bar's items in the bar at the head of its inspector, and the screensaver clock's row.
+- The order is always the same: what changes the thing (rename, its entity, its data), then where it stands (move to
+  a page), then the clipboard, and Remove last in red, with a line between the groups. A key that does the same
+  shows on the right (`⌘C`, `⌫`).
+- A menu holds actions, never settings: a choice with a value (size, colour, display) stays in the inspector, and a
+  tile's size stays with the handles on its card.
+- The right mouse button is the mouse's alone. A finger held on a tile or a bar item drags it, so on a touch screen
+  the ··· is the way to the menu.
 
 ## Home and detail pages
 
@@ -69,7 +112,7 @@ layout's hello leaves the field out, and older firmware reads only the request.
 
 A tall or square tile reserves two rows, including their normal gap. Tiles cannot overlap or extend beyond a page, and the screen's tile capacity does not change. If there is no free rectangle during resizing, the previous size and position stay intact.
 
-Hover over a tile or focus its edge handle to resize it. The right handle changes width; the bottom handle changes height. Handles offer only supported sizes that fit at the current position without moving neighbours. Drag to preview, release to apply, or press Escape to cancel. Arrow keys work on a focused handle. Each completed resize is one undo step. Full-page cards retain their existing inspector setting and do not have edge handles.
+Hover over a tile or focus its edge handle to resize it. The right handle changes width; the bottom handle changes height. Handles offer only supported sizes that fit at the current position without moving neighbours. Drag to preview, release to apply, or press Escape to cancel. Arrow keys work on a focused handle. Each completed resize is one undo step. A tile that grows gets the richest controls its new size has room for, and a tip beside it lists every set that fits, so you can keep that one, pick another or choose none (docs/CATALOGUE.md, "A tile that grows"). Full-page cards retain their existing inspector setting and do not have edge handles.
 
 Most kinds reuse existing designs. A tall tile (1 × 2) keeps the single-column design, including its optional slider or graph. A square tile (2 × 2) keeps the double-width design and its direct controls. Some kinds use the height (app 0.3.8, firmware 0.3.3): a weather tile of two rows lists the days under each other with a low-to-high bar, and a thermostat shows its temperature between − and + with a mode bar under it. A **Live picture** fills its tile on every size (app 0.3.13, firmware 0.3.7). Extra height does not force a full-page design. Moving, copying, exporting and undoing keep the rectangular footprint with the tile.
 

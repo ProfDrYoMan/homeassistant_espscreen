@@ -9,14 +9,12 @@ glass (camera_feed.encode_saver): a camera filling it, a cover filling it or bes
 for the words over it. Nothing on it takes a tap, so the first touch only wakes the screen.
 
 A board without pictures (the CYD and the other boards without PSRAM) shows the clock; its editor offers nothing else."""
-import json
 import logging
-import os
 import re
-import tempfile
 import time
 from datetime import datetime, timezone
 
+import atomic
 import core
 
 LOG = logging.getLogger(__name__)
@@ -28,6 +26,10 @@ FEATURE = 'screensaver'
 KEYS_FEATURE = 'saver_keys'
 # A screen that draws the clock's row of entities (firmware 0.50.0+, app 0.4.81): `wi` in the message.
 ITEMS_FEATURE = 'saver_items'
+# A screen whose clock has faces beside the digital one (module clock_faces, boards with 8 MB of flash or more): `cf` in
+# the message. Its hello lists it; any other screen shows the digital clock whatever face is chosen.
+FACES_FEATURE = 'clock_faces'
+MODULE = 'clock_faces'
 # How long a paused player keeps the screensaver. A speaker stays "paused" in Home Assistant for days, and the camera
 # or the clock after it would never show again.
 PAUSED_SECONDS = 600
@@ -35,16 +37,46 @@ PAUSED_SECONDS = 600
 # the screensaver itself, and its play key must still be there for the finger that pressed it. After that a player that
 # plays goes first again.
 HELD_SECONDS = 120
-KINDS = ('media', 'camera', 'clock')
-PICTURE_KINDS = frozenset(('media', 'camera'))
+# A screen that shows photos from a folder of Home Assistant's media (app 0.4.89): Immich, a folder under /media, Synology
+# Photos, any media source. Its hello lists it; the step is offered and sent only to such a screen.
+PHOTOS_FEATURE = 'saver_photos'
+KINDS = ('media', 'photos', 'camera', 'clock')
+PICTURE_KINDS = frozenset(('media', 'photos', 'camera'))
+# The steps of a plugin (plugin API 0.14, docs/PLUGINS.md "A screensaver"): a face of a step above, or a step of its own
+# in the order (`plugin:<plugin>.<saver>`). At most PLUGIN_STEPS steps of plugins, and their options in `plugins`.
+PLUGIN_KEY = re.compile(r'^plugin:([a-z][a-z0-9_]{0,31})\.([a-z][a-z0-9_]{0,31})$')
+PLUGIN_STEPS = 4
+PLUGIN_SETTINGS = 8
+# The wire name of the photos step's picture: what the screen asks the app for (no Home Assistant entity of its own).
+PHOTOS_ENTITY = 'saver.photos'
+# `photos` (app 0.4.89): the media source folder the photos come from, how many seconds each stands, in what order they
+# come, and how one fills the glass: `auto` fills it with a photo about its shape and shows a photo of another shape whole
+# on its own colour, `fill` always cuts, `whole` never does.
+PHOTO_EVERY = (30, 60, 300, 900, 3600)
+PHOTO_ORDERS = ('shuffle', 'in_order')
+PHOTO_FITS = ('auto', 'fill', 'whole')
+# `motion` (app 0.4.89): `slow` cuts a photo that fills the glass a little larger, and the screen moves it a pixel at a
+# time (picture_motion.h), where that larger photo fits the screen's picture memory.
+PHOTO_MOTIONS = ('still', 'slow')
+PHOTOS_DEFAULT = {'source': '', 'every': 60, 'order': 'shuffle', 'fit': 'auto', 'motion': 'still'}
+MEDIA_SOURCE = re.compile(r'^media-source://[^\s]{1,500}$')
 # `weather` (app 0.4.52): whose temperature the clock shows under the time. 'auto' takes Home Assistant's first weather
 # entity that reports one, '' shows none, and a weather entity of your choice is that one.
 # `more` (app 0.4.54): the players the music step tries after `media`, in their order. The step shows the first of them
 # that plays with a cover: a speaker's own music first, say, and the poster of what the television under it plays next.
 # `items` (app 0.4.81): entities the clock shows beside the temperature, in one centred row: the top bar's entity items,
 # each with its state or its icon alone (content `state` or `icon`, with the icon `auto`, `none` or a named one).
+# `face` (clock_faces): the clock's face, `digital` (every screen), `glass`, `classic` or `bauhaus`; `numerals` the numbers
+# on Glass (0, 4 or 12), `seconds` its seconds hand, `look` dark, light or the screen's own (`auto`).
+FACES = ('digital', 'glass', 'classic', 'bauhaus')
+LOOKS = ('dark', 'light', 'auto')
+NUMERALS = (0, 4, 12)
+# `media_face`, `photos_face` (plugin API 0.14): a plugin's face for that step, '' for the screen's own; `face` takes a
+# plugin's face of the clock as well. `plugins`: per plugin face or step its options as the editor set them and the entity
+# it belongs to (a step of a plugin of an entity), {key: {'options': {...}, 'entity': ''}}.
 DEFAULT = {'show': False, 'media': '', 'camera': '', 'order': list(KINDS), 'off': [], 'weather': 'auto', 'more': [],
-           'items': []}
+           'items': [], 'face': 'digital', 'numerals': 4, 'seconds': True, 'look': 'dark', 'photos': dict(PHOTOS_DEFAULT),
+           'media_face': '', 'photos_face': '', 'plugins': {}}
 ITEMS_MAX = 4
 MORE_PLAYERS = 3
 ENTITY = re.compile(r'[a-z0-9_]+\.[a-z0-9_]+')
@@ -59,7 +91,8 @@ def validate(value):
     """A clean copy of a screensaver choice, or ValueError. Every field is optional; the default fills the rest."""
     if not isinstance(value, dict) or set(value) - set(DEFAULT):
         raise ValueError('screensaver fields')
-    result = {**DEFAULT, 'order': list(DEFAULT['order']), 'off': [], 'more': [], 'items': []}
+    result = {**DEFAULT, 'order': list(DEFAULT['order']), 'off': [], 'more': [], 'items': [],
+              'photos': dict(PHOTOS_DEFAULT), 'plugins': {}}
     if 'show' in value:
         if not isinstance(value['show'], bool):
             raise ValueError('screensaver show')
@@ -85,16 +118,90 @@ def validate(value):
         result['weather'] = weather
     if 'items' in value:
         result['items'] = valid_items(value['items'])
+    for name, allowed in (('face', FACES), ('look', LOOKS), ('numerals', NUMERALS)):
+        if name in value:
+            if isinstance(value[name], bool) or (value[name] not in allowed and not (name == 'face' and plugin_key(value[name]))):
+                raise ValueError(f'screensaver {name}')
+            result[name] = value[name]
+    for name in ('media_face', 'photos_face'):
+        if name in value:
+            if value[name] != '' and not plugin_key(value[name]):
+                raise ValueError(f'screensaver {name}')
+            result[name] = value[name]
+    if 'photos' in value:
+        result['photos'] = valid_photos(value['photos'])
+    if 'plugins' in value:
+        result['plugins'] = valid_plugins(value['plugins'])
+    if 'seconds' in value:
+        if not isinstance(value['seconds'], bool):
+            raise ValueError('screensaver seconds')
+        result['seconds'] = value['seconds']
     if 'order' in value:
-        order = value['order']
-        if not isinstance(order, list) or sorted(order) != sorted(KINDS):
-            raise ValueError('screensaver order')
-        result['order'] = list(order)
+        result['order'] = valid_order(value['order'])
     if 'off' in value:
         off = value['off']
-        if not isinstance(off, list) or any(kind not in KINDS for kind in off) or len(set(off)) != len(off):
+        if not isinstance(off, list) or any(kind not in result['order'] for kind in off) or len(set(off)) != len(off):
             raise ValueError('screensaver off')
         result['off'] = [kind for kind in result['order'] if kind in off]
+    return result
+
+
+def plugin_key(value):
+    """(plugin, saver) for a plugin's face or step (`plugin:<plugin>.<saver>`), else None."""
+    match = PLUGIN_KEY.match(value) if isinstance(value, str) else None
+    return (match.group(1), match.group(2)) if match else None
+
+
+def valid_order(order):
+    """The order of the steps: every step of the screen once, in any order, and at most PLUGIN_STEPS steps of plugins.
+    An order saved before the photos (app 0.4.88 and older) gets them right after the music, where a person who chose
+    no folder never sees them."""
+    if not isinstance(order, list) or len(set(map(str, order))) != len(order):
+        raise ValueError('screensaver order')
+    core_steps = [kind for kind in order if kind in KINDS]
+    plugins = [kind for kind in order if plugin_key(kind)]
+    if len(core_steps) + len(plugins) != len(order) or len(plugins) > PLUGIN_STEPS:
+        raise ValueError('screensaver order')
+    if 'photos' not in core_steps and sorted(core_steps) == sorted(('media', 'camera', 'clock')):
+        order = list(order)
+        order.insert(order.index('media') + 1, 'photos')
+        core_steps.append('photos')
+    if sorted(core_steps) != sorted(KINDS):
+        raise ValueError('screensaver order')
+    return list(order)
+
+
+def valid_photos(value):
+    """The photos step: a media source folder ('' for none yet), its pace, order and fit."""
+    if not isinstance(value, dict) or set(value) - set(PHOTOS_DEFAULT):
+        raise ValueError('screensaver photos')
+    result = dict(PHOTOS_DEFAULT)
+    source = value.get('source', '')
+    if not isinstance(source, str) or (source and not MEDIA_SOURCE.fullmatch(source)):
+        raise ValueError('screensaver photos')
+    result['source'] = source
+    for name, allowed in (('every', PHOTO_EVERY), ('order', PHOTO_ORDERS), ('fit', PHOTO_FITS), ('motion', PHOTO_MOTIONS)):
+        if name in value:
+            if isinstance(value[name], bool) or value[name] not in allowed:
+                raise ValueError('screensaver photos')
+            result[name] = value[name]
+    return result
+
+
+def valid_plugins(value):
+    """Per plugin face or step its options (core.plugin_options' shape; whether they fit the plugin is its manifest's,
+    checked where the plugin is known) and the entity it belongs to."""
+    if not isinstance(value, dict) or len(value) > PLUGIN_SETTINGS:
+        raise ValueError('screensaver plugins')
+    result = {}
+    for key, setting in value.items():
+        if not plugin_key(key) or not isinstance(setting, dict) or set(setting) - {'options', 'entity'}:
+            raise ValueError('screensaver plugins')
+        options = setting.get('options', {})
+        entity = setting.get('entity', '')
+        if not core.plugin_options(options) or (entity and not core.plugin_entity(entity)):
+            raise ValueError('screensaver plugins')
+        result[key] = {'options': dict(options), 'entity': entity}
     return result
 
 
@@ -185,39 +292,79 @@ def entities(choice, states=None):
     found = set(players(choice)) | ({choice['camera']} if choice.get('camera') else set())
     weather = weather_entity(choice, states) if states is not None and choice.get('show') else ''
     shown = {item['entity'] for item in choice.get('items') or ()} if choice.get('show') else set()
-    return found | ({weather} if weather else set()) | shown
+    # The entities of plugin steps and faces (a weather radar of a weather entity): followed as a tile's are.
+    owned = {setting['entity'] for setting in (choice.get('plugins') or {}).values() if setting.get('entity')} \
+        if choice.get('show') else set()
+    return found | ({weather} if weather else set()) | shown | owned
 
 
-def available(kind, choice, states, pictures, keys=False, now=None, held='', broken=()):
-    """Whether a step can show now: one of its players plays with a cover that can be fetched, a camera Home Assistant
-    has, the clock always. The two pictures need a board that draws them."""
+def available(kind, choice, states, pictures, keys=False, now=None, held='', broken=(), photos=None, plugins=None):
+    """Whether a step can show now: one of its players plays with a cover that can be fetched, a photo of its folder is
+    ready, a camera Home Assistant has, the clock always, and a plugin's step when the screen has the plugin and the
+    plugin has something to show (`plugins['steps'][key]` is not None). The pictures need a board that draws them."""
     if kind == 'clock':
         return True
+    if plugin_key(kind):
+        return bool(plugins) and (plugins.get('faces') or {}).get(kind) == 'own' \
+            and (plugins.get('steps') or {}).get(kind) is not None
     if not pictures:
         return False
     if kind == 'media':
         return bool(player(choice, states, keys, now, held, broken))
+    if kind == 'photos':
+        return bool(photos) and bool(photos.get('ready')) and bool((choice.get('photos') or {}).get('source'))
     return bool(choice.get(kind)) and (states.get(choice[kind]) or {}).get('state', '') not in GONE
 
 
-def pick(choice, states, pictures, keys=False, now=None, held='', broken=()):
-    """The first step of the order that is on and available, or '' for none (standby shows the dimmed tiles as before)."""
+def pick(choice, states, pictures, keys=False, now=None, held='', broken=(), photos=None, plugins=None):
+    """The first step of the order that is on and available, or '' for none (standby shows the dimmed tiles as before).
+    A step the screen does not take (photos to a screen whose hello lacks them) is passed over: `photos` is None then."""
     if not choice or not choice.get('show'):
         return ''
     for kind in choice.get('order', KINDS):
-        if kind not in choice.get('off', ()) and available(kind, choice, states, pictures, keys, now, held, broken):
+        if kind not in choice.get('off', ()) and available(kind, choice, states, pictures, keys, now, held, broken,
+                                                           photos, plugins):
             return kind
     return ''
 
 
-def message(choice, states, pictures, short, media_extras, ground=None, keys=False, now=None, held='', bar=None, broken=()):
+def face_of(kind, choice, plugins):
+    """The plugin face a core step shows on this screen, or '' for the screen's own: the face chosen for it, when the
+    screen has that plugin's face (its hello). A plugin that left the screen leaves the screen's own face, never a black
+    glass."""
+    chosen = {'clock': choice.get('face', ''), 'media': choice.get('media_face', ''),
+              'photos': choice.get('photos_face', '')}.get(kind, '')
+    return chosen if plugin_key(chosen) and plugins and (plugins.get('faces') or {}).get(chosen) == kind else ''
+
+
+def face(choice):
+    """The clock's face as the screen reads it (`cf`), or None for the digital clock."""
+    if choice.get('face', 'digital') not in FACES[1:]:
+        return None
+    return {'f': choice['face'], 'n': choice.get('numerals', 4), 's': 1 if choice.get('seconds', True) else 0,
+            'l': choice.get('look', 'dark')}
+
+
+def message(choice, states, pictures, short, media_extras, ground=None, keys=False, now=None, held='', bar=None, broken=(),
+            faces=False, photos=None, plugins=None):
     """The screen message for what the screensaver shows now. `short(text, n)` cuts a text the way every message does,
     `media_extras(attrs)` is the media card's (core.media_extras), `ground(entity, attrs)` the cover's colours, `keys`
     whether the screen's screensaver has keys (KEYS_FEATURE), `held` the player it shows now, `bar(item)` the top bar's
     wire item for one of the clock's entity items (header_bar.entity_item), or None for a screen that takes none,
-    `broken` the players whose cover could not be fetched (player)."""
-    kind = pick(choice, states, pictures, keys, now, held, broken)
+    `broken` the players whose cover could not be fetched (player), `faces` whether the screen draws the clock's faces
+    (FACES_FEATURE), `photos` the photos step of this screen ({'ready', 'mark', 'index', 'count', 'album'}, None for a
+    screen without it), `plugins` its plugins' savers ({'faces': {key: step}, 'steps': {key: data or None}}, None for a
+    screen without them).
+
+    A plugin's face or step adds `pf`: the face (`p`), its options (`o`) and what it draws from (`x`, the step's
+    contract in docs/PLUGINS.md "A screensaver"), which the screen hands the plugin as it is."""
+    kind = pick(choice, states, pictures, keys, now, held, broken, photos, plugins)
+    if plugin_key(kind):
+        setting = (choice.get('plugins') or {}).get(kind) or {}
+        return {'op': 'saver', 'k': 'plugin',
+                'pf': {'p': kind, 'o': dict(setting.get('options') or {}), 'x': plugins['steps'][kind]}}
     result = {'op': 'saver', 'k': kind}
+    own = face_of(kind, choice, plugins) if kind else ''
     if kind == 'clock':
         # The outside temperature under the time (app 0.4.52, firmware 0.31.0+); older firmware reads past it.
         degrees = temperature(choice, states)
@@ -225,12 +372,33 @@ def message(choice, states, pictures, short, media_extras, ground=None, keys=Fal
             result['w'] = degrees
         # The row of entities (app 0.4.81, firmware 0.50.0+): `wi` is the whole row, the temperature first, the way the
         # top bar sends its items. Firmware before it reads `w` alone and shows the temperature.
+        row = []
         if bar and choice.get('items'):
             row = [{'k': 'text', 't': degrees}] if degrees else []
             # One ink on the black glass: an entity's colour stays home.
             row += [{key: value for key, value in bar(item).items() if key != 'c'} for item in choice['items']]
             if row:
                 result['wi'] = row
+        # The clock's face (clock_faces): only to a screen that draws them; older firmware and lite boards read past it.
+        chosen = face(choice) if faces and not own else None
+        if chosen:
+            result['cf'] = chosen
+        if own:
+            result['pf'] = plugin_face(own, choice, clock_contract(degrees, row[1:] if degrees and row else row))
+        return result
+    if kind == 'photos':
+        # One picture of the folder after the other (saver_photos.py): its mark changes with the photo, and the screen
+        # loads the next under the one that stands, as a player's next cover.
+        result['e'] = PHOTOS_ENTITY
+        result['n'] = ''
+        result['x'] = {'pic': photos.get('mark', '')}
+        # It moves slowly (picture_motion.h): the screen moves a photo larger than its glass; one that came at the glass's
+        # size stands still.
+        if (choice.get('photos') or {}).get('motion') == 'slow':
+            result['x']['mv'] = 1
+        if own:
+            result['pf'] = plugin_face(own, choice, photos_contract(photos))
+        return result
     if kind not in PICTURE_KINDS:
         return result
     entity = player(choice, states, keys, now, held, broken) if kind == 'media' else choice[kind]
@@ -257,7 +425,66 @@ def message(choice, states, pictures, short, media_extras, ground=None, keys=Fal
             # Muted (volume down held on the screen, or from anywhere else): the key shows it and the next tap undoes it.
             if attrs.get('is_volume_muted') is True:
                 result['m'] = 1
+        if own:
+            result['pf'] = plugin_face(own, choice, media_contract(entity, state, result, extras, colours))
     return result
+
+
+def plugin_face(key, choice, contract):
+    """`pf` of a plugin's face of a core step: the face, its options and the step's contract."""
+    setting = (choice.get('plugins') or {}).get(key) or {}
+    return {'p': key, 'o': dict(setting.get('options') or {}), 'x': contract}
+
+
+# ---- What a plugin's face draws from (docs/PLUGINS.md, "A screensaver"). Names in full words: the contract of plugin
+# API 0.14. A field may be added later; none is renamed or taken away.
+def _number(value, low=None, high=None):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
+        return None
+    if (low is not None and value < low) or (high is not None and value > high):
+        return None
+    return value
+
+
+def media_contract(entity, state, said, extras, colours):
+    """The music step: the player on the glass, what it plays and what it can do. `picture` is 'saver:picture' while it
+    has a cover, the address a face gives ui::set_picture for it; `colour` the cover's own colour ('#rrggbb')."""
+    attrs = (state or {}).get('attributes') or {}
+    features = attrs.get('supported_features')
+    volume = _number(attrs.get('volume_level'), 0, 1)
+    out = {'entity': entity, 'name': said.get('n', ''), 'title': said.get('t', ''),
+           'artist': extras.get('artist', ''), 'album': extras.get('album', ''),
+           'state': (state or {}).get('state', ''),
+           'features': features if isinstance(features, int) and not isinstance(features, bool) and features >= 0 else 0,
+           'muted': attrs.get('is_volume_muted') is True,
+           'picture': 'saver:picture' if extras.get('pic') else '', 'mark': extras.get('pic', '')}
+    if volume is not None:
+        out['volume'] = round(volume, 3)
+    for key, name in (('duration', 'dur'), ('position', 'pos'), ('position_at', 'at')):
+        if name in extras:
+            out[key] = extras[name]
+    if colours and colours != '-':
+        out['colour'] = '#' + colours.split(',')[0].lower()
+    return out
+
+
+def clock_contract(degrees, row):
+    """The clock step: the outside temperature as the clock shows it ('21°', '' for none) and the entities of its row,
+    each with its icon (a codepoint of Tessera's set, 0 for none) and its words, or `since` (seconds since 1970) for one
+    that says how long ago something was."""
+    items = []
+    for item in row or ():
+        entry = {'icon': item.get('i', 0) if isinstance(item.get('i'), int) else 0, 'text': item.get('t', '')}
+        if item.get('k') == 'ago' and isinstance(item.get('e'), int):
+            entry['since'] = item['e']
+        items.append(entry)
+    return {'temperature': degrees or '', 'items': items}
+
+
+def photos_contract(photos):
+    """The photos step: the photo on the glass ('saver:picture') and where it stands in its folder."""
+    return {'picture': 'saver:picture', 'mark': photos.get('mark', ''), 'index': photos.get('index', 0),
+            'count': photos.get('count', 0), 'album': photos.get('album', '')}
 
 
 class ScreenSavers:
@@ -266,11 +493,8 @@ class ScreenSavers:
     def __init__(self, path):
         self.path = path
         self.choices = {}
-        try:
-            data = json.loads(path.read_text())
-            saved = data.get('screens') if isinstance(data, dict) and data.get('version') == 1 else None
-        except (OSError, ValueError):
-            saved = None
+        data = atomic.read_json(path, 1)
+        saved = data.get('screens') if data else None
         for device, choice in (saved or {}).items():
             try:
                 self.choices[str(device)] = validate(choice)
@@ -280,7 +504,10 @@ class ScreenSavers:
     def get(self, device):
         choice = self.choices.get(device) or DEFAULT
         return {**DEFAULT, **choice, 'order': list(choice['order']), 'off': list(choice['off']),
-                'more': list(choice.get('more') or ()), 'items': [dict(item) for item in choice.get('items') or ()]}
+                'more': list(choice.get('more') or ()), 'items': [dict(item) for item in choice.get('items') or ()],
+                'photos': dict(choice.get('photos') or PHOTOS_DEFAULT),
+                'plugins': {key: {'options': dict(value['options']), 'entity': value['entity']}
+                            for key, value in (choice.get('plugins') or {}).items()}}
 
     def set(self, device, value):
         choice = validate(value)
@@ -296,17 +523,7 @@ class ScreenSavers:
             self._save()
 
     def _save(self):
-        temporary = None
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(mode='w', dir=self.path.parent, delete=False) as handle:
-                temporary = handle.name
-                json.dump({'version': 1, 'screens': self.choices}, handle, ensure_ascii=False)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self.path)
+            atomic.write_json(self.path, {'version': 1, 'screens': self.choices})
         except OSError as error:
             LOG.warning('Could not keep the screensavers (%s)', type(error).__name__)
-        finally:
-            if temporary and os.path.exists(temporary):
-                os.unlink(temporary)

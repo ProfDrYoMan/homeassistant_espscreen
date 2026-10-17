@@ -8,7 +8,7 @@ import { computed, effectScope, onScopeDispose, reactive, ref, watch } from "vue
 import { getJson, send } from "../api";
 import { t } from "../i18n";
 import { boardTitle } from "../model/boards";
-import { attachLine, barItemView, barTypesOf, choiceKey, compareUrl, fit, isTest, nodeOf, ownYaml, pluginDefaults, pluginTileId, testPlugin,
+import { attachLine, barItemView, barTypesOf, choiceKey, pluginSaverKey, saverTypesOf, compareUrl, fit, isTest, nodeOf, ownYaml, pluginDefaults, pluginTileId, testPlugin,
   text, tileTypesOf, type AppFit, type Installed, type Plugin, type PluginTileOption, type Texts } from "../model/plugins";
 import type { Screen } from "../types";
 import { useBuildsStore } from "./builds";
@@ -26,7 +26,7 @@ export type Plan = {
 // from the tile's data, its first rows; asked again once a minute while a page shows it.
 export type PreviewRow = { badge?: string; title?: string; value?: string; at?: number };
 // ---- One line of state: for one screen (its tab), or over all screens (the page) ----
-export type Status = { kind: "installed" | "update" | "building" | "test" | "misfit" | "failed" | ""; label: string };
+export type Status = { kind: "installed" | "update" | "building" | "test" | "misfit" | "failed" | "missing" | ""; label: string };
 // A screen's changes set aside together, one build (the tray): the plugins to add and the ones to take off.
 export type TrayGroup = { screen: Screen; plugins: Plugin[]; removes: Plugin[] };
 type Payload = {
@@ -78,6 +78,9 @@ export const usePluginsStore = defineStore("plugins", () => {
   const providers = ref<Record<string, Record<string, string>>>({});
   // What is asked for now (a list of choices, a tile's look, a plan) and what this page is sending a screen now.
   const asking = new Set<string>(), drawing = new Set<string>(), planning = new Set<string>();
+  // The keys of the lists of the last searches (choicesFor): older ones are let go.
+  const searched: string[] = [];
+  const SEARCHES_KEPT = 12;
   const sending = reactive<Record<string, string[]>>({});
 
   // Plugins are on where the add-on says so (the inventory store's pluginsEnabled, an editor feature the add-on turns on
@@ -91,6 +94,16 @@ export const usePluginsStore = defineStore("plugins", () => {
   const pluginTileOf = (entity: string) => tileTypes.value.get(entity);
   /** A plugin's top bar item by its key (plugin:<plugin>.<item>), as the editor shows it. */
   const barItemOf = (key: string | undefined) => barItemView(key ? barTypes.value.get(key) : undefined);
+  // The screensavers of the plugins the editor knows (plugin API 0.14), by their key (plugin:<plugin>.<saver>).
+  const saverTypes = computed(() => saverTypesOf(index.value));
+  /** A plugin's screensaver by its key, also of a plugin that is not on the screen (any more). */
+  const saverOf = (key: string) => saverTypes.value.get(key);
+  /** The screensavers of the plugins this screen runs: a face of a step, or a step of its own. */
+  function saversFor(screen: Screen | undefined) {
+    if (!screen || screen.virtual) return [];
+    return index.value.filter((plugin) => installedOn(screen, plugin.id)).flatMap((plugin) =>
+      (plugin.savers || []).map((saver) => ({ key: pluginSaverKey(plugin.id, saver.id), plugin, saver })));
+  }
   /** Whether a plugin fits a screen, with what only the add-on knows about it there. */
   const fits = (plugin: Plugin, screen: Screen | null) => fit(plugin, screen, (screen && appFit.value[screen.id]) || {});
 
@@ -117,32 +130,43 @@ export const usePluginsStore = defineStore("plugins", () => {
   // `_screen`: the screen shown, whose own plugin of this id answers (two screens may run two plugins of one id).
   const shownScreen = () => (scr.selected && !inv.inventory.screens.find((s) => s.id === scr.selected)?.virtual ? scr.selected : "");
   // The choices of an option: its own, or those of one of the plugin's fetches (a stop's lines), asked of the add-on with
-  // the tile's other options.
-  function choicesFor(plugin: Plugin, option: PluginTileOption, given: Record<string, unknown>) {
+  // the tile's other options as they are kept (plugin API 0.12: typed, a list as a list, in a body so no type is lost).
+  // `search`: what the person typed in a list found by searching (`search`), the fetch's {search}; asked from two
+  // characters on, and only the lists of the last searches are kept.
+  function choicesFor(plugin: Plugin, option: PluginTileOption, given: Record<string, unknown>, search = "") {
     if (!option.options_from) return option.choices || [];
-    const key = `${shownScreen()}|${choiceKey(plugin, option, given)}`;
+    const typed = option.search ? search.trim() : "";
+    if (option.search && [...typed].length < 2) return [];
+    const others = Object.fromEntries(Object.entries(given).filter(([k, v]) => k !== option.id && v !== "" && v !== undefined));
+    const key = `${shownScreen()}|${choiceKey(plugin, option, others)}|${typed}`;
     if (!(key in choices.value) && !asking.has(key)) {
       asking.add(key);
-      const query = new URLSearchParams([...Object.entries(given).filter(([k, v]) => k !== option.id && v !== "" && v !== undefined)
-        .map(([k, v]) => [k, String(v)]), ...(shownScreen() ? [["_screen", shownScreen()]] : [])]).toString();
-      getJson<{ choices: { value: string; label: string }[] }>(`plugins/${plugin.id}/choices/${option.options_from}${query ? `?${query}` : ""}`)
-        .then((data) => { choices.value[key] = data.choices.map((c) => ({ value: c.value, label: { en: c.label } })); })
+      send<{ choices: { value: string; label: string }[] }>(`plugins/${plugin.id}/choices/${option.options_from}`, "POST",
+        { options: others, ...(typed ? { search: typed } : {}), ...(shownScreen() ? { screen: shownScreen() } : {}) })
+        .then((data) => {
+          if (typed) for (const old of searched.splice(0, Math.max(0, searched.push(key) - SEARCHES_KEPT))) delete choices.value[old];
+          choices.value[key] = data.choices.map((c) => ({ value: c.value, label: { en: c.label } }));
+        })
         .catch(() => { choices.value[key] = []; })
         .finally(() => asking.delete(key));
     }
     return choices.value[key] || [];
   }
+  // Whether the list of choices for these options (and this search) has not come yet.
+  function choicesPending(plugin: Plugin, option: PluginTileOption, given: Record<string, unknown>, search = "") {
+    const others = Object.fromEntries(Object.entries(given).filter(([k, v]) => k !== option.id && v !== "" && v !== undefined));
+    return !(`${shownScreen()}|${choiceKey(plugin, option, others)}|${option.search ? search.trim() : ""}` in choices.value);
+  }
   function previewFor(entity: string, options: Record<string, unknown> | undefined, bound?: string): PreviewRow[] | null {
     const kind = pluginTileOf(entity);
     if (!kind?.tile.preview) return null;
-    const given = { ...pluginDefaults(kind.tile), ...(options || {}), ...(bound ? { entity: bound } : {}) };
-    const key = `${shownScreen()}|${entity}|${JSON.stringify(given)}`;
+    const given = { ...pluginDefaults(kind.tile), ...(options || {}) };
+    const key = `${shownScreen()}|${entity}|${JSON.stringify(given)}|${bound || ""}`;
     const known = previews.value[key];
     if ((!known || Date.now() - known.at > 60000) && !drawing.has(key)) {
       drawing.add(key);
-      const query = new URLSearchParams([...Object.entries(given).filter(([, v]) => v !== "" && v !== undefined).map(([k, v]) => [k, String(v)]),
-        ...(shownScreen() ? [["_screen", shownScreen()]] : [])]).toString();
-      getJson<{ items: PreviewRow[] }>(`plugins/${kind.plugin.id}/preview/${kind.tile.id}${query ? `?${query}` : ""}`)
+      send<{ items: PreviewRow[] }>(`plugins/${kind.plugin.id}/preview/${kind.tile.id}`, "POST",
+        { options: given, ...(bound ? { entity: bound } : {}), ...(shownScreen() ? { screen: shownScreen() } : {}) })
         .then((data) => { previews.value[key] = { items: data.items || [], at: Date.now() }; })
         .catch(() => { previews.value[key] = { items: [], at: Date.now() }; })
         .finally(() => drawing.delete(key));
@@ -272,6 +296,9 @@ export const usePluginsStore = defineStore("plugins", () => {
       return { kind: "building", label: t(builds.buildOf(screen)?.state === "queued" ? "editor.plugins.state.queued" : "editor.plugins.state.building") };
     const have = installedOn(screen, plugin.id);
     if (have?.state === "failed") return { kind: "failed", label: t("editor.plugins.state.failed") };
+    // Built into the screen, but its last hello does not name it: it crashed at boot, or the screen runs a firmware built
+    // without it (Installed.running). Said before an update, which would not mend it.
+    if (have?.state === "active" && have.running === false) return { kind: "missing", label: t("editor.plugins.state.not_running") };
     if (hasUpdate(screen, plugin)) return { kind: "update", label: t("editor.plugins.state.update", { version: plugin.version }) };
     if (isTest(have)) return { kind: "test", label: t(`editor.plugins.source.${have!.source}`) };
     if (have) return { kind: "installed", label: t("editor.plugins.state.installed") };
@@ -549,7 +576,7 @@ export const usePluginsStore = defineStore("plugins", () => {
     // What the Plugins page, a screen's tab and the cards read as they draw (stores/lookup.ts); choicesFor, previewFor and
     // planOn answer at once and ask the add-on for what they do not have yet.
     ...lookups({
-      pluginTileOf, barItemOf, fits, choicesFor, previewFor, tapActionsFor, barItemsFor, entitiesIn, needsConsent, realScreens,
+      pluginTileOf, barItemOf, saverOf, saversFor, fits, choicesFor, choicesPending, previewFor, tapActionsFor, barItemsFor, entitiesIn, needsConsent, realScreens,
       otherOrigin, hasUpdate, updatesOn, tilesOn, partsOn, valueOf, needsAttach, pluginsFile, setupChanged, setupReady, secretSet, partsKb,
       installedOn, buildingOn, testsOn, allTests, labelOf, stageOf, statusOn, statusOverall, planOn, comesAlong, neededBy, canLike,
       isSetAside, isTakingOff, trayPlan, trayAlong, trayReady, setAsideKb, removalPlan, newsFrom, compareFor, screenLine,

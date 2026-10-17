@@ -10,6 +10,8 @@
 #include "runtime_tiles.h"
 #include "plugin_host.h"
 #include "plugin_api.h"
+#include "touch_feedback_lvgl.h"
+#include "plugin_action.h"
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -60,7 +62,19 @@ std::vector<BarItemType> &bar_items() {
   return list;
 }
 
+std::vector<SaverType> &saver_types() {
+  static std::vector<SaverType> list;
+  return list;
+}
+
 Plugin::Plugin() { plugins().push_back(this); }
+
+void Plugin::add_saver(const char *id, SaverStep step, std::function<Saver *()> make) {
+  std::string key = std::string("plugin:") + plugin_id() + "." + id;
+  for (auto &type : saver_types())
+    if (type.key == key) { type.step = step; type.make = std::move(make); return; }
+  saver_types().push_back({this, id, std::move(key), step, std::move(make)});
+}
 
 void Plugin::add_bar_item(const char *id, std::function<BarItem()> read) {
   std::string key = std::string("plugin:") + plugin_id() + "." + id;
@@ -228,8 +242,86 @@ std::string fill(const char *text, const char *name, const std::string &value) {
 }
 
 bool action(const char *service, const std::string &entity, const char *key, const std::string &value) {
-  if (!service || !rt::valid_entity(entity) || entity.rfind("plugin:", 0) == 0) return false;
+  if (!service || !rt::entity_id(entity) || entity.rfind("screen.", 0) == 0) return false;
   return rt::action(service, entity, key ? key : "", value);
+}
+
+// An action with fields of any JSON type (0.12): each field as plugin_action.h writes it for Home Assistant, through
+// the screen's own route as a tap's action goes (the screen must be allowed to perform actions).
+bool action(const char *service, const std::string &entity, JsonVariantConst fields) {
+  static const char *const TAG = "plugin_action";
+  if (!service || !plugin_action::service_name(service) || !fields.is<JsonObjectConst>()) {
+    ESP_LOGW(TAG, "Not sent: %s needs a service as domain.action and its fields as an object", service ? service : "");
+    return false;
+  }
+  if (!entity.empty() && (!rt::entity_id(entity) || entity.rfind("screen.", 0) == 0)) return false;
+  std::vector<plugin_action::Field> list;
+  for (JsonPairConst pair : fields.as<JsonObjectConst>()) {
+    plugin_action::Field field{pair.key().c_str(), pair.value().is<const char *>(), ""};
+    if (field.text) field.value = pair.value().as<const char *>();
+    else serializeJson(pair.value(), field.value);
+    list.push_back(std::move(field));
+  }
+  plugin_action::Encoded encoded;
+  const char *why = "";
+  if (!plugin_action::encode(entity, list, encoded, &why)) {
+    ESP_LOGW(TAG, "Not sent: %s %s", service, why);
+    return false;
+  }
+  if (!rt::fresh()) return false;
+  esphome::api::HomeassistantActionRequest request;
+  request.service = esphome::StringRef(service);
+  request.data.init(encoded.data.size());
+  for (const auto &pair : encoded.data) {
+    esphome::api::HomeassistantServiceMap entry;
+    entry.key = esphome::StringRef(pair.first);
+    entry.value = esphome::StringRef(pair.second);
+    request.data.push_back(entry);
+  }
+  request.data_template.init(encoded.templates.size());
+  for (const auto &pair : encoded.templates) {
+    esphome::api::HomeassistantServiceMap entry;
+    entry.key = esphome::StringRef(pair.first);
+    entry.value = esphome::StringRef(pair.second);
+    request.data_template.push_back(entry);
+  }
+  // With an entity its tiles wait for the answer as for a tap; without one (the fields name their own target, or
+  // there is none) nobody waits.
+  if (entity.empty()) esphome::api::global_api_server->send_homeassistant_action(request);
+  else rt::send_action(request, entity, true);
+  ESP_LOGI(TAG, "Sent service=%s entity=%s (%u values)", service, entity.c_str(),
+           (unsigned) (encoded.data.size() + encoded.templates.size()));
+  return true;
+}
+
+// A finger's wish (0.14): the screensaver's player has its own (rt::saver_wish), a tile's entity goes through the tile's
+// (rt::wish, every tile and card of it shows it), and an entity no tile shows only gets the action: nothing on the glass
+// shows its value but the plugin's own parts, which follow Home Assistant's word.
+bool wish(const std::string &entity, Wish field, const std::string &value) {
+  using F = optimistic::Field;
+  if (!rt::entity_id(entity) || entity.rfind("screen.", 0) == 0) return false;
+  const std::string domain = entity.substr(0, entity.find('.'));
+  F f;
+  std::string service, key, data;
+  if (field == Wish::PLAYING || field == Wish::MUTED) {
+    if (domain != "media_player" || (value != "1" && value != "0")) return false;
+    f = field == Wish::PLAYING ? F::PLAYING : F::MUTED;
+    service = field == Wish::PLAYING ? "media_player.media_play_pause" : "media_player.volume_mute";
+    if (field == Wish::MUTED) { key = "is_volume_muted"; data = value == "1" ? "true" : "false"; }
+  } else {
+    if (value != "on" && value != "off") return false;
+    f = F::ON_OFF;
+    service = domain + (value == "on" ? ".turn_on" : ".turn_off");
+  }
+  if (domain == "media_player" && rt::saver_now.kind == "media" && rt::saver_now.entity == entity)
+    return rt::saver_wish(f, value, service.c_str(), key.c_str(), data.c_str());
+  for (size_t i = 0; i < rt::model.count; ++i)
+    if (rt::model.tiles[i].entity == entity) {
+      auto &t = rt::model.tiles[i];
+      rt::wish(t, f, value, service, key, data, f == F::ON_OFF ? std::string() : rt::media_entity(t));
+      return true;
+    }
+  return rt::action(service, entity, key, data);
 }
 
 bool open_card(const char *plugin_id, const char *card, const std::string &entity, int tile, const std::string &title) {
@@ -240,6 +332,13 @@ bool open_card(const char *plugin_id, const char *card, const std::string &entit
 void close_card() { plugin_host::close_card(); }
 
 Point tap_point() { return plugin_host::tapped; }
+
+Point drift(uint32_t when) {
+  if (!when) return {0, 0};
+  const LocalTime t = local_time(when);
+  const auto at = saver_view::drift(t.hour * 60 + t.minute, ::ui::mm(1));
+  return {at.x, at.y};
+}
 
 uint32_t send(const Plugin *plugin, JsonObjectConst request) {
   static uint32_t next = 0;
@@ -407,11 +506,19 @@ template <class S> static size_t hash(const S &text) { return std::hash<std::str
 // The card whose tile is in a call of the host (create, on_state, on_tick, on_theme, on_tap): a place the tile makes
 // in that call is this card's. Nothing else of a tile's runs (a plugin's own moments are the plugin's, not a tile's).
 static Card *making = nullptr;
+// The places a call of the host makes pictures in (ui::picture): the tile's in a call of a tile, the open card's in a
+// call of a card (0.13), nullptr outside both.
+static std::vector<Place> *placing = nullptr;
 struct Making {
   Card *was;
-  explicit Making(Card *card) : was(making) { making = card; }
-  ~Making() { making = was; }
+  std::vector<Place> *had;
+  explicit Making(Card *card) : was(making), had(placing) { making = card; placing = card ? &card->places : nullptr; }
+  ~Making() { making = was; placing = had; }
 };
+// The places of the plugin card open over the page (0.13), nullptr when none is (defined with the cards below).
+static std::vector<Place> *card_places();
+// The places of the plugin's screensaver on the glass (0.14), nullptr when none is.
+static std::vector<Place> *saver_places();
 
 bool known(const rt::Tile &t) { return tessera::tile_type(t.entity) != nullptr; }
 
@@ -492,8 +599,10 @@ void tap(rt::Widgets &w, int x, int y) {
 }
 
 static void tick_card(uint32_t epoch);
+static void saver_tick(uint32_t epoch);
 
 void tick_cards(uint32_t epoch) {
+  saver_tick(epoch);  // a plugin's screensaver (0.14) counts on its own clock too, on every board
   tick_card(epoch);
   for (auto &w : rt::widgets) {
     if (!w.plugin || !w.tile || !w.extra || w.extra_mode != "plugin" || w.index >= rt::model.count) continue;
@@ -507,16 +616,18 @@ void tick_cards(uint32_t epoch) {
 // The places with an address that lie within the card, as the parts of one picture, in the order the tile made them,
 // and the place each part is; the atlas's scale for them (a card over the cap comes smaller as a whole). The card's
 // layout is brought up to date first, so a place moved in on_tick is measured where it is now.
-static int measure(const rt::Widgets &w, std::vector<tile_picture::Part> &parts, std::vector<Place *> &owners) {
+// `frame` is what the places are measured from: a tile's card, or a plugin card's room (0.13).
+static int measure(lv_obj_t *frame, std::vector<Place> &places, std::vector<tile_picture::Part> &parts,
+                   std::vector<Place *> &owners) {
   parts.clear();
   owners.clear();
-  if (!w.plugin || !w.tile) return picture_store::SCALE_ONE;
-  lv_obj_update_layout(w.tile);
+  if (!frame) return picture_store::SCALE_ONE;
+  lv_obj_update_layout(frame);
   lv_area_t card;
-  lv_obj_get_coords(w.tile, &card);
+  lv_obj_get_coords(frame, &card);
   const int cw = lv_area_get_width(&card), ch = lv_area_get_height(&card);
   int right = 0, bottom = 0;
-  for (auto &p : w.plugin->places) {
+  for (auto &p : places) {
     if (p.url.empty() || !p.place || lv_obj_has_flag(p.place, LV_OBJ_FLAG_HIDDEN)) continue;
     lv_area_t at;
     lv_obj_get_coords(p.place, &at);
@@ -541,6 +652,10 @@ static int measure(const rt::Widgets &w, std::vector<tile_picture::Part> &parts,
     if (parts.size() == tile_picture::MAX_PARTS) break;
   }
   return picture_store::fit_scale(right, bottom, rt::picture_cap());
+}
+static int measure(const rt::Widgets &w, std::vector<tile_picture::Part> &parts, std::vector<Place *> &owners) {
+  if (!w.plugin || !w.tile) { parts.clear(); owners.clear(); return picture_store::SCALE_ONE; }
+  return measure(w.tile, w.plugin->places, parts, owners);
 }
 
 bool pictured(const rt::Widgets &w) {
@@ -576,23 +691,22 @@ static void place_clear(Place &p) {
 
 // The places back where the tile laid them out, the moment another picture (or none) takes the place of what they
 // showed during a slide.
-static void slide_back(Card &card) {
-  for (auto &p : card.places) {
+static void slide_back(std::vector<Place> &places) {
+  for (auto &p : places) {
     if (!p.place) continue;
     lv_anim_delete(p.place, nullptr);
     if (lv_obj_get_style_translate_x(p.place, LV_PART_MAIN)) lv_obj_set_style_translate_x(p.place, 0, 0);
   }
 }
 
-void picture_place(rt::Widgets &w, void *picture) {
-  if (!w.plugin) return;
-  if (picture != picture_drawn(w)) slide_back(*w.plugin);
+// The places of `frame` each with their piece of the atlas `picture` (nullptr: none, the blocks again).
+static void lay(lv_obj_t *frame, std::vector<Place> &places, void *picture) {
 #if LV_USE_IMAGE
   auto *src = static_cast<lv_image_dsc_t *>(picture);
   std::vector<tile_picture::Part> parts;
   std::vector<Place *> owners;
-  const int scale = measure(w, parts, owners);
-  for (auto &p : w.plugin->places) {
+  const int scale = measure(frame, places, parts, owners);
+  for (auto &p : places) {
     const auto at = std::find(owners.begin(), owners.end(), &p);
     if (!src || !src->data || at == owners.end()) { place_clear(p); continue; }
     const tile_picture::Piece f = tile_picture::piece(parts[at - owners.begin()], scale);
@@ -616,27 +730,38 @@ void picture_place(rt::Widgets &w, void *picture) {
     lv_obj_invalidate(p.image);
   }
 #else
-  for (auto &p : w.plugin->places) place_clear(p);
+  (void) frame;
+  for (auto &p : places) place_clear(p);
   (void) picture;
 #endif
 }
-
-const void *picture_drawn(const rt::Widgets &w) {
-  if (!w.plugin) return nullptr;
+// The picture the places draw now (their last atlas), nullptr for none.
+static const void *drawn(const std::vector<Place> &places) {
 #if LV_USE_IMAGE
-  for (const auto &p : w.plugin->places)
+  for (const auto &p : places)
     if (p.image && !lv_obj_has_flag(p.image, LV_OBJ_FLAG_HIDDEN))
       if (const void *src = lv_image_get_src(p.image)) return src;
+#else
+  (void) places;
 #endif
   return nullptr;
 }
-
-bool picture_draws(const rt::Widgets &w, const void *picture) {
-  if (!w.plugin || !picture) return false;
-  for (const auto &p : w.plugin->places)
+static bool draws(const std::vector<Place> &places, const void *picture) {
+  if (!picture) return false;
+  for (const auto &p : places)
     if (p.image && rt::draws(p.image, static_cast<const lv_image_dsc_t *>(picture))) return true;
   return false;
 }
+
+void picture_place(rt::Widgets &w, void *picture) {
+  if (!w.plugin) return;
+  if (picture != picture_drawn(w)) slide_back(w.plugin->places);
+  lay(w.tile, w.plugin->places, picture);
+}
+
+const void *picture_drawn(const rt::Widgets &w) { return w.plugin ? drawn(w.plugin->places) : nullptr; }
+
+bool picture_draws(const rt::Widgets &w, const void *picture) { return w.plugin && draws(w.plugin->places, picture); }
 
 bool picture_let_go(rt::Widgets &w, const void *picture) {
   if (!w.plugin) return false;
@@ -649,16 +774,18 @@ bool picture_let_go(rt::Widgets &w, const void *picture) {
   return took;
 }
 
-// The place `obj` is, on the card in a call of the host first, else on any card (a plugin that kept the place and
-// sets its picture from on_message); nullptr for an object that is no place.
+// The place `obj` is, of the tile or card in a call of the host first, else on any tile's card or the open card (a
+// plugin that kept the place and sets its picture from on_message); nullptr for an object that is no place.
 static Place *find_place(lv_obj_t *obj) {
   if (!obj) return nullptr;
-  if (making) for (auto &p : making->places) if (p.place == obj) return &p;
+  if (placing) for (auto &p : *placing) if (p.place == obj) return &p;
   Place *found = nullptr;
   rt::each_card([&](rt::Widgets &w) {
     if (found || !w.plugin) return;
     for (auto &p : w.plugin->places) if (p.place == obj) { found = &p; return; }
   });
+  if (!found) if (auto *places = card_places()) for (auto &p : *places) if (p.place == obj) return &p;
+  if (!found) if (auto *places = saver_places()) for (auto &p : *places) if (p.place == obj) return &p;
   return found;
 }
 
@@ -675,8 +802,15 @@ struct OpenCard {
   size_t state = 0;
   bool dark = false;
   lv_obj_t *backdrop = nullptr, *root = nullptr;
+  lv_obj_t *room = nullptr;      // the card's own room (CardContext::parent), what its places are measured from
+  std::vector<Place> places;     // its places for pictures (0.13), in the order the card made them
+  std::string art_key;           // the picture its places want (tile_picture::card_key), "" for none
 };
 static OpenCard *shown = nullptr;
+static std::vector<Place> *card_places() { return shown ? &shown->places : nullptr; }
+static void card_pictures_end(OpenCard &open);
+// The touch guard's keys of a card's spots (card_tap), apart from the tiles' (rt::TILE_TOUCH) and the keys'.
+constexpr int CARD_TOUCH = 300000;
 // A card may close itself, or open another in its place, from any call the host makes into it (tessera::close_card,
 // tessera::open_card in its open, on_state, on_tick, on_theme or on_back). A card that closes while such a call is under
 // way leaves the glass at once and waits here until the outermost call returns, so neither the card's own code nor
@@ -702,7 +836,10 @@ static void bury() {
 // One call into the card `open`: true when it is still the card shown afterwards, so the caller may go on with it.
 template<typename Run> static bool call(OpenCard *open, Run &&run) {
   ++calling;
+  std::vector<Place> *had = placing;
+  placing = &open->places;   // a place the card makes in this call is its own (ui::picture, 0.13)
   run(*open->card);
+  placing = had;
   --calling;
   const bool still = shown == open;  // `open` is not deleted yet: the card waits in `retired` until this point
   bury();
@@ -734,9 +871,29 @@ static void card_state(OpenCard &open, bool force) {
 
 bool card_open() { return shown != nullptr; }
 
+// A tap on the open card's room (Card::on_tap, 0.12). The guard is a tile's (rt::allowed: the finger did not move, was
+// long enough, and no bounce), with the spot as its key: a cell of 8 mm, so a bounce on one row is one tap and the next
+// row right after it is its own. Where the finger let go must be on the room, as for a tile (LVGL clicks an object
+// wherever a finger that pressed it lets go when the board sets no limit to a finger's drift).
+static void card_tap(lv_event_t *event) {
+  auto *room = static_cast<lv_obj_t *>(lv_event_get_current_target(event));
+  lv_point_t at{-1, -1};
+  if (!rt::finger_at(at)) at = {-1, -1};
+  lv_area_t area;
+  lv_obj_get_coords(room, &area);
+  const bool known = at.x >= 0 && at.y >= 0;
+  if (known && (at.x < area.x1 || at.x > area.x2 || at.y < area.y1 || at.y > area.y2)) return;
+  const int cell = std::max(1, ::ui::mm(8));
+  const int spot = known ? ((at.y - area.y1) / cell) * 64 + (at.x - area.x1) / cell : 0;
+  if (!shown || !rt::allowed(esphome::millis(), CARD_TOUCH + spot, "plugin card")) return;
+  tapped = known ? tessera::Point{at.x - area.x1, at.y - area.y1} : tessera::Point{-1, -1};
+  call(shown, [](tessera::Card &card) { card.on_tap(); });
+}
+
 void close_card() {
   if (!shown) return;
   OpenCard *open = shown;
+  card_pictures_end(*open);
   shown = nullptr;  // first: a card that closes or opens a card from its destructor finds nothing open
   if (!calling) return destroy(open);
   if (open->backdrop) lv_obj_add_flag(open->backdrop, LV_OBJ_FLAG_HIDDEN);
@@ -804,6 +961,10 @@ bool open_card(const std::string &key, const std::string &entity, int tile, cons
   lv_obj_remove_flag(area, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_pos(area, pad, top);
   lv_obj_set_size(area, std::max(1, width - 2 * pad), std::max(1, height - top - pad));
+  // A tap on the room goes to the card (0.12), through the guard every tile's tap passes.
+  lv_obj_add_flag(area, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(area, card_tap, LV_EVENT_SHORT_CLICKED, nullptr);
+  open->room = area;
   shown = open;
   tessera::CardContext context{area, std::max(1, width - 2 * pad), std::max(1, height - top - pad), open->entity.c_str(),
                                tile};
@@ -822,8 +983,378 @@ static void tick_card(uint32_t epoch) {
   if (open->dark != theme::dark) {
     open->dark = theme::dark;
     if (!call(open, [](tessera::Card &card) { card.on_theme(); })) return;
+    // The blocks under its pictures follow the look; the pictures are asked again in it (the look is in their key).
+    for (auto &p : open->places) rt::set_color(p.place, LV_STYLE_BG_COLOR, theme::color(theme::TRACK));
   }
   call(open, [&](tessera::Card &card) { card.on_tick(epoch); });
+}
+
+// ---- Pictures on a plugin's card (plugin API 0.13) ----
+// The places a card lays out in its room come the way a plugin tile's do: one question for all of them (the atlas of
+// their frames from the room's top left, tile_picture::set_parts), the app fetches each address within the manifest's
+// rights and paints the frames, the loader downloads it as the media card's cover goes (Rank::CARD, the full view's
+// slot), and the store keeps it beside the page's pictures: what the glass under the card shows stays, a page out of
+// sight makes room first. When the card closes its picture goes with it, as a tile's goes with its tile; the app keeps
+// the source pictures by address, so a card that opens again, or shows the cover its tile shows, costs no fetch there.
+static const picture_loader::Owner CARD_OWNER{picture_loader::Kind::CARD, 1};
+static uint32_t card_number = 0;   // the number of the open card's last question; its answer carries it
+
+static bool card_ask(OpenCard &open, tile_picture::Ask &a) {
+  std::vector<tile_picture::Part> parts;
+  std::vector<Place *> owners;
+  measure(open.room, open.places, parts, owners);
+  if (parts.empty()) return false;
+  tile_picture::set_parts(a, std::move(parts), theme::hex(theme::PAGE), rt::picture_cap());
+  a.index = open.tile >= 0 ? static_cast<size_t>(open.tile) : 0;
+  a.entity = open.key;
+  a.dark = theme::dark;
+  return true;
+}
+static void card_request(const tile_picture::Ask &a, const std::string &entity) {
+  if (rt::inbox.empty() || !esphome::api::global_api_server) return;
+  esphome::api::HomeassistantActionRequest request;
+  request.service = esphome::StringRef("esphome.screen_camera");
+  request.is_event = true;
+  auto fields = tile_picture::card_fields(a, entity);
+  fields.insert(fields.begin(), {{"inbox", rt::inbox}, {"session", rt::protocol_key(rt::transfer.lease)},
+                                 {"rev", rt::layout_rev}, {"view", std::to_string(++card_number)}});
+  request.data.init(fields.size());
+  for (const auto &field : fields) {
+    esphome::api::HomeassistantServiceMap entry;
+    entry.key = esphome::StringRef(field.first);
+    entry.value = esphome::StringRef(field.second);
+    request.data.push_back(entry);
+  }
+  esphome::api::global_api_server->send_homeassistant_action(request);
+  ESP_LOGI("camera", "asked for the pictures of the card %s", a.entity.c_str());
+}
+// The card's picture onto its places, when it is the one they want now. Until the next is here, the places keep the
+// one they show of the same layout (a card that steps to the next item), as a tile's do.
+static void card_place(OpenCard &open) {
+  lv_image_dsc_t *src = rt::picture_of(open.art_key);
+  if (!src) return;
+  if (src != drawn(open.places)) slide_back(open.places);
+  lay(open.room, open.places, src);
+  ESP_LOGI("picture", "card %s: its pictures are shown", open.key.c_str());
+}
+
+void card_picture_want() {
+  OpenCard *open = shown;
+  if (!open || !open->room || !rt::tile_pictures_supported()) return;
+  // Not while the screen is dark: what it wants waits, and a download of it breaks off (not wanted this round).
+  if (!rt::tiles_seen()) return;
+  tile_picture::Ask a;
+  if (!card_ask(*open, a)) {
+    // No place with an address now (a card that took its picture away): its last picture goes.
+    if (!open->art_key.empty()) { rt::loader.release(CARD_OWNER); open->art_key.clear(); }
+    return;
+  }
+  const std::string key = tile_picture::card_key(a, open->key, open->entity);
+  if (key != open->art_key) {
+    open->art_key = key;
+    if (rt::picture_of(key)) card_place(*open);
+  }
+  picture_loader::Want want;
+  want.key = key;
+  want.tag = tile_picture::card_tag(open->key);
+  want.slot = picture_loader::Slot::FULL;
+  want.rank = picture_loader::Rank::CARD;
+  want.drawn = true;  // the app fetches them: an answer without a picture (a slow host) is asked again, later each time
+  const std::string entity = open->entity;
+  want.ask = [a, entity] { card_request(a, entity); };
+  want.done = [](picture_loader::Outcome o) { if (rt::shows(o) && shown) card_place(*shown); };
+  rt::loader.want(CARD_OWNER, std::move(want));
+}
+
+void card_picture_answer(const std::string &card, const std::string &url, uint32_t number) {
+  if (!shown || card != shown->key || number != card_number) return;
+  if (url.empty()) ESP_LOGI("picture", "card %s: no pictures now", card.c_str());
+  rt::loader.answer(tile_picture::card_tag(card), url, esphome::millis());
+}
+bool card_question(uint32_t number) { return shown && number == card_number; }
+static bool saver_draws(const void *picture);
+static void saver_letgo(const void *download);
+// The open card's places, and a screensaver's (plugin API 0.14): the store frees nothing either draws.
+bool card_draws(const void *picture) { return (shown && draws(shown->places, picture)) || saver_draws(picture); }
+void card_letgo(const void *download) {
+  saver_letgo(download);
+  if (!shown || !download) return;
+  for (auto &p : shown->places) if (p.image && rt::draws(p.image, static_cast<const lv_image_dsc_t *>(download))) place_clear(p);
+}
+// The card closes: its places let go of their picture and the loader of its question, so the store frees it now.
+static void card_pictures_end(OpenCard &open) {
+  for (auto &p : open.places) place_clear(p);
+  if (open.art_key.empty()) return;
+  rt::loader.release(CARD_OWNER);
+  open.art_key.clear();
+  rt::pictures_collect();
+}
+
+// ---- A plugin's screensaver (plugin API 0.14, docs/PLUGINS.md "A screensaver") ----
+// runtime_tiles shows the screensaver (saver_show, saver_hide, saver_sync); when the app's word names a plugin's saver
+// this screen has, it hands the glass here. The saver draws in a stage over the whole glass, which the host moves a
+// millimetre along a slow circle every minute (saver_view::drift, as the clock's faces), unless the manifest says the
+// saver moves itself. Its places for pictures are asked for as a card's are, with `saver` instead of `card`; the
+// address "saver:picture" is the step's own picture, which the app cuts to the place, and the key carries the step's
+// mark of it, so the next cover or photo is another picture.
+struct OpenSaver : tessera::InPsram {
+  std::unique_ptr<tessera::Saver> saver;
+  std::string key;
+  tessera::SaverStep step = tessera::SaverStep::OWN;
+  lv_obj_t *stage = nullptr;     // what the saver draws in (SaverContext::parent), a child of the glass rt made
+  std::vector<Place> places;     // its places for pictures, in the order the saver made them
+  std::string art_key;           // the picture its places want, "" for none
+  roomy::Text data;              // the app's word for it ({"o", "x"}), as it came
+  std::string mark, entity;      // the step's picture's mark (its `mark`), and the entity it belongs to (pictures)
+  size_t state = 0;              // the data it was last given (a hash)
+  int minute = -1;
+};
+static OpenSaver *saver_open = nullptr;
+static std::vector<Place> *saver_places() { return saver_open ? &saver_open->places : nullptr; }
+static int saver_calling = 0;
+static bool saver_gone = false;  // saver_hide during one of its own calls: deleted once that call returns
+static void saver_end();
+template <typename Run> static void saver_call(Run &&run) {
+  if (!saver_open) return;
+  ++saver_calling;
+  std::vector<Place> *had = placing;
+  placing = &saver_open->places;  // a place the saver makes in this call is its own (ui::picture)
+  // The dark look in every call of a saver, whatever the screen's (plugin_api.h): its roles are white on black.
+  const bool look = theme::dark;
+  theme::dark = true;
+  run(*saver_open->saver);
+  theme::dark = look;
+  placing = had;
+  --saver_calling;
+  if (!saver_calling && saver_gone) saver_end();
+}
+constexpr int SAVER_TOUCH = 400000;   // the touch guard's keys of a saver's parts, apart from tiles' and cards'
+
+bool saver_known(const std::string &key) {
+  for (const auto &type : tessera::saver_types()) if (type.key == key && type.make) return true;
+  return false;
+}
+bool saver_shows() { return saver_open != nullptr; }
+bool saver_backdrop(const std::string &key) {
+  for (const auto &type : tessera::saver_types()) if (type.key == key) return type.plugin->backdrop(type.id);
+  return false;
+}
+
+static const char *step_name(tessera::SaverStep step) {
+  switch (step) {
+    case tessera::SaverStep::CLOCK: return "clock";
+    case tessera::SaverStep::MEDIA: return "media";
+    case tessera::SaverStep::PHOTOS: return "photos";
+    default: return "own";
+  }
+}
+
+// What the saver draws from: the app's `x`, with the wish of a finger on the player in front (rt::saver_wish), so a
+// face's play key turns at once as Tessera's own does.
+static void saver_feed(bool force) {
+  OpenSaver *open = saver_open;
+  if (!open) return;
+  JsonDocument doc(&json_memory);
+  if (open->data.empty() || deserializeJson(doc, open->data.data(), open->data.size())) doc.to<JsonObject>();
+  JsonObject x = doc["x"].is<JsonObject>() ? doc["x"].as<JsonObject>() : doc["x"].to<JsonObject>();
+  if (open->step == tessera::SaverStep::MEDIA && rt::saver_now.kind == "media") {
+    x["state"] = rt::saver_now.state;
+    x["muted"] = rt::saver_now.muted;
+  }
+  open->mark = x["mark"].is<const char *>() ? x["mark"].as<std::string>() : std::string();
+  open->entity = x["entity"].is<const char *>() ? x["entity"].as<std::string>() : std::string();
+  roomy::Text fed;
+  serializeJson(x, fed);
+  const size_t state = hash(fed);
+  if (!force && state == open->state) return;
+  open->state = state;
+  saver_call([&](tessera::Saver &saver) { saver.on_state(x); });
+}
+
+// Every minute the stage takes its next spot on the slow circle (nothing stands on the same pixels for hours).
+static void saver_drift() {
+  OpenSaver *open = saver_open;
+  if (!open || !open->stage) return;
+  const int minute = rt::minute_of_day();
+  if (minute == open->minute) return;
+  open->minute = minute;
+  bool moves = false;
+  for (const auto &type : tessera::saver_types()) if (type.key == open->key) moves = type.plugin->moves(type.id);
+  const auto at = moves ? saver_view::Offset{} : saver_view::drift(minute, ::ui::mm(1));
+  lv_obj_set_pos(open->stage, at.x, at.y);
+}
+
+void saver_show(lv_obj_t *root, const std::string &key, const roomy::Text &data, int level, bool night) {
+  saver_hide();
+  const tessera::SaverType *type = nullptr;
+  for (const auto &t : tessera::saver_types()) if (t.key == key) type = &t;
+  if (!type || !type->make || !root) return;
+  const auto make = type->make;  // a copy: the plugin may register while it is made
+  const tessera::SaverStep step = type->step;
+  ++saver_calling;
+  std::unique_ptr<tessera::Saver> saver(make());
+  --saver_calling;
+  if (!saver) return;
+  auto *open = new OpenSaver();
+  open->saver = std::move(saver);
+  open->key = key;
+  open->step = step;
+  open->data = data;
+  open->stage = lv_obj_create(root);
+  lv_obj_remove_style_all(open->stage);
+  lv_obj_remove_flag(open->stage, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_remove_flag(open->stage, LV_OBJ_FLAG_SCROLLABLE);
+  const int width = overlay_card::screen_width(), height = overlay_card::screen_height();
+  lv_obj_set_size(open->stage, width, height);
+  saver_open = open;
+  saver_gone = false;
+  JsonDocument doc(&json_memory);
+  if (data.empty() || deserializeJson(doc, data.data(), data.size())) doc.to<JsonObject>();
+  JsonObjectConst options = doc["o"].is<JsonObject>() ? doc["o"].as<JsonObjectConst>() : JsonObjectConst();
+  tessera::SaverContext context{open->stage, width, height, step, static_cast<uint8_t>(std::clamp(level, 1, 100)), night,
+                                options};
+  ESP_LOGI("plugins", "screensaver %s (%s) on the glass", key.c_str(), step_name(step));
+  saver_call([&](tessera::Saver &s) { s.show(context); });
+  saver_feed(true);
+  saver_call([](tessera::Saver &s) { s.on_tick(rt::now_epoch()); });
+  saver_drift();
+}
+
+void saver_state(const roomy::Text &data) {
+  if (!saver_open || data == saver_open->data) return;
+  saver_open->data = data;
+  saver_feed(false);
+}
+void saver_refresh() { saver_feed(false); }
+
+static const picture_loader::Owner SAVER_OWNER{picture_loader::Kind::CARD, 2};
+static uint32_t saver_number = 0;   // the number of the saver's last question for its pictures
+
+static void saver_end() {
+  OpenSaver *open = saver_open;
+  saver_open = nullptr;
+  saver_gone = false;
+  if (!open) return;
+  for (auto &p : open->places) place_clear(p);
+  if (!open->art_key.empty()) { rt::loader.release(SAVER_OWNER); rt::pictures_collect(); }
+  ++saver_calling;
+  open->saver.reset();   // its parts are the stage's children, deleted with the glass by runtime_tiles
+  --saver_calling;
+  delete open;
+}
+void saver_hide() {
+  if (!saver_open) return;
+  ESP_LOGI("plugins", "screensaver %s leaves the glass", saver_open->key.c_str());
+  if (saver_calling) { saver_gone = true; return; }
+  saver_end();
+}
+
+static void saver_tick(uint32_t epoch) {
+  if (!saver_open) return;
+  saver_call([&](tessera::Saver &s) { s.on_tick(epoch); });
+  saver_drift();
+}
+
+// A tap or a hold on a part the saver made with ui::takes_taps: the guard every key passes, the screen stays in standby.
+static uint32_t saver_pressed = 0;
+static void saver_touch(lv_event_t *event) {
+  auto *part = static_cast<lv_obj_t *>(lv_event_get_current_target(event));
+  const auto code = lv_event_get_code(event);
+  const uint32_t now = esphome::millis();
+  if (!saver_open) return;
+  if (code == LV_EVENT_PRESSED) { saver_pressed = now ? now : 1; return; }
+  lv_point_t at{-1, -1};
+  if (!rt::finger_at(at)) at = {-1, -1};
+  const int spot = static_cast<int>(reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+  if (code == LV_EVENT_PRESSING) {
+    if (!saver_pressed || now - saver_pressed < rt::SAVER_MUTE_HOLD_MS) return;
+    saver_pressed = 0;  // this contact is used up: its release taps nothing
+    if (!rt::allowed(now, SAVER_TOUCH + 2 * spot + 1, "plugin screensaver hold")) return;
+    tapped = {at.x, at.y};
+    saver_call([](tessera::Saver &s) { s.on_hold(); });
+    return;
+  }
+  if (!saver_pressed) return;  // the hold took it
+  saver_pressed = 0;
+  if (!rt::allowed(now, SAVER_TOUCH + 2 * spot, "plugin screensaver")) return;
+  (void) part;
+  tapped = {at.x, at.y};
+  saver_call([](tessera::Saver &s) { s.on_tap(); });
+}
+
+// ---- A screensaver's pictures (as a card's: one question for every place, the app paints the frames) ----
+static bool saver_ask(OpenSaver &open, tile_picture::Ask &a) {
+  std::vector<tile_picture::Part> parts;
+  std::vector<Place *> owners;
+  measure(open.stage, open.places, parts, owners);
+  if (parts.empty()) return false;
+  tile_picture::set_parts(a, std::move(parts), theme::hex(theme::CAMERA_PAGE), rt::picture_cap());
+  a.index = 0;
+  a.entity = open.key;
+  a.dark = true;  // drawn in the dark look (saver_call)
+  return true;
+}
+static void saver_request(const tile_picture::Ask &a, const std::string &entity) {
+  if (rt::inbox.empty() || !esphome::api::global_api_server) return;
+  esphome::api::HomeassistantActionRequest request;
+  request.service = esphome::StringRef("esphome.screen_camera");
+  request.is_event = true;
+  auto fields = tile_picture::card_fields(a, entity);
+  for (auto &field : fields) if (field.first == "card") field.first = "saver";
+  fields.insert(fields.begin(), {{"inbox", rt::inbox}, {"session", rt::protocol_key(rt::transfer.lease)},
+                                 {"rev", rt::layout_rev}, {"view", std::to_string(++saver_number)}});
+  request.data.init(fields.size());
+  for (const auto &field : fields) {
+    esphome::api::HomeassistantServiceMap entry;
+    entry.key = esphome::StringRef(field.first);
+    entry.value = esphome::StringRef(field.second);
+    request.data.push_back(entry);
+  }
+  esphome::api::global_api_server->send_homeassistant_action(request);
+  ESP_LOGI("camera", "asked for the pictures of the screensaver %s", a.entity.c_str());
+}
+static void saver_place(OpenSaver &open) {
+  lv_image_dsc_t *src = rt::picture_of(open.art_key);
+  if (!src) return;
+  if (src != drawn(open.places)) slide_back(open.places);
+  lay(open.stage, open.places, src);
+}
+void saver_picture_want() {
+  OpenSaver *open = saver_open;
+  if (!open || !open->stage || !rt::tile_pictures_supported()) return;
+  tile_picture::Ask a;
+  if (!saver_ask(*open, a)) {
+    if (!open->art_key.empty()) { rt::loader.release(SAVER_OWNER); open->art_key.clear(); }
+    return;
+  }
+  // The step's picture changes under the same address ("saver:picture"): its mark is part of the key.
+  const std::string key = "psaver|" + tile_picture::card_key(a, open->key, open->entity) + "|" + open->mark;
+  if (key != open->art_key) {
+    open->art_key = key;
+    if (rt::picture_of(key)) saver_place(*open);
+  }
+  picture_loader::Want want;
+  want.key = key;
+  want.tag = "psaver|" + open->key;
+  want.slot = picture_loader::Slot::FULL;
+  want.rank = picture_loader::Rank::CARD;
+  want.drawn = true;
+  const std::string entity = open->step == tessera::SaverStep::OWN ? open->entity : std::string();
+  want.ask = [a, entity] { saver_request(a, entity); };
+  want.done = [](picture_loader::Outcome o) { if (rt::shows(o) && saver_open) saver_place(*saver_open); };
+  rt::loader.want(SAVER_OWNER, std::move(want));
+}
+void saver_picture_answer(const std::string &key, const std::string &url, uint32_t number) {
+  if (!saver_open || key != saver_open->key || number != saver_number) return;
+  if (url.empty()) ESP_LOGI("picture", "screensaver %s: no pictures now", key.c_str());
+  rt::loader.answer("psaver|" + key, url, esphome::millis());
+}
+bool saver_question(uint32_t number) { return saver_open && number == saver_number; }
+static bool saver_draws(const void *picture) { return saver_open && draws(saver_open->places, picture); }
+static void saver_letgo(const void *download) {
+  if (!saver_open || !download) return;
+  for (auto &p : saver_open->places)
+    if (p.image && rt::draws(p.image, static_cast<const lv_image_dsc_t *>(download))) place_clear(p);
 }
 
 bool tap_action(size_t index) {
@@ -987,6 +1518,13 @@ static void start() {
   screen_hooks::cards_closed().push_back([]() { for (auto *p : tessera::plugins()) p->on_cards_closed(); });
   screen_hooks::alert_show().push_back([]() { for (auto *p : tessera::plugins()) p->on_alert(); });
   screen_hooks::touched().push_back([]() { for (auto *p : tessera::plugins()) p->on_touch(); });
+  // Feedback the moment a finger lands or a value under it steps (touch_feedback.h), heard by the plugins only.
+  touch_feedback::pressed().push_back([]() { for (auto *p : tessera::plugins()) p->on_press(); });
+  touch_feedback::stepped().push_back([](const touch_feedback::Step &s) {
+    const tessera::Step step{s.direction, s.edge};
+    for (auto *p : tessera::plugins()) p->on_step(step);
+  });
+  touch_feedback::lvgl::listen();
   screen_hooks::away().push_back([]() { return card_open(); });
   build_settings();
   for (auto *p : tessera::plugins()) p->on_ready();
@@ -1029,6 +1567,14 @@ void hello(JsonObject root) {
     auto tiles = item["tiles"].to<JsonArray>();
     for (const auto &type : tessera::tile_types())
       if (type.plugin == p) tiles.add(type.id);
+    // Its screensavers (plugin API 0.14): what the app may pick for this screen.
+    bool any = false;
+    for (const auto &type : tessera::saver_types()) any = any || type.plugin == p;
+    if (any) {
+      auto savers = item["savers"].to<JsonArray>();
+      for (const auto &type : tessera::saver_types())
+        if (type.plugin == p) savers.add(type.id);
+    }
   }
 }
 
@@ -1045,11 +1591,33 @@ lv_obj_t *text(lv_obj_t *parent, Font f, theme::Role role) {
 
 bool pictures() { return rt::tile_pictures_supported(); }
 
+void takes_taps(lv_obj_t *part) {
+  using plugin_host::saver_open;
+  if (!part) return;
+  if (!saver_open || plugin_host::placing != &saver_open->places) {
+    ESP_LOGW("plugins", "ui::takes_taps outside a call of a screensaver: the part takes no tap");
+    return;
+  }
+  bool taps = false;
+  for (const auto &type : tessera::saver_types()) if (type.key == saver_open->key) taps = type.plugin->taps(type.id);
+  if (!taps) {
+    ESP_LOGW("plugins", "ui::takes_taps on %s, whose manifest has no `taps: true`: the part takes no tap", saver_open->key.c_str());
+    return;
+  }
+  static uintptr_t spots = 0;
+  const uintptr_t spot = ++spots % 64;
+  lv_obj_add_flag(part, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_ext_click_area(part, ::ui::px(6));
+  lv_obj_add_event_cb(part, plugin_host::saver_touch, LV_EVENT_PRESSED, reinterpret_cast<void *>(spot));
+  lv_obj_add_event_cb(part, plugin_host::saver_touch, LV_EVENT_PRESSING, reinterpret_cast<void *>(spot));
+  lv_obj_add_event_cb(part, plugin_host::saver_touch, LV_EVENT_SHORT_CLICKED, reinterpret_cast<void *>(spot));
+}
+
 lv_obj_t *picture(lv_obj_t *parent) {
   lv_obj_t *place = block(parent, theme::TRACK);
   lv_obj_remove_flag(place, LV_OBJ_FLAG_SCROLLABLE);
-  if (plugin_host::making) plugin_host::making->places.push_back({place});
-  else ESP_LOGW("plugins", "ui::picture outside a tile's call: the place shows no picture");
+  if (plugin_host::placing) plugin_host::placing->push_back({place});
+  else ESP_LOGW("plugins", "ui::picture outside a call of a tile, a card or a screensaver: the place shows no picture");
   return place;
 }
 
@@ -1058,12 +1626,12 @@ void set_picture(lv_obj_t *place, const std::string &url, Fit fit) { set_picture
 static void slide_exec(void *obj, int32_t x) { lv_obj_set_style_translate_x(static_cast<lv_obj_t *>(obj), x, 0); }
 
 void slide_pictures(int dx, uint32_t ms) {
-  plugin_host::Card *card = plugin_host::making;
-  if (!card) {
-    ESP_LOGW("plugins", "ui::slide_pictures outside a tile's call");
+  std::vector<plugin_host::Place> *places = plugin_host::placing;
+  if (!places) {
+    ESP_LOGW("plugins", "ui::slide_pictures outside a call of a tile or a card");
     return;
   }
-  for (auto &p : card->places) {
+  for (auto &p : *places) {
     if (!p.place || lv_obj_has_flag(p.place, LV_OBJ_FLAG_HIDDEN)) continue;
     lv_anim_delete(p.place, nullptr);
     lv_anim_t a;
@@ -1113,9 +1681,24 @@ void picture_place(runtime_tiles::Widgets &, void *) {}
 const void *picture_drawn(const runtime_tiles::Widgets &) { return nullptr; }
 bool picture_draws(const runtime_tiles::Widgets &, const void *) { return false; }
 bool picture_let_go(runtime_tiles::Widgets &, const void *) { return false; }
+void card_picture_want() {}
+void card_picture_answer(const std::string &, const std::string &, uint32_t) {}
+bool card_question(uint32_t) { return false; }
+bool card_draws(const void *) { return false; }
+void card_letgo(const void *) {}
 bool open_card(const std::string &, const std::string &, int, const std::string &) { return false; }
 void close_card() {}
 bool card_open() { return false; }
+bool saver_known(const std::string &) { return false; }
+bool saver_shows() { return false; }
+bool saver_backdrop(const std::string &) { return false; }
+void saver_show(lv_obj_t *, const std::string &, const roomy::Text &, int, bool) {}
+void saver_state(const roomy::Text &) {}
+void saver_refresh() {}
+void saver_hide() {}
+void saver_picture_want() {}
+void saver_picture_answer(const std::string &, const std::string &, uint32_t) {}
+bool saver_question(uint32_t) { return false; }
 bool tap_action(size_t) { return false; }
 void message(const std::string &, JsonObjectConst) {}
 void ready() {}

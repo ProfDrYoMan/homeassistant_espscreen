@@ -4,6 +4,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useFirmwareJob, useLineBuild } from "../composables/useFirmwareJob";
 import { t } from "../i18n";
 import { afterBrowserBuild, ESPHOME_WEB, firmwareImage, memoryText as memoryOf, usbTarget } from "../model/firmware-job";
+import { serverStep } from "../model/screen-status";
+import type { ServerSide } from "../types";
 import BrowserFlash from "./BrowserFlash.vue";
 import { flashSupport } from "../flasher/logic";
 import { useBrowserFlash } from "../flasher/session";
@@ -62,8 +64,11 @@ const statusText = computed(() => {
   if (!data.value) return t("editor.common.loading");
   if (!data.value.available) return t("editor.firmware.no_cli");
   const own = followed.build.value;
-  if (own) return `${own.file} · ${own.action} · ${own.state === "queued" ? t("editor.firmware.waiting", own.place || 1) : own.state}${own.reason ? ` · ${own.reason}` : ""}`;
-  return data.value.job ? `${data.value.job.file} · ${data.value.job.action} · ${data.value.job.state}` : t("editor.firmware.choose");
+  // Where its compile runs: on the build server, at its step, or here after all, with the reason (build_server.py).
+  const where = (build: ServerSide | null | undefined) => { const step = serverStep(build); return step ? ` · ${step.text}` : ""; };
+  if (own) return `${own.file} · ${own.action} · ${own.state === "queued" ? t("editor.firmware.waiting", own.place || 1) : own.state}${own.state === "running" ? where(own) : ""}${own.reason ? ` · ${own.reason}` : ""}`;
+  const job = data.value.job;
+  return job ? `${job.file} · ${job.action} · ${job.state}${job.state === "running" ? where(job) : ""}` : t("editor.firmware.choose");
 });
 // What the add-on says about the memory the build has (build_memory.py, app 0.4.65), under the status line.
 const memoryText = computed(() => memoryOf(followed.build.value ?? data.value?.job)?.text || "");

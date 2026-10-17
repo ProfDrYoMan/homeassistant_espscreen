@@ -1,20 +1,19 @@
 <script setup lang="ts">
 // A plugin's tile in the inspector (design, docs: the plugins proposal): its name, the options its manifest lists, drawn
-// with the inspector's own rows, and the sizes it takes. A choice can come from one of the plugin's fetches (the lines of
-// a stop): the add-on asks the plugin's service with the tile's other options and hands back only the choices.
+// with the inspector's own rows (PluginOptions, which the screensaver's drawer shares), and the sizes it takes.
 import { computed } from "vue";
-import { editorNumber, t } from "../i18n";
+import { t } from "../i18n";
 import { healthText } from "../model/broken-tiles";
 import { offeredEntities, pluginDefaults, text, type PluginTileOption } from "../model/plugins";
 import { glyph } from "../model/topbar";
-import type { Tile } from "../types";
+import type { PluginValue, Tile } from "../types";
+import PluginOptions from "./PluginOptions.vue";
 import Icon from "./ui/Icon.vue";
 import InspectorHead from "./ui/InspectorHead.vue";
 import NameField from "./inspector/NameField.vue";
 import TitleButton from "./inspector/TitleButton.vue";
 import PropRow from "./ui/PropRow.vue";
 import Section from "./ui/Section.vue";
-import SwitchRow from "./ui/SwitchRow.vue";
 import UiSelect from "./ui/UiSelect.vue";
 import { usePluginsStore } from "../stores/plugins";
 import { removeTile, setTileOption } from "../editor/tiles";
@@ -28,22 +27,15 @@ const insp = useInspectorStore();
 
 const props = defineProps<{ tile: Tile }>();
 const kind = computed(() => plugins.pluginTileOf(props.tile.entity)!);
-const values = computed(() => ({ ...pluginDefaults(kind.value.tile), ...(props.tile.options?.plugin || {}) }));
-function set(option: PluginTileOption, value: string | number | boolean) {
+const values = computed<Record<string, PluginValue>>(() => ({ ...pluginDefaults(kind.value.tile), ...(props.tile.options?.plugin || {}) }));
+function set(option: PluginTileOption, value: PluginValue) {
   setTileOption(props.tile, "plugin", { ...(props.tile.options?.plugin || {}), [option.id]: value });
 }
 // A tile that belongs to an entity (its manifest's `domains`): the entities of those domains, only those with the
 // attributes it needs when its manifest names them (`has_attributes`).
 const entityChoices = computed(() => offeredEntities(plugins.entitiesIn(kind.value.tile.domains), kind.value.tile, props.tile.options?.plugin_entity)
   .map((e) => [e.id, e.name !== e.id ? `${e.name} (${e.id})` : e.id] as [string, string]));
-const choices = (option: PluginTileOption) => plugins.choicesFor(kind.value.plugin, option, values.value).map((choice) => [choice.value, text(choice.label)] as [string, string]);
-const fromFetch = (option: PluginTileOption) => Boolean(option.options_from);
 const size = (value: string) => value.replace("x", "×");
-const number = (value: number) => editorNumber(value);
-function step(option: PluginTileOption, by: number) {
-  const now = Number(values.value[option.id] ?? option.min ?? 0);
-  set(option, Math.min(option.max ?? Infinity, Math.max(option.min ?? -Infinity, now + by * (option.step ?? 1))));
-}
 // Its entity gone from Home Assistant, or away for a while (stores/broken.ts): said under the choice of another.
 const broken = useBrokenStore();
 const entityHealth = computed(() => props.tile.options?.plugin_entity ? broken.tileHealth(props.tile.options.plugin_entity) : null);
@@ -69,22 +61,7 @@ function openPlugin() { insp.closeInspector(); ui.tab = "plugins"; }
       </PropRow>
     </Section>
     <Section v-if="kind.tile.options?.length" :title="t('editor.plugin_tile.options')">
-      <template v-for="option in kind.tile.options" :key="option.id">
-        <SwitchRow v-if="option.kind === 'toggle'" :label="text(option.label)" :description="option.hint ? text(option.hint) : undefined"
-          :model-value="Boolean(values[option.id])" @update:model-value="(on: boolean) => set(option, on)" />
-        <PropRow v-else :label="text(option.label)" icon="tune-variant" :hint="option.hint ? text(option.hint) : undefined" :for="`plugin-option-${option.id}`">
-          <UiSelect v-if="option.kind === 'choice'" :id="`plugin-option-${option.id}`" :model-value="String(values[option.id] ?? '')"
-            :options="choices(option)" :placeholder="t('editor.plugin_tile.choose')" @update:model-value="(value: string) => set(option, value)" />
-          <span v-else-if="option.kind === 'number'" class="plugin-stepper">
-            <button type="button" class="btn quiet mini" :aria-label="t('editor.plugin_tile.less')" @click="step(option, -1)"><Icon name="minus" /></button>
-            <b>{{ number(Number(values[option.id] ?? option.min ?? 0)) }}{{ option.unit ? ` ${option.unit}` : "" }}</b>
-            <button type="button" class="btn quiet mini" :aria-label="t('editor.plugin_tile.more')" @click="step(option, 1)"><Icon name="plus" /></button>
-          </span>
-          <input v-else :id="`plugin-option-${option.id}`" type="text" :value="String(values[option.id] ?? '')" autocomplete="off"
-            @change="set(option, ($event.target as HTMLInputElement).value)" />
-          <template v-if="fromFetch(option)" #note><small class="help">{{ t("editor.plugin_tile.from_fetch") }}</small></template>
-        </PropRow>
-      </template>
+      <PluginOptions :plugin="kind.plugin" :options="kind.tile.options" :values="values" @change="set" />
     </Section>
 
     <Section :title="t('editor.plugin_tile.on_screen')">

@@ -191,7 +191,10 @@
       "hours_minutes": "{h} Std. {m}",
       "wifi": "WLAN",
       "tessera": "Tessera",
-      "plugins": "Plugins"
+      "plugins": "Plugins",
+      "microphone_gain": "Mikrofonverstärkung",
+      "automatic_gain": "Automatische Verstärkung",
+      "echo_cancellation": "Echounterdrückung"
     },
     "tile": {
       "tap_to_open": "Zum Öffnen",
@@ -239,7 +242,16 @@
       "resume": "Fortsetzen",
       "start_cleaning": "Reinigung starten",
       "clean": "Reinigen",
-      "dock": "Station"
+      "dock": "Station",
+      "stop": "Stopp",
+      "by_room": "Nach Bereich",
+      "routines": "Routinen",
+      "suction_water": "Saugen & Wischen",
+      "pick_rooms": "Einen oder mehrere Bereiche wählen",
+      "order_hint": "Nicht jeder Roboter hält diese Reihenfolge ein",
+      "no_rooms": "Keine Bereiche zugeordnet",
+      "no_rooms_how": "Ordne die Segmente in Home Assistant Bereichen zu, in den Einstellungen des Saugers.",
+      "routines_note": "In der App des Roboters erstellt"
     },
     "cover": {
       "position": "Position",
@@ -380,7 +392,8 @@
         "cleaning": "Reinigt",
         "paused": "Pausiert",
         "returning": "Rückkehr zur Ladestation",
-        "idle": "Leerlauf"
+        "idle": "Leerlauf",
+        "error": "Fehler"
       },
       "weather": {
         "sunny": "Sonnig",
@@ -912,7 +925,21 @@
       "extras": {
         "request": "Diese Änderung eines Extras ist auf diesem Bildschirm nicht möglich."
       },
-      "display_precision_unregistered": "Home Assistant speichert keine Einstellungen für diesen Sensor, weil er keine eindeutige ID hat. Seine Anzeigegenauigkeit lässt sich daher nur in seinem YAML festlegen."
+      "display_precision_unregistered": "Home Assistant speichert keine Einstellungen für diesen Sensor, weil er keine eindeutige ID hat. Seine Anzeigegenauigkeit lässt sich daher nur in seinem YAML festlegen.",
+      "build_server": {
+        "host": "Gib die IP-Adresse oder den Hostnamen des Build-Servers ein.",
+        "port": "Der Port ist eine Zahl von 1 bis 65535. Ein Build-Server lauscht auf 6055, wenn du das nicht geändert hast.",
+        "unreachable": "Unter dieser Adresse antwortet nichts. Prüfe, ob der Build-Server läuft, ob er für andere Geräte baut und ob eine Firewall Port 6055 durchlässt.",
+        "protocol": "Unter dieser Adresse antwortet etwas, aber es ist kein ESPHome-Build-Server, mit dem Tessera sprechen kann.",
+        "preview_first": "Suche zuerst den Build-Server und vergleiche dann seinen Fingerabdruck.",
+        "no_window": "Der Build-Server nimmt gerade keine neuen Geräte an. Öffne dort Pairing requests und kopple dann erneut.",
+        "no_window_key": "Der Build-Server hat diesen Schlüssel nicht angenommen. Prüfe den Kopplungsschlüssel oder starte den Build-Server neu, um einen neuen zu erhalten.",
+        "rejected": "Der Build-Server hat die Kopplung abgelehnt.",
+        "mismatch": "Dieser Build-Server hat mit einem anderen Fingerabdruck geantwortet als dem, den du geprüft hast. Suche ihn erneut.",
+        "not_paired": "Kopple zuerst einen Build-Server.",
+        "unknown": "Der Build-Server kennt Tessera nicht mehr. Kopple ihn erneut.",
+        "pending": "Der Build-Server hat Tessera noch nicht angenommen."
+      }
     },
     "status": {
       "first_tiles": "Wähle deine ersten Kacheln",
@@ -937,6 +964,8 @@
       "offline": "Bildschirm war offline; neuer Versuch beim nächsten Mal.",
       "unknown_target": "Profil oder IP-Adresse unbekannt; aktualisiere diesen Bildschirm von Hand.",
       "build_failed": "Erstellen oder Installieren fehlgeschlagen; siehe Protokoll unter Firmware & USB.",
+      "plugin_update_needed": "{name} lässt sich mit dieser Firmware nicht bauen. Aktualisiere das Plugin {name} auf der Seite Plugins auf {version} und aktualisiere dann den Bildschirm erneut.",
+      "plugin_failed": "{name} {version} lässt sich mit dieser Firmware nicht bauen, und es gibt noch keine neuere Version. Entferne das Plugin {name} auf der Seite Plugins, um den Bildschirm ohne es zu aktualisieren; das Protokoll steht unter Firmware & USB.",
       "build_memory": "Zu wenig Speicher, um die Firmware zu erstellen: etwa {need} müssen frei sein, frei sind {free}. Halte ein paar Add-ons vorübergehend an oder gib der Maschine mehr Speicher; siehe Firmware & USB.",
       "build_memory_limit": "Zu wenig Speicher, um die Firmware zu erstellen, auch mit einem Compiler gleichzeitig. Halte ein paar Add-ons vorübergehend an oder gib der Maschine mehr Speicher; siehe Firmware & USB.",
       "no_report": "Bildschirm hat sich nicht mit Firmware {version} zurückgemeldet; prüfe den Bildschirm.",
@@ -998,7 +1027,8 @@
         },
         "media_player": {
           "volume": "Lautstärke und Stumm",
-          "playback": "Zurück, Wiedergabe/Pause, Weiter"
+          "playback": "Zurück, Wiedergabe/Pause, Weiter",
+          "volume_playback": "Lautstärke und Zurück, Wiedergabe/Pause, Weiter"
         },
         "number": {
           "stepper": "Wert − / +",
@@ -1102,6 +1132,18 @@
         "wake_when_moved": {
           "label": "Bei Bewegung aufwecken",
           "hint": "Der Bildschirm wacht aus dem Standby auf, wenn jemand ihn hochnimmt, bewegt oder anstößt. Er spürt sich selbst, nicht jemanden, der vorbeigeht."
+        },
+        "microphone_gain": {
+          "label": "Mikrofonverstärkung",
+          "hint": "Analoge Mikrofonverstärkung. Beginnt bei 30 dB; die Verstärkung der Wiedergabereferenz bleibt fest."
+        },
+        "automatic_gain": {
+          "label": "Automatische Verstärkung",
+          "hint": "Der Mikrofoncodec regelt den Aufnahmepegel automatisch. Unabhängig von der Echounterdrückung."
+        },
+        "echo_cancellation": {
+          "label": "Echounterdrückung",
+          "hint": "Verringert den eigenen Lautsprecher im Mikrofonsignal. Aus umgeht die Echounterdrückung; Mikrofon und Vollduplex bleiben aktiv. Erfordert den AEC-Audiopfad."
         }
       }
     },
@@ -1445,7 +1487,8 @@
       "remove": "Entfernen",
       "loading": "Wird geladen…",
       "back": "← Zurück",
-      "copy": "Kopieren"
+      "copy": "Kopieren",
+      "done": "Fertig"
     },
     "nav": {
       "plugins": "Plugins",
@@ -1809,6 +1852,7 @@
         "on_screens": "Auf {n} Bildschirm | Auf {n} Bildschirmen",
         "fits_none": "Passt auf keinen deiner Bildschirme",
         "failed": "Erstellen fehlgeschlagen",
+        "not_running": "Läuft nicht auf dem Bildschirm",
         "queued": "Wartet, bis es dran ist"
       },
       "source": {
@@ -1881,7 +1925,7 @@
         "network_none": "Baut keine Verbindungen außerhalb von Home Assistant auf",
         "read": "Liest diese Entitäten aus Home Assistant"
       },
-      "warning": "Ein Plugin läuft mit vollem Zugriff auf deinem Bildschirm, auch auf sein WLAN und die Aktionen, die er in Home Assistant ausführen darf. Füge nur Plugins von Autoren hinzu, denen du vertraust, oder lies zuerst den Code.",
+      "warning": "Ein Plugin läuft mit vollem Zugriff auf deinem Bildschirm, auch auf sein WLAN und die Aktionen, die er in Home Assistant ausführen darf, und sein Build läuft in dieser App, wo er an deine Home-Assistant-Konfiguration herankommt. Füge nur Plugins von Autoren hinzu, denen du vertraust, oder lies zuerst den Code.",
       "room": {
         "title": "Platz auf {screen}",
         "small": "{kb} KB mehr: Die Firmware belegt dann {after} statt {before} ihres Speicherplatzes.",
@@ -2035,12 +2079,14 @@
       },
       "tabs": {
         "tiles": "Kacheln",
+        "screensavers": "Bildschirmschoner",
         "functions": "Funktionen",
         "hardware": "Hardware",
         "in_use": "In Gebrauch"
       },
       "types": {
         "tiles": "Kacheln",
+        "screensavers": "Bildschirmschoner",
         "functions": "Funktion",
         "hardware": "Hardware"
       },
@@ -2069,6 +2115,7 @@
       },
       "none_in_tab": {
         "tiles": "Noch keine Plugins mit Kacheln.",
+        "screensavers": "Noch keine Bildschirmschoner-Plugins.",
         "functions": "Noch keine Plugins für den ganzen Bildschirm.",
         "hardware": "Noch keine Hardware-Plugins."
       },
@@ -2147,7 +2194,17 @@
       "now": "jetzt",
       "minutes": "{n} Min.",
       "live": "Der Editor zeichnet sie aus den eigenen Daten des Plugins; der Bildschirm zeichnet sie selbst und zählt mit seiner eigenen Uhr herunter.",
-      "entity": "Entität"
+      "entity": "Entität",
+      "add": "Hinzufügen",
+      "change": "Andere wählen",
+      "find": "Suchen…",
+      "search": "Suchen…",
+      "search_more": "Mindestens zwei Buchstaben eingeben",
+      "none_found": "Nichts gefunden",
+      "remove": "{name} entfernen",
+      "type": "Eingeben und Enter drücken",
+      "full": "Der Bildschirm nimmt für diese Kachel nicht mehr auf: ihre Optionen sind voll.",
+      "count": "{n} von {max}"
     },
     "memory": {
       "label": "Speicher für Kacheln",
@@ -2348,7 +2405,8 @@
         "full_hint": "Am unteren Rand der ganzseitigen Kachel; ein Tippen woanders wirkt wie unten eingestellt.",
         "wide_hint": "Rechts auf der doppelt breiten Kachel, wie die Zeilen in Home Assistant. Ein Tippen auf den Namen wirkt wie unten eingestellt.",
         "needs_firmware": "Der Bildschirm zeigt die direkte Steuerung ab Firmware 0.2.19; bis dahin bleibt die Kachel, wie sie war.",
-        "tall_hint": "",
+        "tall_hint": "Wähle die Steuerung für die zusätzliche Höhe. Eine Kachel, die wächst, schlägt die umfangreichste passende Auswahl vor; deine eigene Wahl bleibt.",
+        "room_hint": "Der Bildschirm zeigt sie, wo die Kachel Platz dafür hat (Firmware 0.57.0 oder neuer): auf einer einfachen Kachel unter dem Namen, auf einer doppelt breiten daneben. Wo sie nicht passen, sieht die Kachel aus wie ohne sie.",
         "tilt": "",
         "tilt_hint": ""
       },
@@ -2378,6 +2436,13 @@
         "lock_only": "Nie",
         "confirm_hint": "Ein verriegeltes Schloss öffnet erst nach einem zweiten Tippen auf die Kachel oder Taste. Verriegeln geht immer mit einem Tippen.",
         "lock_only_hint": "Dieser Bildschirm kann verriegeln, aber nie entriegeln oder öffnen. Gut für einen Bildschirm im Eingang, in der Garage oder im Kinderzimmer."
+      },
+      "tilt_open": {
+        "label": "Lamellen offen bei",
+        "100": "100 %",
+        "50": "50 %",
+        "100_hint": "Wie in Home Assistant: 0 % ist geschlossen, 100 % ganz offen.",
+        "50_hint": "Für Lamellen, die bei 50 % offen und bei 0 % und 100 % in die eine und die andere Richtung geschlossen sind, wie der SwitchBot Blind Tilt."
       },
       "sub": {
         "label": "Zweite Zeile",
@@ -2587,6 +2652,16 @@
           "grey": "Grau",
           "blue-grey": "Blaugrau"
         }
+      },
+      "anchor_hint": "Klicke auf das Symbol, um ein anderes zu wählen, oder auf den Namen, um die Kachel umzubenennen",
+      "grow": {
+        "title": "Platz für mehr Steuerung",
+        "applied": "Bei {columns} × {rows} passt mehr Steuerung. Wähle, was diese Kachel zeigt; ändern kannst du es später unter Steuerung.",
+        "offered": "Bei {columns} × {rows} hat diese Kachel Platz hierfür. Wähle, was sie zeigt; ändern kannst du es später unter Steuerung.",
+        "suggested": "Vorschlag",
+        "none": "Keine Steuerung",
+        "never": "Nicht mehr anzeigen",
+        "done": "Fertig"
       }
     },
     "precision": {
@@ -2650,28 +2725,21 @@
       "screen_name": "Titel des Bildschirms",
       "screen_name_hint": "Jede Seite ohne eigenen Titel zeigt diesen.",
       "no_title_hint": "Leer lassen, um nur das Logo zu zeigen.",
-      "right": "Rechts: Uhrzeit, Sensoren oder eine Uhr",
       "item_label": "{name}, Platz {slot}. Enter: einstellen, Pfeile: verschieben",
-      "remove_named": "{name} aus der Kopfleiste entfernen",
       "max": "Höchstens 1 Element | Höchstens {n} Elemente",
       "add_title": "Uhrzeit, Datum, Analoguhr oder eine Entität hinzufügen",
-      "add_button": "Uhrzeit, Datum oder Entität hinzufügen",
       "hint": {
         "overflow": "Nicht alles passt neben den Namen: Der Bildschirm lässt die gestrichelten Elemente weg. Entferne eines oder wähle einen kürzeren Namen.",
-        "reorder": "Zum Umsortieren ziehen; zum Einstellen auf ein Element tippen.",
         "needs_firmware": "Sensoren, Datum und Analoguhr erscheinen ab Firmware {version}; bis zu diesem Update zeigt dieser Bildschirm den Namen und, falls die Uhrzeit in der Leiste ist, die Uhr."
       },
       "detail": {
         "hidden": "Ausgeblendet: gerade nicht aktiv",
         "overflow": "Passt nicht neben den Namen",
-        "dial": "Zifferblatt",
         "hidden_signal": "Ausgeblendet, solange das Signal gut ist",
         "hidden_link": "Ausgeblendet, solange alles verbunden ist",
         "hidden_battery": "Ausgeblendet, solange der Akku über 20 % ist"
       },
       "live": {
-        "hidden": "Gerade ausgeblendet: nicht aktiv",
-        "overflow": "Passt gerade nicht neben den Namen",
         "looks": "So sieht es auf dem Bildschirm aus"
       },
       "analog_sample": "Kleines Zifferblatt mit der Uhrzeit",
@@ -2688,8 +2756,6 @@
       "clock_12": "12-Stunden-Uhr · ändern unter {settings}",
       "clock_settings": "Einstellungen → Sprache & Region",
       "date_hint": "Heute: {date}. Das Datum folgt der eigenen Uhr des Bildschirms.",
-      "up": "Nach oben",
-      "down": "Nach unten",
       "add": {
         "title": "Zur Kopfleiste hinzufügen",
         "slots": "{used} von {n} Platz belegt | {used} von {n} Plätzen belegt",
@@ -2702,7 +2768,6 @@
         "none_found": "Keine Entitäten gefunden.",
         "plugins": "Aus Plugins"
       },
-      "left": "Links",
       "left_hint": "Titel und Startseiten-Schaltfläche: in den Seiteneinstellungen",
       "wifi_sample": "Das Signal dieses Bildschirms",
       "link_sample": "Nur wenn Home Assistant oder Tessera fehlt",
@@ -2713,7 +2778,18 @@
       "battery_hint": "Der Bildschirm liest seinen eigenen Akku, daher bleibt dieses Element in der Leiste, wenn Home Assistant weg ist. Das Symbol folgt dem Ladestand so, wie Home Assistant ihn zeichnet, mit einem Blitz während des Ladens.",
       "battery_show_hint": "Nur wenn niedrig hält die Leiste frei, bis der Akku bei 20 % oder weniger ist.",
       "status_firmware": "Dieses Element erscheint ab Firmware {version}. Bis zu diesem Update lässt der Bildschirm es weg.",
-      "plugin_item": "Zeigt, was sein Plugin sagt, nur solange es etwas zu sagen hat. Auf einem Bildschirm ohne dieses Plugin bleibt es weg."
+      "plugin_item": "Zeigt, was sein Plugin sagt, nur solange es etwas zu sagen hat. Auf einem Bildschirm ohne dieses Plugin bleibt es weg.",
+      "left_move": "Nach links",
+      "right_move": "Nach rechts",
+      "strip": {
+        "left_title": "Titel und Home-Taste",
+        "left_hint": "Linke Seite · einstellbar in {page}",
+        "place": "Element {place} von {count}",
+        "hint": "Tippe ein Element in der Leiste an, um es einzustellen. Ziehe es nach links oder rechts, um es zu verschieben, oder aus der Leiste, um es zu entfernen.",
+        "copy": "Diese Leiste auf andere Seiten kopieren",
+        "copy_hint": "Ihre Elemente oder die ganze Leiste mit Titel",
+        "page_settings": "Einstellungen von {page}"
+      }
     },
     "screen_settings": {
       "groups": {
@@ -2782,6 +2858,7 @@
         "use": "{name} verwenden",
         "kinds": {
           "media": "Laufende Musik",
+          "photos": "Fotos",
           "camera": "Kamera",
           "clock": "Uhr"
         },
@@ -2790,7 +2867,10 @@
           "camera_none": "Noch keine Kamera",
           "temperature": "Außentemperatur",
           "time_date": "Uhrzeit und Datum",
-          "off": "Aus"
+          "off": "Aus",
+          "photos_none": "Ordner wählen",
+          "plugin_gone": "Sein Plugin ist nicht auf diesem Bildschirm",
+          "plugin_entity": "Entität wählen"
         },
         "on": "Auf dem Bildschirmschoner zeigen",
         "place": "{n} von {count}",
@@ -2804,11 +2884,9 @@
         "keys_hint": "Wiedergabe, Pause und Lautstärke funktionieren auf dem Bildschirmschoner. Ein Tippen woanders weckt den Bildschirm.",
         "choose_camera": "Kamera wählen",
         "camera_hint": "Ihr Bild, alle 15 Sekunden",
-        "glass": "Auf dem Bildschirm",
         "temperature": "Temperatur",
         "weather_auto": "Automatisch",
         "weather_none": "Keine Temperatur",
-        "beside": "Daneben",
         "items_add": "Entität hinzufügen",
         "items_hint": "Neben der Temperatur in einer Zeile: ein Sensor, eine Tür, eine Lampe.",
         "items_full": "Die Uhr hat Platz für {n} Entitäten.",
@@ -2821,7 +2899,68 @@
         "item_both": "Beides",
         "item_look": "Zeigt",
         "item_hint": "Schwarzweiß auf dem Bildschirmschoner, egal welche Farbe die Entität hat.",
-        "items_add_title": "Zur Uhr hinzufügen"
+        "items_add_title": "Zur Uhr hinzufügen",
+        "clock_part": "Uhrzeit, Datum und Temperatur",
+        "row_hint": "Tippe eine Entität in der Zeile an, um sie einzustellen. Ziehe sie nach links oder rechts, um sie zu verschieben, oder aus der Zeile, um sie zu entfernen.",
+        "player_search": "Player suchen",
+        "player_none": "Kein Player gefunden",
+        "face": "Zifferblatt",
+        "faces": {
+          "digital": "Digital",
+          "glass": "Glas",
+          "classic": "Klassisch",
+          "bauhaus": "Bauhaus"
+        },
+        "look": "Aussehen",
+        "look_dark": "Dunkel",
+        "look_light": "Hell",
+        "look_auto": "Wie der Bildschirm",
+        "numerals": "Ziffern",
+        "numerals_none": "Keine",
+        "seconds": "Sekundenzeiger",
+        "face_alone_hint": "Dieses Zifferblatt zeigt nur die Uhrzeit. Temperatur und Entitäten stehen auf Klassisch und Digital.",
+        "face_moves_hint": "Das Zifferblatt verschiebt sich jede Minute ein wenig, und Bauhaus malt alle zehn Minuten ein neues Bild, damit nichts lange auf denselben Pixeln steht.",
+        "plugin_add": "Aus Plugins hinzufügen",
+        "plugin_steps_full": "Platz für {n} Plugin-Schritte",
+        "plugin_gone": "Sein Plugin ist nicht auf diesem Bildschirm, daher zeigt dieser Schritt nichts. Füge das Plugin wieder hinzu oder entferne den Schritt.",
+        "plugin_entity_search": "Entitäten suchen",
+        "plugin_entity_none": "Keine Entität gefunden",
+        "plugin_entity_choose": "Entität wählen",
+        "plugin_entity_change": "Andere Entität wählen",
+        "face_standard": "Standard",
+        "photos_folder": "Ordner",
+        "photos_hint": "Ein Ordner aus den Medien von Home Assistant: ein Ordner unter /media, Immich, Synology Photos.",
+        "photos_sources": "Medien",
+        "photos_untitled": "Ohne Titel",
+        "photos_loading": "Wird geladen…",
+        "photos_failed": "Home Assistant konnte diesen Ordner nicht öffnen.",
+        "photos_here": "{n} Foto hier | {n} Fotos hier",
+        "photos_none_here": "Direkt in diesem Ordner sind keine Fotos. Öffne einen seiner Ordner.",
+        "photos_empty": "Hier ist nichts.",
+        "photos_choose": "Diesen Ordner wählen",
+        "photos_change": "Ändern",
+        "photos_show": "Diashow",
+        "photos_every": "Alle",
+        "photos_every_30": "30 s",
+        "photos_every_60": "1 Min.",
+        "photos_every_300": "5 Min.",
+        "photos_every_900": "15 Min.",
+        "photos_every_3600": "1 Stunde",
+        "photos_order": "Reihenfolge",
+        "photos_order_shuffle": "Zufällig",
+        "photos_order_in_order": "Der Reihe nach",
+        "photos_fit": "Anpassung",
+        "photos_fit_auto": "Auto",
+        "photos_fit_fill": "Füllen",
+        "photos_fit_whole": "Ganz",
+        "photos_fit_auto_hint": "Ein Foto etwa in der Form des Bildschirms füllt ihn. Andere erscheinen ganz, auf ihrer eigenen Farbe.",
+        "photos_fit_fill_hint": "Jedes Foto füllt den Bildschirm, an den Rändern beschnitten.",
+        "photos_fit_whole_hint": "Jedes Foto erscheint ganz, auf seiner eigenen Farbe.",
+        "photos_motion": "Bewegung",
+        "photos_motion_still": "Still",
+        "photos_motion_slow": "Langsam",
+        "photos_motion_still_hint": "Jedes Foto steht still.",
+        "photos_motion_slow_hint": "Ein Foto, das das Glas füllt, gleitet langsam darüber, ein Pixel nach dem anderen. Die 10-Zoll-Bildschirme zeigen ihre Fotos still: ein größeres Foto passt nicht in ihren Speicher."
       },
       "plugins": {
         "title": "Plugins",
@@ -2909,6 +3048,63 @@
       "alerts": {
         "text": "Eine Karte über den ganzen Bildschirm, ausgelöst von einer Automation, auf einem Bildschirm oder auf allen. Der Spickzettel enthält die Aktionsnamen, Felder, Symbole und Farben und ein Formular zum Ausprobieren.",
         "detail": "Vollbild-Benachrichtigungen aus einer Automation"
+      },
+      "build_server": {
+        "title": "Build-Server",
+        "intro": "Erstelle Firmware auf einem schnelleren Computer. Tessera schickt das YAML des Bildschirms an einen ESPHome-Build-Server und installiert, was zurückkommt. Kann der Server nicht, läuft der Build wie bisher hier.",
+        "connect": "Build-Server verbinden",
+        "how_title": "So startest du einen Build-Server",
+        "how_desktop": "ESPHome Desktop auf einem Computer: baut von Anfang an für andere Geräte.",
+        "how_builder": "ESPHome Device Builder: Settings → Build server → Enable remote build.",
+        "how_headless": "Auf einem Server ohne Bildschirm: führe {command} aus und nutze den Schlüssel, den es ausgibt.",
+        "how_link": "Mehr über Build-Server",
+        "address": "Adresse",
+        "address_hint": "Die IP-Adresse oder der Hostname des Computers. Home Assistant-Apps können ihn nicht im Netzwerk suchen.",
+        "port": "Port",
+        "look_up": "Suchen",
+        "looking": "Suche…",
+        "check_title": "Ist das dein Build-Server?",
+        "check_text": "{name} · ESPHome {version}",
+        "check_hint": "Der Build-Server zeigt seinen Fingerabdruck dort, wo du das Bauen für andere Geräte eingeschaltet hast, oder im Fenster, in dem du ihn gestartet hast. Kopple nur, wenn diese Emoji übereinstimmen.",
+        "server_emoji": "Sein Fingerabdruck",
+        "own_emoji": "Fingerabdruck von Tessera",
+        "own_emoji_hint": "Der Build-Server zeigt diese, wenn du Tessera annimmst.",
+        "key": "Kopplungsschlüssel",
+        "key_hint": "Der Schlüssel, den dieser Build-Server beim Start ausgegeben hat, etwa ABCD-EFGH-JKLM-NPQR. Er gilt einmal.",
+        "pair": "Stimmt, koppeln",
+        "pairing": "Kopplung…",
+        "back": "Zurück",
+        "cancel": "Abbrechen",
+        "wait_title": "Tessera auf {name} annehmen",
+        "wait_text": "Öffne Pairing requests auf dem Build-Server, prüfe, ob er diese Emoji für Tessera zeigt, und nimm es an.",
+        "paired": "Mit {name} gekoppelt. Bildschirme werden ab jetzt dort gebaut.",
+        "status": {
+          "connecting": "Verbinde…",
+          "online": "Bereit",
+          "busy": "Mit anderem Build beschäftigt",
+          "offline": "Nicht erreichbar",
+          "pending": "Wartet auf deine Annahme",
+          "refused": "Nicht mehr gekoppelt",
+          "mismatch": "Fingerabdruck geändert"
+        },
+        "offline_text": "Builds laufen hier, bis er wieder da ist.",
+        "refused_text": "{name} kennt Tessera nicht mehr, oder niemand hat es rechtzeitig angenommen. Kopple ihn erneut, um dort zu bauen.",
+        "mismatch_text": "{name} hat mit einem anderen Fingerabdruck geantwortet als dem, den du geprüft hast. Wenn du ihn neu installiert hast, kopple ihn erneut.",
+        "send": "Bildschirme auf diesem Server bauen",
+        "send_hint": "Aus, oder wenn der Server nicht erreichbar ist: Builds laufen hier.",
+        "version_same": "Baut mit ESPHome {version}, wie Tessera.",
+        "version_other": "Baut mit ESPHome {ours}, das Tessera nutzt. Der Server installiert es einmalig neben seinem eigenen {theirs}.",
+        "building": "Baue {file} · {step}",
+        "last_server": "Letzter Build: {file} auf diesem Server in {time}.",
+        "last_here": "Letzter Build: {file} lief hier, {reason}.",
+        "last_failed": "Letzter Build: {file} ist auf diesem Server fehlgeschlagen. Das Protokoll sagt, warum.",
+        "minutes": "{m} min {s} s",
+        "seconds": "{s} s",
+        "pair_again": "Erneut koppeln",
+        "forget": "Vergessen",
+        "forget_confirm": "{name} vergessen? Bildschirme werden wieder hier gebaut. Um Tessera auch dort zu entfernen, entferne es aus den gekoppelten Geräten des Build-Servers.",
+        "forget_go": "Vergessen",
+        "unavailable": "Dieses Tessera kann nicht mit einem Build-Server sprechen."
       }
     },
     "firmware": {
@@ -3327,6 +3523,16 @@
       "start_fresh_confirm": "Mit einer leeren Seite auf diesem Bildschirm beginnen? Das ursprüngliche Layout bleibt in der Migrationssicherung erhalten. Andere Bildschirme bleiben unverändert.",
       "offline_notice": "Warten auf die erneute Verbindung des Bildschirms. Der Editor verwendet die zuletzt geprüften Funktionen.",
       "include_navigation_hint": "Wenn ausgeschaltet, bleibt die Seite über direkte Links erreichbar. Zurück erscheint unten oder ersetzt das Haus, wenn die untere Leiste ausgeblendet ist.",
+      "dock_picture": "Bild der Seite",
+      "in_dock": "Im Dock",
+      "in_dock_hint": "Das Dock öffnet sich mit einem Wisch vom unteren Rand nach oben und zeigt jede Seite zum Springen.",
+      "dock_mode_picture": "Bild",
+      "dock_mode_icon": "Symbol",
+      "dock_mode_hidden": "Ausgeblendet",
+      "dock_hint_picture": "Das Dock zeigt ein kleines Bild dieser Seite.",
+      "dock_hint_icon": "Das Dock zeigt dieses Symbol statt des Bildes der Seite.",
+      "dock_hint_hidden": "Die Seite bleibt beim Wischen und in den Seitenpunkten; nur das Dock lässt sie weg.",
+      "wizard_home": "Home-Taste",
       "home_control": "Startseiten-Schaltfläche auf dieser Seite anzeigen",
       "clock_control": "Uhrzeit",
       "edit_topbar": "Kopfleiste dieser Seite bearbeiten",
@@ -3408,7 +3614,10 @@
       "bar_entities": "Außerdem rechts",
       "actions_blocked": "Home Assistant lässt diesen Bildschirm noch keine Aktionen ausführen, ein Tippen auf eine Kachel bewirkt also nichts.",
       "allow_actions": "Aktionen erlauben",
-      "actions_allowed": "{name} darf deine Geräte jetzt steuern."
+      "actions_allowed": "{name} darf deine Geräte jetzt steuern.",
+      "part_page": "Die Seite: Titel und Navigation",
+      "part_page_hint": "Titel, Startseite und wie man hierher kommt",
+      "home_control_hint": "Setzt die Home-Taste links in die obere Leiste dieser Seite. Sie führt zur Startseite."
     },
     "feedback": {
       "question": "Funktioniert dein Bildschirm wie erwartet?",
@@ -3531,9 +3740,9 @@
       "remove": "Die Vorschau und ihr gespeichertes Layout in diesem Browser.",
       "save": "Vorschau speichern",
       "saved": "In diesem Browser gespeichert",
-      "hint": "Die Firmware des Bildschirms selbst, gezeichnet aus dem Layout, das du bearbeitest. Tippe, halte und wische wie auf dem Bildschirm. Es wird nichts gespeichert.",
+      "hint": "Die Firmware des Bildschirms selbst, gezeichnet aus dem Layout, das du bearbeitest. Tippe, halte und wische wie auf dem Bildschirm. Änderungen am Layout werden nicht gespeichert.",
       "control": "Tippen steuert Geräte",
-      "control_hint": "Ein: Ein Tippen auf eine Kachel führt ihre Aktion in Home Assistant aus, wie auf dem Bildschirm. Aus: Die Vorschau zeigt nur, was ein Tippen bewirkt.",
+      "control_hint": "Wenn aktiviert, können Berührungen Home-Assistant-Geräte steuern und die Einstellungen dieses Panels ändern. Sonst sind Hardware-Einstellungen schreibgeschützt und andere Änderungen bleiben in der Vorschau.",
       "skipped": "Vorschau-Bildschirm {names} ließ sich nicht laden und wurde ausgelassen.",
       "not_kept": "Dieser Browser konnte den Vorschau-Bildschirm nicht speichern: Sein Speicher ist voll oder gesperrt."
     },
@@ -3542,7 +3751,8 @@
         "tile": "Kachel",
         "page": "Seite",
         "bar": "Kopfleiste"
-      }
+      },
+      "back": "Zurück zu {name}"
     },
     "confirm": {
       "leave_question": "Du hast nicht gespeicherte Änderungen. Trotzdem zur Übersicht?",
@@ -3665,7 +3875,27 @@
       "update_failed": "Update von {name} fehlgeschlagen",
       "build_failed": "Build von {name} fehlgeschlagen",
       "show_log": "Log anzeigen",
-      "waiting_place": "Wartet, 1 Build zuerst | Wartet, {n} Builds zuerst"
+      "waiting_place": "Wartet, 1 Build zuerst | Wartet, {n} Builds zuerst",
+      "server": {
+        "bundle": "YAML wird gepackt",
+        "send": "Wird an {name} gesendet",
+        "queued": "Wartet auf {name}",
+        "build": "Wird auf {name} gebaut",
+        "fetch": "Firmware wird abgeholt",
+        "here": "Wird hier gebaut · {reason}",
+        "fallback": {
+          "offline": "der Build-Server ist nicht erreichbar",
+          "refused": "der Build-Server ist nicht gekoppelt",
+          "mismatch": "der Fingerabdruck des Build-Servers hat sich geändert",
+          "unavailable": "hier gibt es keinen Build-Server",
+          "lost": "die Verbindung zum Build-Server ist abgebrochen",
+          "refused_job": "der Build-Server hat ihn nicht angenommen",
+          "provision": "der Build-Server konnte ESPHome nicht installieren",
+          "cancelled": "er wurde auf dem Build-Server gestoppt",
+          "fetch": "die Firmware ist nicht zurückgekommen",
+          "bundle": "das YAML konnte nicht gepackt werden"
+        }
+      }
     },
     "grid": {
       "title": "Raster",
@@ -3700,6 +3930,12 @@
       "copy": "Kopieren",
       "hint": "{copy} kopiert die Kacheln mit allen Einstellungen. Wähle eine Seite oder ein Feld, hier oder auf einem anderen Bildschirm, und drücke {paste}.",
       "remove": "Kachel entfernen | {n} Kacheln entfernen"
+    },
+    "menu": {
+      "cut": "Ausschneiden",
+      "move_to": "Auf Seite verschieben",
+      "add_here": "Hier eine Kachel hinzufügen",
+      "paste_here": "Hier einfügen"
     }
   }
 }

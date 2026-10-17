@@ -6,7 +6,7 @@
 import { t } from "../i18n";
 import { boardTitle } from "./boards";
 import { versionAtLeast } from "./layout";
-import type { Build, ChangelogSection, LineBuild, Screen } from "../types";
+import type { Build, BuildServerStep, ChangelogSection, LineBuild, Screen, ServerSide } from "../types";
 
 // The firmware version a screen's features go by, as the add-on works it out (firmware_known, app 0.2.78; null when it
 // can't tell). A screen entry without the field goes by the firmware text, as before.
@@ -37,9 +37,24 @@ export function buildProgress(screen: Screen, building: Building): { percent: nu
   if (phase === "verify") return { percent: 78, text: phaseText("verify") };
   if (phase === "settle") return { percent: 92, text: phaseText("settle") };
   if (stage === "upload") return { percent: 66, text: t("editor.update.writing") };
+  const server = serverStep(build);
+  if (server) return server;
   if (stage) return { percent: 40, text: t("editor.update.building") };
   return { percent: 12, text: buildText(screen, build) };
 }
+
+// A compile on the build server (the add-on's build_server.py): its step and the server's name, or why it runs here after
+// all. Null for a build that never asked the server.
+const SERVER_PERCENT: Record<BuildServerStep, number> = { bundle: 16, send: 22, queued: 28, build: 42, fetch: 60 };
+export function serverStep(build: ServerSide | null | undefined): { percent: number; text: string } | null {
+  if (build?.where === "server" && build.remote && build.remote in SERVER_PERCENT)
+    return { percent: SERVER_PERCENT[build.remote], text: t(`editor.build.server.${build.remote}`, { name: build.server || "" }) };
+  if (build?.where === "here" && build.fallback) return { percent: 40, text: fallbackText(build.fallback) };
+  return null;
+}
+/** Building here after all, with the reason in a few words. */
+export const fallbackText = (reason: string) =>
+  t("editor.build.server.here", { reason: t(`editor.build.server.fallback.${reason}`) });
 
 // ---- Updates ----
 // A screen that doesn't run the chosen language yet needs its update as well.

@@ -14,7 +14,7 @@ import { useEntitiesStore } from "../src/stores/entities";
 import { useScreenStore } from "../src/stores/screen";
 import { useSessionStore } from "../src/stores/session";
 import { useInventoryStore } from "../src/stores/inventory";
-import { addPage } from "../src/editor/pages";
+import { addPage, setPageDock } from "../src/editor/pages";
 import { addTile, liveEntries, placeTile, retargetPageTile, setTileOption } from "../src/editor/tiles";
 import { useDocumentStore } from "../src/stores/document";
 
@@ -73,7 +73,7 @@ describe("the editor", () => {
 
   it("draws the second line the tile panel chose on the mockup: nothing, own words or a value", () => {
     useEntitiesStore().liveStates["light.a"] = { state: "on", word: "On", a: { brightness: 128 } };
-    const card = (sub?: string) => mount(TileCard, { props: { tile: { ...doc.layout!.tiles[0], options: sub ? { sub } : {} }, slot: 0 } }).find(".st");
+    const card = (sub?: string) => mount(TileCard, { props: { tile: { ...doc.layout!.tiles[0], options: sub ? { sub } : {} }, at: 0 } }).find(".st");
     expect(card().text()).toBe("On");
     expect(card("none").exists()).toBe(false);
     expect(card("text:Sofa left").text()).toBe("Sofa left");
@@ -108,6 +108,42 @@ describe("the editor", () => {
     expect(doc.undoCount).toBe(1);
   });
 
+  it("offers In the Dock (picture, icon, hidden) on a screen with the Dock, and nothing without it", async () => {
+    addPage();
+    const id = doc.document!.pages[1].id;
+    const screen = useInventoryStore().inventory.screens[0];
+    screen.dock = false;
+    let view = mount(PageInspector, { props: { id } });
+    expect(view.find(".dock-field").exists()).toBe(false);
+    expect(view.find("#page-part-dock").exists()).toBe(false);
+    view.unmount();
+    screen.dock = true;
+    view = mount(PageInspector, { props: { id } });
+    // The Dock is a part of the small page at the head of the settings (app 0.4.89): chosen there, its field shows.
+    expect(view.find(".dock-field").exists()).toBe(false);
+    await view.find("#page-part-dock").trigger("click");
+    const modes = () => view.findAll(".dock-field .seg button");
+    expect(modes().map((b) => b.attributes("aria-pressed"))).toEqual(["true", "false", "false"]);
+    expect(view.find(".dock-field .picker").exists()).toBe(false);
+    // Icon opens the picker at once, with the page's picture first: an empty automatic icon must not take the row with it.
+    await modes()[1].trigger("click");
+    expect(view.find(".dock-field .picker .icon-auto").text()).toContain("Picture of the page");
+    expect("icon" in doc.document!.pages[1]).toBe(false);
+    setPageDock(id, "icon", "sofa");
+    await nextTick();
+    expect(doc.document!.pages[1].icon).toBe("sofa");
+    expect(modes()[1].attributes("aria-pressed")).toBe("true");
+    // Hidden leaves it out and keeps the icon for when it comes back; Picture drops the icon.
+    await modes()[2].trigger("click");
+    expect(doc.document!.pages[1].navigation.showInDock).toBe(false);
+    expect(doc.document!.pages[1].icon).toBe("sofa");
+    expect(view.find(".dock-field .picker").exists()).toBe(false);
+    await modes()[0].trigger("click");
+    expect("showInDock" in doc.document!.pages[1].navigation).toBe(false);
+    expect("icon" in doc.document!.pages[1]).toBe(false);
+    view.unmount();
+  });
+
   it("saves a page title without the spaces at its ends, and keeps them while typing (app 0.4.2)", async () => {
     addPage();
     const id = doc.document!.pages[1].id;
@@ -120,7 +156,7 @@ describe("the editor", () => {
   });
 
   it("draws an on/off or run card two rows tall as one big key from firmware 0.17.0, and keeps controls where chosen", () => {
-    const card = (tile: any) => mount(TileCard, { props: { tile: { ...doc.layout!.tiles[0], ...tile }, slot: 0 } });
+    const card = (tile: any) => mount(TileCard, { props: { tile: { ...doc.layout!.tiles[0], ...tile }, at: 0 } });
     const square = { entity: "light.a", options: { size: "square" } };
     // Firmware 0.4.0 keeps the switch.
     expect(card(square).classes()).not.toContain("big-key");

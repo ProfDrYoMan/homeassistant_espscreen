@@ -79,26 +79,34 @@ waveshare_io_ch32v003:
   - id: expander
     i2c_id: touch_bus
 
-# The native output power supply switches EXIO2 only when brightness crosses zero.
-# No startup wait or hold after zero; fades and OTA keep using the expander's PWM directly.
-power_supply:
-  - id: backlight_enable
+output:
+  # Keep every backlight path (including fades, alerts and OTA) on the same hardware output.
+  # Set the PWM before enabling the light; at zero, disable EXIO2 after the fade reaches its end.
+  - platform: template
+    id: gpio_backlight_pwm
+    type: float
+    write_action:
+      - lambda: |-
+          id(backlight_pwm).set_level(state);
+          static int enabled = -1;
+          const bool lit = state > 0.0f;
+          if (enabled != lit) {
+            id(backlight_enable).set_state(lit);
+            enabled = lit;
+          }
+  - platform: gpio
+    id: backlight_enable
     pin:
       waveshare_io_ch32v003: expander
       number: 2
       mode:
         output: true
-    enable_time: 0ms
-    keep_on_time: 0ms
-
-output:
   # The backlight's level is the expander's PWM output, low for full light (inverted). The safe levels are
   # ESPHome's defaults for this board: 247 keeps the backlight from flickering at the dark end, and 1 is full light.
   # EXIO2 above switches the backlight fully off when the requested level is zero.
   - platform: waveshare_io_ch32v003
-    id: gpio_backlight_pwm
+    id: backlight_pwm
     waveshare_io_ch32v003_id: expander
-    power_supply: backlight_enable
     inverted: true
     safe_pwm_levels:
       min_value: 1

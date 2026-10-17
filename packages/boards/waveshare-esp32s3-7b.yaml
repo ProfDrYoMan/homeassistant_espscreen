@@ -13,7 +13,7 @@ packages:
   hardware: !include ../hardware/esp32s3-rgb.yaml
   look: !include ../looks/standard.yaml
   touch: !include ../features/capacitive-touch.yaml
-  backlight: !include ../features/backlight.yaml
+  backlight: !include ../features/backlight-no-dimming.yaml
   camera: !include ../features/camera.yaml
   self_test: !include ../features/self-test.yaml
 
@@ -79,8 +79,8 @@ waveshare_io_ch32v003:
   - id: expander
     i2c_id: touch_bus
 
-# The native output power supply switches EXIO2 only when brightness crosses zero.
-# No startup wait or hold after zero; fades and OTA keep using the expander's PWM directly.
+# The native output power supply enables EXIO2 with a 50 ms startup wait and keeps it on for 5 s after zero brightness.
+# Brightness changes without fading, and OTA uses the expander's PWM directly.
 power_supply:
   - id: backlight_enable
     pin:
@@ -94,7 +94,7 @@ power_supply:
 output:
   # The backlight's level is the expander's PWM output, low for full light (inverted). The safe levels are
   # ESPHome's defaults for this board: 247 keeps the backlight from flickering at the dark end, and 1 is full light.
-  # EXIO2 above switches the backlight fully off when the requested level is zero.
+  # EXIO2 above switches the backlight fully off after the requested level stays at zero for 5 s.
   - platform: waveshare_io_ch32v003
     id: gpio_backlight_pwm
     waveshare_io_ch32v003_id: expander

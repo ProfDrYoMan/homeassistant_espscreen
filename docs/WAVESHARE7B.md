@@ -23,9 +23,10 @@ The board's one USB-C port goes through a USB-to-UART chip, and the logs go out 
 - Landscape: 1024 x 600, four columns of four cells. Portrait: 600 x 1024, two columns of seven cells.
 - The standard look at 170 dpi, the density of the 4-inch Guition, so a tile keeps the size it has there.
 - The backlight takes levels: brightness is a percentage, and standby, night mode, Sleep, Wake and the alert's flashes
-  are enabled. The level is the PWM output of the board's expander. At zero brightness its enable line, EXIO2, goes
-  low to switch the backlight fully off; above zero it goes high again. ESPHome's native output power supply handles
-  EXIO2 with zero startup and hold times, and brightness goes directly to the PWM output. The panel supply, EXIO6, stays on. The wake
+  are enabled. The level is the PWM output of the board's expander, with no fading between brightness levels.
+  ESPHome's native output power supply takes EXIO2 high with a 50 ms startup wait when enabling the backlight,
+  and takes it low to switch the backlight fully off after brightness stays at zero for 5 s.
+  Brightness goes directly to the PWM output. The panel supply, EXIO6, stays on. The wake
   from standby has not been seen on this hardware yet.
 - Camera tiles, full-screen snapshots, live tile pictures, camera alerts and media artwork use the shared PSRAM implementation.
   Their operation on this board still needs physical verification.

@@ -35,8 +35,7 @@ script:
       level: int
       ms: int
     then:
-#      - lambda: id(back_light).turn_on().set_transition_length(ms).set_brightness(level / 100.0f).perform();
-      - lambda: id(back_light).turn_on().set_transition_length(0).set_brightness(level / 100.0f).perform();
+      - lambda: id(back_light).turn_on().set_transition_length(ms).set_brightness(level / 100.0f).perform();
 
   - id: wake_display
     mode: restart

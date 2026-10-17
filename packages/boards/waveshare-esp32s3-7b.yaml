@@ -13,7 +13,7 @@ packages:
   hardware: !include ../hardware/esp32s3-rgb.yaml
   look: !include ../looks/standard.yaml
   touch: !include ../features/capacitive-touch.yaml
-  backlight: !include ../features/backlight.yaml
+  backlight: !include ../features/backlight-no-dimming.yaml
   camera: !include ../features/camera.yaml
   self_test: !include ../features/self-test.yaml
 

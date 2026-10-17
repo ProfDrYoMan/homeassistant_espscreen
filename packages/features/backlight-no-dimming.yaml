@@ -5,10 +5,9 @@
 # standby and night (apply_screen_settings in packages/core.yaml), an alert's blinks, and the end of an alert.
 # A backlight that must never go dark adds features/backlight-always-on.yaml after this file.
 substitutions:
-  # apply_screen_settings: how the backlight takes its level. Standby dims slowly (ESPHome's transition); waking is quick.
+  # apply_screen_settings: how the backlight takes its level. No fading.
   APPLY_BACKLIGHT: |-
-    // Standby dims slowly (ESPHome's transition); waking fades in over 200 ms.
-    id(set_backlight).execute(level, id(display_dimmed) ? 1500 : 200);
+    id(set_backlight).execute(level);
   # An update coming in (ota_status::wake, firmware 0.38.0): the glass at its brightness at once. ESPHome's update holds
   # the loop that runs the light's transition, so the level goes straight to the output, with the light's own gamma.
   OTA_BACKLIGHT: |-
@@ -23,19 +22,15 @@ light:
     id: back_light
     internal: true
     restore_mode: ALWAYS_ON
-    default_transition_length: 150ms
+    default_transition_length: 0ms
 
 script:
-  # One owner for the backlight level, through ESPHome's own light transition (firmware 0.2.57+). Firmware 0.2.13-0.2.56
-  # stepped the duty with the LEDC hardware fader by reaching into ESPHome's LEDC output, which ESPHome 2026.8 made final;
-  # a new call interrupts the running transition from where it is, as ESPHome does for any light.
   - id: set_backlight
     mode: restart
     parameters:
       level: int
-      ms: int
     then:
-      - lambda: id(back_light).turn_on().set_transition_length(ms).set_brightness(level / 100.0f).perform();
+      - lambda: id(back_light).turn_on().set_brightness(level / 100.0f).perform();
 
   - id: wake_display
     mode: restart
@@ -47,9 +42,7 @@ script:
           id(last_touch_ms) = millis();
           id(display_dimmed) = false;
           id(sleep_requested) = false;
-          // A short fade in, 200 ms. ESPHome's default is 1s, and that feels sluggish
-          // when you touch the screen and are waiting on light.
-          id(set_backlight).execute(screen_settings::current.brightness, 200);
+          id(set_backlight).execute(screen_settings::current.brightness);
           // The screensaver goes with the standby, and the touch that woke the screen does nothing else (0.29.0+).
           runtime_tiles::saver_wake();
       - lvgl.widget.hide: dim_wake_overlay
@@ -71,7 +64,7 @@ script:
             - lvgl.widget.hide: alert_overlay
             - script.stop: alert_timeout
             - script.stop: alert_flash
-            - lambda: 'id(set_backlight).execute(screen_settings::current.brightness, 80);'
+            - lambda: 'id(set_backlight).execute(screen_settings::current.brightness);'
             - script.execute:
                 id: alert_report
                 action: !lambda 'return reason;'
@@ -83,7 +76,7 @@ script:
       - repeat:
           count: 4
           then:
-            - lambda: 'id(set_backlight).execute(0, 60);'
+            - lambda: 'id(set_backlight).execute(0);'
             - delay: 140ms
-            - lambda: 'id(set_backlight).execute(screen_settings::current.brightness, 60);'
+            - lambda: 'id(set_backlight).execute(screen_settings::current.brightness);'
             - delay: 180ms

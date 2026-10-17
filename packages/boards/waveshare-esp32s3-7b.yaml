@@ -88,8 +88,8 @@ power_supply:
       number: 2
       mode:
         output: true
-    enable_time: 0ms
-    keep_on_time: 0ms
+    enable_time: 50ms
+    keep_on_time: 5s
 
 output:
   # The backlight's level is the expander's PWM output, low for full light (inverted). The safe levels are

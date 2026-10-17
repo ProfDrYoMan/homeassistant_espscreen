@@ -1,7 +1,8 @@
 ## Unreleased
 
 - **Waveshare ESP32-S3-Touch-LCD-7B: fully dark backlight at 0%.** EXIO2 now switches the backlight off at zero
-  brightness and back on above zero, while PWM continues to control brightness. Other boards are unchanged.
+  brightness and back on above zero through ESPHome's native output power supply, with no startup wait or hold time.
+  Brightness uses the expander's PWM directly, without a template output. Other boards are unchanged.
 
 ## 0.4.88 (firmware 0.56.0)
 

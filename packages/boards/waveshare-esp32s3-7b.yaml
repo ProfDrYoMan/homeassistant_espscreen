@@ -13,7 +13,7 @@ packages:
   hardware: !include ../hardware/esp32s3-rgb.yaml
   look: !include ../looks/standard.yaml
   touch: !include ../features/capacitive-touch.yaml
-  backlight: !include ../features/backlight.yaml
+  backlight: !include ../features/backlight-no-transition.yaml
   camera: !include ../features/camera.yaml
   self_test: !include ../features/self-test.yaml
 
@@ -79,14 +79,24 @@ waveshare_io_ch32v003:
   - id: expander
     i2c_id: touch_bus
 
+# Only the 7B switches EXIO2 off after zero brightness and enables it again above zero.
+power_supply:
+  - id: backlight_enable
+    pin:
+      waveshare_io_ch32v003: expander
+      number: 2
+      mode:
+        output: true
+    enable_time: 50ms
+    keep_on_time: 5s
+
 output:
   # The backlight's level is the expander's PWM output, low for full light (inverted). The safe levels are
   # ESPHome's defaults for this board: 247 keeps the backlight from flickering at the dark end, and 1 is full light.
-  # The enable line (EXIO2) stays out of this output. It goes high once, with the panel below, and never low again:
-  # on the 4.3-inch Waveshare, switching the backlight's boost converter on from a dark screen browned the board out
-  # (packages/features/backlight-always-on.yaml). A level of 0 is the darkest the PWM gives, with the enable kept on.
+  # The native power supply switches EXIO2 off after brightness stays at zero for 5 s.
   - platform: waveshare_io_ch32v003
     id: gpio_backlight_pwm
+    power_supply: backlight_enable
     waveshare_io_ch32v003_id: expander
     inverted: true
     safe_pwm_levels:
@@ -147,12 +157,8 @@ display:
       number: 3
       mode:
         output: true
-    # The backlight enable (EXIO2) and the panel supply (EXIO6), both high from the panel's start on.
+    # Keep the panel supply (EXIO6) on; the backlight output owns EXIO2 separately.
     enable_pin:
-      - waveshare_io_ch32v003: expander
-        number: 2
-        mode:
-          output: true
       - waveshare_io_ch32v003: expander
         number: 6
         mode:

@@ -1,3 +1,10 @@
+# Fork workflow, takes precedence over the upstream instructions below
+
+- Fetch and integrate only `upstream/main`. Never fetch, merge, pull or recreate `dev`.
+- Start work on a branch from `upstream/main`; the current work branch is `my_changes`.
+- Keep this fork's `main` on upstream main plus the fork's own changes. Publish changes to `origin/main` and the work branch.
+- Do not use the upstream dev, bench-first publication or release-only main workflow in this fork. Do not create a release unless explicitly requested.
+
 # Working instructions for LLMs and developers
 
 ESP Screens turns ESP32 touch screens into Home Assistant control panels. Four parts, one product:

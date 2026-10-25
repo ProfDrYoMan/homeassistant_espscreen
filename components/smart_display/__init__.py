@@ -9,9 +9,10 @@ import logging
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome.components import socket
 from esphome.core import CORE
 
-from . import modules, screen_text_gen
+from . import hw_build, modules, p4_build, screen_text_gen
 
 CODEOWNERS = []
 AUTO_LOAD = ["json"]
@@ -28,16 +29,52 @@ def _language(value):
 
 
 CONF_FLASH_MB = "flash_mb"
+CONF_CAMERA_ORIENTATION = "camera_orientation"
+
+
+def _camera_orientation(value):
+    """How the board mounts its camera's sensor against the glass (CAMERA_ORIENTATION): as the glass, or upside down."""
+    value = cv.int_(value)
+    if value not in (0, 180):
+        raise cv.Invalid(f"CAMERA_ORIENTATION {value}: only 0 and 180 are supported; a sensor turned a quarter against "
+                         f"the glass is not (camera_turn.h)")
+    return value
+
 
 CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_LANGUAGE, default="en"): _language,
     # The flash a host build stands in for (tools/render/host.py), which has no esp32 block to read it from.
     cv.Optional(CONF_FLASH_MB): cv.positive_int,
+    cv.Optional(CONF_CAMERA_ORIENTATION, default=0): _camera_orientation,
 })
+
+
+# The connections a P4 screen holds open at once beside the ones ESPHome's own components count: a live stream for each
+# of live_view::MAX_STREAMS (live_view.h: four tiles, the full view, a plugin's places) and a download in each of
+# picture_fetch's three slots (full, thumb, live). ESPHome sums every component's count into CONFIG_LWIP_MAX_SOCKETS and
+# allocates a socket only once it opens, so a count that covers them costs a few bytes each. Without it a D1001 had 12:
+# four live tiles and the video's three viewers took them, and a fifth tile's still found no connection.
+P4_STREAM_SOCKETS = 7
+PICTURE_SOCKETS = 3
+
+
+def _sockets(config):
+    if _esp32_p4():
+        socket.consume_sockets(P4_STREAM_SOCKETS + PICTURE_SOCKETS, "smart_display")(config)
+    return config
+
+
+FINAL_VALIDATE_SCHEMA = _sockets
+
+
+# The linker wraps every ESP32 build gets, beside the picture engine's (p4_build.ENGINES): what an abort said, kept
+# across the reset (abort_record.h, which defines them).
+DIAGNOSTIC_WRAPS = ("panic_abort",)
 
 
 async def to_code(config):
     wanted = config[CONF_LANGUAGE]
+    cg.add_define("SCREEN_CAMERA_ORIENTATION", config[CONF_CAMERA_ORIENTATION])
     language, code = screen_text_gen.definitions(wanted)
     if language != wanted:
         # ESP Screens only writes languages it has; a hand-written one it lacks builds in the nearest it does have.
@@ -55,8 +92,15 @@ async def to_code(config):
         from esphome.components import ota
 
         ota.request_ota_state_listeners()
+    if CORE.is_esp32:
+        for wrap in DIAGNOSTIC_WRAPS:
+            cg.add_build_flag(f"-Wl,--wrap={wrap}")
     if _esp32_p4():
         await _p4(config)
+    # The capability record's build half (hw.h, docs/PLATFORM_PLAN.md 3.3): what the configuration contains, a speaker, a
+    # microphone, an echo canceller, a camera of the board's own, as defines; the boot adds what only it knows.
+    for define in hw_build.defines(CORE.config):
+        cg.add_define(define)
     _tier(config)
 
 
@@ -81,22 +125,9 @@ def _tier(config):
     _LOGGER.info("Tier %s: %s", tier, ", ".join(modules.modules_for(tier)) or "no modules")
 
 
-# ---- The ESP32-P4 boards (docs/CAMERA.md, "Live on the P4 boards") ----
-# Keyed on the chip, never on a board: a new P4 board has all of this without a line in its file, and the boards
-# with less memory never do.
-#
-# Every P4 board reaches its Wi-Fi through an ESP32-C6 over SDIO (esp_hosted), where a packet's round trip takes long
-# enough that ESP-IDF's default TCP receive window of four segments (5,760 bytes) held a download at about 0.7 MB/s.
-# A window of 64 KB, as Espressif's own esp_hosted throughput settings have it, gave 2.6 MB/s on the reTerminal D1001
-# (2026-10-10). The window applies to every connection, which is why it is the P4's alone: a CYD has 45 KB in one
-# piece. A screen's own `sdkconfig_options` keep the last word.
-P4_NETWORK = {
-    "CONFIG_LWIP_TCP_WND_DEFAULT": 65534,
-    "CONFIG_LWIP_TCP_RECVMBOX_SIZE": 64,
-    "CONFIG_LWIP_TCPIP_RECVMBOX_SIZE": 64,
-}
-
-
+# ---- The ESP32-P4 boards (docs/CAMERA.md, "Live on the P4 boards"; docs/PICTURE_ARCHITECTURE.md, section 3.9) ----
+# Keyed on the chip, never on a board: a new P4 board has all of this without a line in its file, and the boards with
+# less memory never do. The facts themselves are p4_build.py's, free of ESPHome, so tests/test_live_view.py checks them.
 def _esp32_p4():
     if not CORE.is_esp32:
         return False
@@ -107,8 +138,8 @@ def _esp32_p4():
 
 
 def p4_network_options(own):
-    """The options a P4 gets, less those the screen's own sdkconfig_options set (tests/test_live_view.py)."""
-    return {name: value for name, value in P4_NETWORK.items() if name not in own}
+    """The options a P4 gets, less those the screen's own sdkconfig_options set (p4_build.network_options)."""
+    return p4_build.network_options(own)
 
 
 async def _p4(config):
@@ -117,28 +148,32 @@ async def _p4(config):
     own = ((CORE.config.get("esp32") or {}).get("framework") or {}).get("sdkconfig_options") or {}
     for name, value in p4_network_options(own).items():
         add_idf_sdkconfig_option(name, value)
-    # The camera live, full screen (live_view.h): the decoded pictures go into the panel's frame buffer past LVGL. The
-    # panel's handle is picked up as ESP-IDF makes it for ESPHome's display, whichever display platform that is.
+    # The picture engine and the glass (p4_build.picture_engine): on a P4 with LVGL the hardware JPEG decoder and the
+    # PPA write the decoded pictures into the panel's frame buffer past LVGL (picture_engine_p4.cpp, glass_dsi.cpp,
+    # live_view.cpp); the panel's handle is picked up as ESP-IDF makes it for ESPHome's display, whichever display
+    # platform that is. Every other build has the software engine: the headers' inline stubs, nothing added.
     lvgl = CORE.config.get("lvgl")
     lvgl = lvgl[0] if isinstance(lvgl, list) else lvgl
-    if not lvgl:
+    engine = p4_build.ENGINES[p4_build.picture_engine("esp32p4", bool(lvgl))]
+    if not engine["define"]:
         return
-    cg.add_define("USE_LIVE_VIEW")
-    cg.add_build_flag("-Wl,--wrap=esp_lcd_new_panel_dpi")
-    # Every PPA client on the screen moves in shorter bursts, so the panel's own DMA keeps up (live_view.cpp, "The
-    # panel's share of the memory bus").
-    cg.add_build_flag("-Wl,--wrap=ppa_register_client")
+    cg.add_define(engine["define"])
+    # The linker wraps the engine and the glass need: the panel as ESP-IDF makes it and every PPA client's bursts (so
+    # the panel's own DMA keeps up: glass.h, "The panel's share of the memory bus"), and the guard that copies a turned
+    # block the 2D-DMA would never finish in pieces (ppa_guard.h).
+    for wrap in engine["wraps"]:
+        cg.add_build_flag(f"-Wl,--wrap={wrap}")
     from esphome.const import CONF_ID
 
     component = await cg.get_variable(lvgl[CONF_ID])
-    cg.add(cg.RawExpression(f"live_view::bind({component})"))
+    cg.add(cg.RawExpression(f"glass::bind({component})"))
 
 
 # ---- Plugins (docs/PLUGINS.md) ----
 # The plugin API this core offers: plugin_api.h's PLUGIN_API_MAJOR/MINOR and the add-on's plugin_manifest.PLUGIN_API
 # (a test keeps the three equal). A plugin builds on the same major from its own minor up, unless a minor between its
 # own and this one changed a name while the major is 0 (PLUGIN_API_BREAKS, the same as plugin_manifest.py's).
-PLUGIN_API = (0, 14)
+PLUGIN_API = (0, 19)
 PLUGIN_API_BREAKS = {0: (4,)}
 PLUGIN_MANIFEST = "tessera-plugin.yaml"
 
@@ -217,6 +252,12 @@ async def register_plugin(var, component_file):
     # The whole plugin API goes into this build only now that it has a plugin (plugin_host.cpp, USE_TESSERA_PLUGINS).
     cg.add_define("USE_TESSERA_PLUGINS")
     cg.add(var.set_identity(str(manifest["id"]), str(manifest["version"])))
+    # A plugin that brings the screen's own camera (the feature `camera`, ts_camera): the core watches it by itself and
+    # shows its dot while Home Assistant uses it (plugin API 0.17, docs/PICTURES.md "Capture"), whatever the plugin does.
+    if "camera" in (manifest.get("provides") or []):
+        from esphome.core import ID
+        camera = await cg.get_variable(ID("ts_camera"))
+        cg.add(cg.RawStatement(f"plugin_host::watch_camera({camera});"))
     for tile in manifest.get("tiles") or []:
         memory = tile.get("memory")
         memory = memory.get("bytes") if isinstance(memory, dict) else memory

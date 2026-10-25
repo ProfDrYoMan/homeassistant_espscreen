@@ -232,7 +232,11 @@
       "buttons"
     ],
     "vacuum": [
-      "buttons"
+      "buttons",
+      "map",
+      "rooms",
+      "routines",
+      "map_rooms"
     ]
   },
   "backgrounds": [

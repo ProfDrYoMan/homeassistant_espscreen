@@ -543,7 +543,15 @@ struct Tile {
   // picture over the card where the board draws pictures. Never a whole page: the player's card is that.
   bool favorite() const { return display == "favorite" && domain() == "media_player" && !full; }
   // A tile that draws its picture out of the page's strip (runtime_tiles.h, live_*).
-  bool pictured() const { return live() || cover_tile() || is_map() || (favorite() && !extra().fav_mark.empty()); }
+  bool pictured() const { return live() || cover_tile() || is_map() || (favorite() && !extra().fav_mark.empty()) || vacuum_map(); }
+  // A robot's map on its larger tile (module vacuum, module_vacuum_tile.cpp): the app draws it at the map's place.
+  bool vacuum_map() const {
+#ifdef SD_MOD_VACUUM_CARD
+    return domain() == "vacuum" && (controls == "map" || controls == "map_rooms") && extra().vacuum && extra().vacuum->has_map();
+#else
+    return false;
+#endif
+  }
   // Double width takes a row; full (firmware 0.2.62+) takes the whole page, all six slots, and is also wide.
   bool wide = false, full = false;
   uint8_t height = 1;  // Row span; independent of the card design and page height.

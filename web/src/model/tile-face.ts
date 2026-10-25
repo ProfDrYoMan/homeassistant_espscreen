@@ -3,14 +3,15 @@
 // graph, a favourite or a live picture, a Big number, a card over the whole page, a big key, a tall card, a wide card or
 // the standard one. TileCard draws the face this names (components/tile/). Pure: what the card is, how large, what Home
 // Assistant reports and what its screen's firmware draws come in; nothing is read from a store.
-import { drawable } from "./catalogue";
+import { drawable, screenFeatures } from "./catalogue";
 import { inlineControlKind, pageTarget } from "./layout";
+import { VACUUM_FACES } from "./vacuum-tile";
 import { availableControl, controlKeys, coverPrimary, hasCoverTilt, type ControlKey } from "./tall-controls";
 import type { Live } from "./tile-text";
 import type { TileOptions } from "../types";
 
 export type FaceKind = "bedside" | "plugin-live" | "plugin" | "energy" | "analog" | "dial" | "flip-wide" | "flip" | "digital" | "graph" | "meter"
-  | "favorite" | "camera" | "watch" | "full" | "big-key" | "tall" | "wide" | "standard";
+  | "favorite" | "camera" | "watch" | "full" | "big-key" | "vacuum" | "tall" | "wide" | "standard";
 
 export type FaceInput = {
   entity: string;
@@ -25,6 +26,8 @@ export type FaceInput = {
   chosen: string | null;
   /** The screen draws a thermostat's range on its -/+ (firmware 0.19.0+). */
   rangeReady: boolean;
+  /** The screen's board has the vacuum card's module, and with it the larger vacuum tile (false: the keys). */
+  vacuumTile?: boolean;
   /** The screen's firmware is 0.17.0 or newer: big keys, the wide flip clock and a bedside clock's AM or PM. */
   bigKeys: boolean;
   /** A favourite with something to play (app 0.4.42). */
@@ -88,8 +91,9 @@ export const displayOf = (entity: string, options?: TileOptions) => (entity === 
 /** The control set the screen draws for this entity on this card (catalogue drawable): an older screen gets a thermostat
  * with only a range without its -/+, one without a temperature to set never has them; a card one row high draws the
  * setpoint alone (resolve_controls), and a blind its own control without its slats. */
-export function drawnControls(domain: string, chosen: string | null, live: Live | null | undefined, rows: number, rangeReady: boolean) {
-  const drawn = chosen ? drawable(domain, chosen, live?.a || {}, rangeReady ? null : new Set<string>()) : null;
+export function drawnControls(domain: string, chosen: string | null, live: Live | null | undefined, rows: number, rangeReady: boolean, vacuumTile = true) {
+  const features = !rangeReady ? new Set<string>() : vacuumTile ? null : (() => { const all = screenFeatures(); all.delete("vacuum_tile"); return all; })();
+  const drawn = chosen ? drawable(domain, chosen, live?.a || {}, features) : null;
   const selected = drawn === "none" ? null : drawn;
   if (selected === "setpoint_mode" && rows < 2) return "setpoint";
   if (selected === "volume_playback" && rows < 2) return "volume";
@@ -112,7 +116,7 @@ export function tileFace(input: FaceInput): Face {
   const tall = shape.rows > 1 && (!full || coverExtended || climateModes) && ["standard", "cover"].includes(display);
   const goesTo = pageTarget(entity);
   const tallAction = tall && (entity === "screen.settings" || Boolean(goesTo));
-  const controls = drawnControls(domain, chosen, live, shape.rows, input.rangeReady);
+  const controls = drawnControls(domain, chosen, live, shape.rows, input.rangeReady, input.vacuumTile !== false);
   const tallControls = availableControl(domain, options?.inline === "slider" ? inlineControlKind(domain) : controls, state, a, input.rangeReady);
   const tallStack = tall && tallControls === "toggle";
   const bigKey = tall && !full && input.bigKeys && BIG_KEY_DOMAINS.includes(domain) && options?.inline !== "slider"
@@ -147,6 +151,7 @@ function faceKind(input: FaceInput, face: Omit<Face, "kind">): FaceKind {
   if (input.favorite && !face.full) return "favorite";
   if (display === "live" && ["camera", "image"].includes(domain)) return "camera";
   if (input.watch) return "watch";
+  if ((face.tall || face.full) && domain === "vacuum" && VACUUM_FACES.includes(face.tallControls)) return "vacuum";
   if (face.full && !face.tall) return "full";
   if (face.bigKey) return "big-key";
   if (face.tall) return "tall";

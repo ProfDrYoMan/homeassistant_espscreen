@@ -5,37 +5,36 @@
 // picture with the hardware JPEG decoder (one engine for all, its calls are thread safe) and has the PPA bring it to the
 // glass: a full view's picture scaled to fill its room and turned as LVGL turns its drawing, straight into the panel's
 // frame buffer; a tile's picture first cut or fitted into a canvas of the card's size, where the shade, the corners and
-// the name go over it (live_view::compose), and then turned onto the glass. A copy happens with `glass` held and only
-// while nobody stopped the stream, so once close() returns nothing of it writes the glass any more and LVGL may draw
-// there at once. Buffers live in PSRAM and go when the task has ended (tick()).
+// the name go over it (live_view::compose), and then turned onto the glass. A copy happens with the glass held (glass.h:
+// one writer at a time) and only while nobody stopped the stream, so once close() returns nothing of it writes the glass
+// any more and LVGL may draw there at once. Buffers live in PSRAM and go when the task has ended (tick()). The panel, its
+// frame buffer, the lock and the rooms LVGL keeps out of are the glass's (glass.h, glass_dsi.cpp); the decoder and the
+// PPA copies are the engine's (picture_engine.h, picture_engine_p4.cpp). What is here is the stream's own: its task
+// and socket, the framing, the canvas of a tile and what goes over it, the loader, the sound, the reports.
 #include "live_view.h"
+#include "glass.h"
+#include "picture_engine.h"
 #if defined(USE_LIVE_VIEW) && defined(SCREEN_PICTURES)
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <cstdlib>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "esphome/components/lvgl/lvgl_esphome.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
-#include "lvgl.h"
-#include "lvgl_private.h"  // lv_inv_area, lv_area_intersect and the display's list, which LVGL 9 keeps out of lvgl.h
 
-#include <driver/jpeg_decode.h>
-#include <driver/ppa.h>
+#include <esp_err.h>
 #include <esp_heap_caps.h>
-#include <esp_lcd_mipi_dsi.h>
 #include <esp_timer.h>
-// The DSI bridge's own registers, for its underrun flag (panel_misses below); ESP-IDF keeps the chip's registers here.
-#if __has_include(<soc/mipi_dsi_bridge_struct.h>)
-#include <soc/mipi_dsi_bridge_struct.h>
-#define LIVE_VIEW_COUNTS_MISSES 1
-#endif
 #include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
 #include <freertos/stream_buffer.h>
 #include <freertos/task.h>
+
+#include "audio_owner.h"
+#include "psram_task.h"
+#include "roomy.h"
 #ifdef USE_SPEAKER
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/speaker/speaker.h"
@@ -45,60 +44,11 @@ namespace live_view {
 
 static const char *const TAG = "live";
 constexpr size_t CHUNK = 16 * 1024;
+constexpr uint32_t STACK_BYTES = 6144;  // a stream task's stack (psram_task.h), its high water logged as it ends
 constexpr uint32_t WAIT_MS = 500;  // a read waits this long, so a stop is seen within it
-
-// ---- The panel ESPHome's display made (the wrap of esp_lcd_new_panel_dpi at the end of this file) and LVGL ----
-static esp_lcd_panel_handle_t panel = nullptr;
-static int panel_w = 0, panel_h = 0;
-static bool panel_rgb565 = false;
-static esphome::lvgl::LvglComponent *lvgl = nullptr;
-void bind(esphome::lvgl::LvglComponent *component) { lvgl = component; }
-void panel_made(esp_lcd_panel_handle_t made, const esp_lcd_dpi_panel_config_t *config) {
-  panel = made;
-  panel_w = config->video_timing.h_size;
-  panel_h = config->video_timing.v_size;
-  // ESPHome names the frame buffer's format in either field, by ESP-IDF version.
-  panel_rgb565 = config->in_color_format == LCD_COLOR_FMT_RGB565 ||
-                 (config->in_color_format == 0 && config->pixel_format == LCD_COLOR_PIXEL_FORMAT_RGB565);
-}
-static int turn_now() { return lvgl ? static_cast<int>(lvgl->get_rotation()) : 0; }
-
-bool available() { return panel != nullptr && panel_rgb565 && lvgl != nullptr; }
-
-// ---- The panel's share of the memory bus ----
-// The DSI bridge reads the frame buffer from PSRAM without pause, a frame every 16 ms; when another DMA (the PPA, the
-// JPEG decoder, the DMA2D that copies what LVGL drew) holds the bus too long, the bridge runs dry and the panel shows
-// a frame of blue, its colour for no data (ESP-IDF's own words in esp_lcd_panel_dpi.c: "the LCD display may already
-// becomes blue"). ESP-IDF only logs that from its interrupt, on the UART and for every frame. Here the bridge's
-// underrun flag is read every tick instead (its interrupt is turned off, so the flag stays up until it is read) and
-// counted: panel_misses, in every report of a stream, so a tester's log says whether a change helped (the Guition
-// 10.1 P4, pixel clock 70 MHz, saw the flashes; the D1001 at 80 MHz counts none).
-// What keeps the bridge fed: every PPA client on this screen moves in bursts of PPA_BURST bytes instead of ESP-IDF's
-// 128, so the bus turns to the bridge between bursts. LVGL's own PPA draw unit took the same way for the same underrun
-// (lvgl/lvgl #9590, its burst a setting since #9612), at some cost in copy time. The streams' clients ask for it in
-// open(); ESPHome's LVGL, which turns every flush of a turned glass with the PPA, gets it through the wrap of
-// ppa_register_client at the end of this file (smart_display/__init__.py adds the wrap on a P4).
-constexpr ppa_data_burst_length_t PPA_BURST = PPA_DATA_BURST_LENGTH_64;
-constexpr int PPA_BURST_BYTES = 64;  // the same, for the log
-static uint32_t panel_misses = 0;
-#ifdef LIVE_VIEW_COUNTS_MISSES
-static bool counting_misses = false;
-static void count_misses() {
-  if (!counting_misses) {
-    MIPI_DSI_BRIDGE.int_ena.underrun_int_ena = 0;
-    MIPI_DSI_BRIDGE.int_clr.underrun_int_clr = 1;
-    counting_misses = true;
-    return;
-  }
-  if (MIPI_DSI_BRIDGE.int_raw.underrun_int_raw) {
-    MIPI_DSI_BRIDGE.int_clr.underrun_int_clr = 1;
-    ++panel_misses;
-  }
-}
-#else
-static void count_misses() {}
-#endif
-uint32_t misses() { return panel_misses; }
+// ---- The glass (glass.h): the panel, its frame buffer, the one-writer lock and the rooms LVGL keeps out of ----
+bool available() { return glass::direct(); }
+uint32_t misses() { return glass::misses(); }
 
 // ---- The camera's sound: the board's speaker (features/audio.yaml binds it) ----
 #ifdef USE_SPEAKER
@@ -117,253 +67,155 @@ struct Stream {
   uint32_t *name = nullptr;  // the stream's own copy of look.name
   int turn = 0;
   std::atomic<bool> stopping{false}, done{false}, failed{false};
-  // LVGL is kept out of the stream's room from its first picture on (set by the task just before it copies one): until
-  // then LVGL draws as ever, a spinner turning while the camera comes.
-  std::atomic<bool> armed{false};
-  // Where its last picture lies on the glass (LVGL's coordinates): a tile's whole card, a full view's picture as large
-  // as fits its room, which leaves room beside it when the camera's shape is not the room's. Written by the task as it
-  // copies a picture, read by the main loop: only that is kept from LVGL, which draws the rest of the room itself, and
-  // when it moves (a camera's still, then its stream at another size) LVGL draws where it lay again (tick).
-  portMUX_TYPE spot_lock = portMUX_INITIALIZER_UNLOCKED;
-  Rect spot;
-  Rect spot_told;  // the main loop's: the spot it last saw
+  // Its room on the glass (glass.h): LVGL is kept out of where its picture lies from the first picture on (placed by
+  // the task just before it copies one); until then LVGL draws as ever, a spinner turning while the camera comes.
+  glass::Room room = -1;
   std::atomic<uint32_t> shown{0}, bytes{0}, decode_us{0}, copy_us{0}, skipped{0};
   // When the way to the first picture went by (ms after start, written once by the task, read after `shown`).
   uint32_t started_at = 0, connected_ms = 0, answered_ms = 0, first_bytes_ms = 0;
-  ppa_client_handle_t ppa = nullptr;
+  uint32_t live_ms = 0;  // its first live picture (written once by the task, read after `live`)
+  picture_engine::Client ppa = nullptr;  // its client of the PPA (the engine's)
   uint8_t *input = nullptr, *picture = nullptr;
   uint16_t *canvas = nullptr;
   size_t input_size = 0, picture_size = 0, canvas_size = 0;
   // The camera's sound (a full view on a board with a speaker): parts the task puts in `sound`, which the main loop
   // hands to the speaker unless `muted`.
+  // Its storage in PSRAM, its control (with the spinlock its critical sections take) inside the chip: made static over
+  // memory of the stream's own (sound_control, sound_storage), never with xStreamBufferCreateWithCaps. ESP-IDF 5.5.5's
+  // vStreamBufferDeleteWithCaps deletes a stream buffer as a queue (vSemaphoreDelete), reads a byte past the control
+  // as the queue's "statically allocated" flag and, when that byte is 0, frees the control twice (espressif/esp-idf
+  // #18855, on release/v5.5 after 5.5.5). A test build that moved this buffer to PSRAM with the WithCaps pair restarted
+  // a reTerminal D1001 that way at the close of a camera with sound (2026-10-25, tlsf_free "block already marked as
+  // free"); no release ever built it so, the buffer was an ordinary xStreamBufferCreate before.
   StreamBufferHandle_t sound = nullptr;
+  StaticStreamBuffer_t *sound_control = nullptr;
+  uint8_t *sound_storage = nullptr;
   uint8_t *sound_part = nullptr;
   uint8_t *sound_piece = nullptr;  // what the speaker took part of, the rest of it next tick
   size_t piece_left = 0, piece_at = 0;
+  // Whole samples only (s16le, two bytes each): parts of an odd length cut to even (the task) and writes the speaker
+  // took an odd number of bytes of (the main loop), counted for the stream's last line, which should say none.
+  std::atomic<uint32_t> odd_parts{0};
+  std::atomic<uint32_t> full_parts{0};  // parts left out because the buffer had no room for all of it
+  uint32_t odd_taken = 0;
+  uint32_t caught_up = 0, caught_up_bytes = 0;  // the times the main loop left the oldest out (SOUND_HIGH), and how much
   std::atomic<bool> muted{false}, heard{false};
-  // The main loop's own: the report of the last REPORT_MS, the first picture and sound told, the speaker started.
-  bool told_first = false, told_sound = false, speaking = false;
+  // The speaker is someone else's for now (audio_owner.h: a voice session or a doorbell took it): the sound is held back
+  // as when muted, and plays again once the owner gives the speaker back. Set on the main loop, read by the task.
+  std::atomic<bool> yielded{false};
+  audio_owner::Role sound_role = audio_owner::Role::CAMERA_SOUND;  // the role its sound claimed (open), released with it
+  audio_owner::Side claimed = audio_owner::Side::OUT;              // and the sides, while `claims`
+  bool claims = false;
+  // Until it is live (live_view.h): the picture on the glass is a still (the task turns a tile's loader over it), and a
+  // live one was shown. `under` holds the loader's square of the card as composed, its last turn drawn at `turned_at`.
+  std::atomic<bool> warming{false}, live{false};
+  uint16_t *under = nullptr;
+  uint32_t turned_at = 0;
+  // The main loop's own: the report of the last REPORT_MS, the first picture, its first live one and sound told, the
+  // speaker started.
+  bool told_first = false, told_live = false, told_sound = false, speaking = false;
   uint32_t reported_at = 0, reported_shown = 0, reported_bytes = 0, reported_decode = 0, reported_copy = 0;
+  psram_task::Task task;  // its task, its stack in PSRAM: the main loop deletes it once done (psram_task.h)
+  std::atomic<uint32_t> stack_left{0};  // what of its stack the task never used, in bytes (written before `done`)
 };
 static Stream *streams[MAX_STREAMS] = {};
-// One writer on the glass at a time: LVGL for the whole of each refresh (REFR_START to REFR_READY: deciding what to
-// draw, drawing it, flushing it to the panel), a stream's task for each copy of a picture. Without it a stream's first
-// picture could land while LVGL was still drawing the still and the name it had decided on before the stream armed,
-// and that drawing then lay over the picture until the next one (2026-10-12, the D1001: the name over a live tile after
-// the camera full screen closed). Recursive: close() takes it too, and runs inside a refresh when something covers a
-// stream (live_stop_covered, on REFR_START).
-// It is also the one user of the 2D-DMA at a time: a stream's task decodes and lays out each picture with it held, as
-// the decoder, the PPA and the panel's copy of LVGL's strips (ESPHome's PPA turn, then ESP-IDF's async copy into the
-// frame buffer) all go through the 2D-DMA. Two of them at once from different tasks is what hangs in ESP-IDF's reports
-// on the P4 (espressif/esp-idf #18999, #19108: serialised with a mutex, it ran). A decode was the one thing left
-// running beside a refresh, and the top bar of the camera full screen now and then stayed over the page after it
-// closed (2026-10-15, a P4 board): most likely the first strip LVGL sent, while the stream's last picture was still
-// decoding. LVGL waits for a decode now and then: about 11 ms for a full view's picture.
-static SemaphoreHandle_t glass = nullptr;
-static void hold_glass(lv_event_t *) { xSemaphoreTakeRecursive(glass, portMAX_DELAY); }
-static void release_glass(lv_event_t *) { xSemaphoreGiveRecursive(glass); }
-static jpeg_decoder_handle_t decoder = nullptr;
-static void *frame_buffer = nullptr;
-
-// ---- LVGL stays out of a live picture's room ----
-// A card on the page behind the view that changes (a sensor's new value), or a page's own redraw around a live tile,
-// has LVGL draw that area again, and what LVGL has there (the view's black, a tile's still with its spinner and name)
-// would cover the live picture until its next one. So what LVGL is about to draw is cut against where the picture of
-// every stream that streams lies (its spot: a full view's picture may leave room beside it, which stays LVGL's), once, as it starts drawing (LV_EVENT_RENDER_START: its areas joined, nothing drawn yet): what lies
-// outside a room stays, in pieces, what lies inside goes. That one place sees every way LVGL comes to draw there: an
-// area as it comes, one it had before a stream's first picture, two it joined into one, and the whole glass, which LVGL
-// draws when more areas come in one frame than its list holds. A filter of each area as it came missed the last three
-// (2026-10-10, the D1001: a tile's spinner and name over its live picture after the camera full screen closed). Each
-// piece goes through the display's own rounding (ESPHome's draw_rounding), as LVGL's own areas do. Once a stream ends
-// nothing is cut for it, and LVGL draws its room again.
-static bool filtering = false;
-static lv_area_t lv_rect(const Rect &r) { return {r.x, r.y, r.x + r.w - 1, r.y + r.h - 1}; }
-static Rect spot_of(Stream &s) {
-  taskENTER_CRITICAL(&s.spot_lock);
-  const Rect spot = s.spot;
-  taskEXIT_CRITICAL(&s.spot_lock);
-  return spot;
-}
-static void set_spot(Stream &s, const Rect &spot) {
-  taskENTER_CRITICAL(&s.spot_lock);
-  s.spot = spot;
-  taskEXIT_CRITICAL(&s.spot_lock);
-}
-// What LVGL keeps out of: where the stream's last picture lies.
-static lv_area_t room_of(Stream &s) {
-  const Rect spot = spot_of(s);
-  return lv_rect(spot.empty() ? s.area : spot);
-}
-static void invalidate(const lv_area_t &part) { lv_inv_area(lv_display_get_default(), &part); }
-static bool covered(const lv_area_t &a) {
-  for (auto *o : streams) {
-    if (!o || !o->armed) continue;
-    const lv_area_t room = room_of(*o);
-    lv_area_t common;
-    if (lv_area_intersect(&common, &a, &room)) return true;
-  }
-  return false;
-}
-// `area` less every streaming room, as up to MAX_PIECES rectangles; -1 when that takes more.
-constexpr int MAX_PIECES = LV_INV_BUF_SIZE;
-static lv_area_t pieces[MAX_PIECES], next_pieces[MAX_PIECES], kept[LV_INV_BUF_SIZE];
-static int cut_out(const lv_area_t &area) {
-  int count = 1;
-  pieces[0] = area;
-  for (auto *s : streams) {
-    if (!s || !s->armed) continue;
-    const lv_area_t room = room_of(*s);
-    int made = 0;
-    for (int i = 0; i < count; ++i) {
-      const lv_area_t r = pieces[i];
-      lv_area_t common;
-      if (!lv_area_intersect(&common, &r, &room)) {
-        if (made == MAX_PIECES) return -1;
-        next_pieces[made++] = r;
-        continue;
-      }
-      const lv_area_t parts[4] = {{r.x1, r.y1, r.x2, room.y1 - 1}, {r.x1, room.y2 + 1, r.x2, r.y2},
-                                  {r.x1, common.y1, room.x1 - 1, common.y2}, {room.x2 + 1, common.y1, r.x2, common.y2}};
-      const bool there[4] = {r.y1 < room.y1, r.y2 > room.y2, r.x1 < room.x1, r.x2 > room.x2};
-      for (int k = 0; k < 4; ++k) {
-        if (!there[k]) continue;
-        if (made == MAX_PIECES) return -1;
-        next_pieces[made++] = parts[k];
-      }
-    }
-    count = made;
-    for (int i = 0; i < count; ++i) pieces[i] = next_pieces[i];
-  }
-  return count;
-}
-static void keep_out(lv_event_t *) {
-  lv_display_t *display = lv_display_get_default();
-  int count = 0;
-  bool whole = false;  // more pieces than LVGL's list holds
-  for (uint32_t i = 0; i < display->inv_p && !whole; ++i) {
-    if (display->inv_area_joined[i]) continue;
-    const lv_area_t &area = display->inv_areas[i];
-    if (!covered(area)) {
-      kept[count++] = area;  // as LVGL had it, rounded on its way in
-      continue;
-    }
-    const int made = cut_out(area);
-    if (made < 0 || count + made > LV_INV_BUF_SIZE) {
-      whole = true;
-      break;
-    }
-    for (int k = 0; k < made; ++k) kept[count++] = pieces[k];
-  }
-  if (whole) {
-    // Then the whole glass less the rooms; should even that take too many, LVGL draws what it has, a frame of its own
-    // over the live pictures.
-    const lv_area_t glass = {0, 0, lv_display_get_horizontal_resolution(display) - 1,
-                             lv_display_get_vertical_resolution(display) - 1};
-    const int made = cut_out(glass);
-    if (made < 0) return;
-    count = 0;
-    for (int k = 0; k < made; ++k) kept[count++] = pieces[k];
-  }
-  for (int i = 0; i < count; ++i) {
-    lv_display_send_event(display, LV_EVENT_INVALIDATE_AREA, &kept[i]);  // rounding twice changes nothing
-    display->inv_areas[i] = kept[i];
-    display->inv_area_joined[i] = 0;
-  }
-  display->inv_p = count;
-}
-static bool holding = false;  // LVGL holds the glass while it refreshes, from the first stream on and for good
-static void watch_lvgl() {
-  if (!holding) {
-    lv_display_add_event_cb(lv_display_get_default(), hold_glass, LV_EVENT_REFR_START, nullptr);
-    lv_display_add_event_cb(lv_display_get_default(), release_glass, LV_EVENT_REFR_READY, nullptr);
-    holding = true;
-  }
-  if (filtering) return;
-  lv_display_add_event_cb(lv_display_get_default(), keep_out, LV_EVENT_RENDER_START, nullptr);
-  filtering = true;
-}
-static void unwatch_lvgl_when_alone() {
-  for (auto *o : streams)
-    if (o) return;
-  if (!filtering) return;
-  lv_display_remove_event_cb_with_user_data(lv_display_get_default(), keep_out, nullptr);
-  filtering = false;
-}
+static_assert(MAX_STREAMS <= glass::MAX_ROOMS, "every stream has a room on the glass");
 
 static void free_stream(Stream *s) {
-  if (s->sound) vStreamBufferDelete(s->sound);
-  if (s->sound_part) free(s->sound_part);
-  if (s->sound_piece) free(s->sound_piece);
+  if (s->sound) vStreamBufferDelete(s->sound);  // static: frees nothing, its memory is the stream's own below
+  if (s->sound_control) heap_caps_free(s->sound_control);
+  if (s->sound_storage) roomy::release(s->sound_storage);
+  if (s->sound_part) roomy::release(s->sound_part);
+  if (s->sound_piece) roomy::release(s->sound_piece);
   if (s->input) free(s->input);
   if (s->picture) free(s->picture);
   if (s->canvas) free(s->canvas);
   if (s->name) free(s->name);
-  if (s->ppa) ppa_unregister_client(s->ppa);
+  if (s->under) free(s->under);
+  picture_engine::drop(s->ppa);
+  if (s->room >= 0) glass::give_back(s->room);
   delete s;
 }
 
-// The PPA's block copy, with its scale and turn: `bw` x `bh` at bx, by of a picture (`stride_w` x `rows`) to x, y of
-// another (ow x oh, `out_size` bytes).
-static esp_err_t copy(Stream &s, const void *in, int stride_w, int rows, int bx, int by, int bw, int bh, void *out,
-                      size_t out_size, int ow, int oh, int x, int y, int sixteenths, int turn) {
-  ppa_srm_oper_config_t srm{};
-  srm.in.buffer = in;
-  srm.in.pic_w = stride_w;
-  srm.in.pic_h = rows;
-  srm.in.block_w = bw;
-  srm.in.block_h = bh;
-  srm.in.block_offset_x = bx;
-  srm.in.block_offset_y = by;
-  srm.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
-  srm.out.buffer = out;
-  srm.out.buffer_size = out_size;
-  srm.out.pic_w = ow;
-  srm.out.pic_h = oh;
-  srm.out.block_offset_x = x;
-  srm.out.block_offset_y = y;
-  srm.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
-  // ESPHome's LVGL turns clockwise, the PPA counter-clockwise.
-  srm.rotation_angle = turn == 90    ? PPA_SRM_ROTATION_ANGLE_270
-                       : turn == 180 ? PPA_SRM_ROTATION_ANGLE_180
-                       : turn == 270 ? PPA_SRM_ROTATION_ANGLE_90
-                                     : PPA_SRM_ROTATION_ANGLE_0;
-  srm.scale_x = srm.scale_y = sixteenths / 16.0f;
-  srm.mode = PPA_TRANS_MODE_BLOCKING;
-  return ppa_do_scale_rotate_mirror(s.ppa, &srm);
+// The engine's copy (picture_engine::blit): the block `bw` x `bh` at bx, by of a picture (`in_w` x `rows`) to x, y of
+// another (ow x oh, `out_size` bytes), at the engine's `scale` (picture_engine::fit, cut) and turned as LVGL turns.
+static esp_err_t copy(Stream &s, const void *in, int in_w, int rows, int bx, int by, int bw, int bh, void *out,
+                      size_t out_size, int ow, int oh, int x, int y, int scale, int turn) {
+  picture_engine::Block block;
+  block.in = in, block.in_w = in_w, block.in_rows = rows, block.bx = bx, block.by = by, block.bw = bw, block.bh = bh;
+  block.out = out, block.out_size = out_size, block.out_w = ow, block.out_h = oh, block.x = x, block.y = y;
+  block.scale = scale, block.turn = turn;
+  return static_cast<esp_err_t>(picture_engine::blit(s.ppa, block));
 }
 
-// One picture of `length` bytes in the stream's input: decoded, laid out, and copied onto the glass.
-static void show(Stream &s, size_t length) {
-  jpeg_decode_picture_info_t info{};
-  if (jpeg_decoder_get_info(s.input, length, &info) != ESP_OK) {
+// A tile's loader over a still (live_view.h, "Until it is live"): its square of the card as composed kept in `under`,
+// and the loader drawn over it as it stands now.
+static bool lay_loader(Stream &s) {
+  int lx = 0, ly = 0;
+  if (!s.under || !loader_spot(s.look, s.area.w, s.area.h, lx, ly)) return false;
+  const int cw = s.area.w, size = s.look.loader;
+  for (int j = 0; j < size; ++j)
+    memcpy(s.under + static_cast<size_t>(j) * size, s.canvas + static_cast<size_t>(ly + j) * cw + lx,
+           static_cast<size_t>(size) * 2);
+  s.turned_at = esphome::millis();
+  draw_loader(s.canvas, cw, lx, ly, s.look, s.turned_at);
+  return true;
+}
+// Its next turn, between the stills: the square as composed again, the loader over it, and that square alone onto the
+// glass, every LOADER_STEP_MS while the task waits for the stream's next bytes.
+static void turn_loader(Stream &s) {
+  const uint32_t now = esphome::millis();
+  int lx = 0, ly = 0;
+  if (!s.warming || now - s.turned_at < LOADER_STEP_MS || !loader_spot(s.look, s.area.w, s.area.h, lx, ly)) return;
+  s.turned_at = now;
+  const int cw = s.area.w, ch = s.area.h, size = s.look.loader;
+  for (int j = 0; j < size; ++j)
+    memcpy(s.canvas + static_cast<size_t>(ly + j) * cw + lx, s.under + static_cast<size_t>(j) * size,
+           static_cast<size_t>(size) * 2);
+  draw_loader(s.canvas, cw, lx, ly, s.look, now);
+  const glass::Panel panel = glass::panel();
+  const Rect target = on_panel(Rect{s.area.x + lx, s.area.y + ly, size, size}, s.turn, panel.w, panel.h);
+  esp_err_t err = ESP_OK;
+  glass::hold();
+  if (!s.stopping && glass::armed(s.room))
+    err = copy(s, s.canvas, cw, ch, lx, ly, size, size, glass::frame_buffer(), static_cast<size_t>(panel.w) * panel.h * 2,
+               panel.w, panel.h, target.x, target.y, 16, s.turn);
+  glass::release();
+  if (err != ESP_OK) s.warming = false;  // the loader stops where it stands; the pictures go on
+}
+
+// One picture of `length` bytes in the stream's input: decoded, laid out, and copied onto the glass. `still`: the
+// camera's still from before its stream came, with the loader over it on a tile.
+static void show(Stream &s, size_t length, bool still) {
+  picture_engine::Still info;
+  if (!picture_engine::info(s.input, length, info)) {
     s.skipped++;
     return;
   }
-  // The decoder writes whole MCUs: rows as wide as the picture rounded up to 16 (4:2:0, 4:2:2) or 8 pixels.
-  const bool wide = info.sample_method == JPEG_DOWN_SAMPLING_YUV420 || info.sample_method == JPEG_DOWN_SAMPLING_YUV422;
-  const bool tall = info.sample_method == JPEG_DOWN_SAMPLING_YUV420;
-  const int stride_w = (info.width + (wide ? 15 : 7)) & ~(wide ? 15 : 7);
-  const int rows = (info.height + (tall ? 15 : 7)) & ~(tall ? 15 : 7);
-  const int w = info.width, h = info.height;
+  // The decoder writes whole MCUs (picture_jpeg.h): `stride_w` pixels a row, `rows` of them.
+  const int stride_w = info.stride;
+  const int rows = static_cast<int>(info.bytes / 2 / info.stride);
+  const int w = info.w, h = info.h;
   // Where it goes: a full view's picture as large as fits its room, a tile's into its card.
-  int sixteenths = 0;
+  int scale = 0;
   Rect where;
-  Cut into;
+  picture_engine::Cut into;
   if (s.look.tile) {
-    into = cut(w, h, s.area.w, s.area.h, s.look.contain);
+    into = picture_engine::cut(w, h, s.area.w, s.area.h, s.look.contain);
     if (into.ok) where = s.area;
   } else {
-    where = fit(w, h, s.area, sixteenths);
+    const picture_engine::Fit f = picture_engine::fit(w, h, s.area.x, s.area.y, s.area.w, s.area.h);
+    if (!f.empty()) where = Rect{f.x, f.y, f.w, f.h};
+    scale = f.scale;
   }
   if (where.empty()) {
     if (s.skipped++ == 0) ESP_LOGW(TAG, "a picture of %dx%d does not fit its room (%dx%d)", w, h, s.area.w, s.area.h);
     return;
   }
-  const size_t need = static_cast<size_t>(stride_w) * rows * 2;
+  const size_t need = info.bytes;
   if (need > s.picture_size) {
     if (s.picture) free(s.picture);
-    jpeg_decode_memory_alloc_cfg_t out{.buffer_direction = JPEG_DEC_ALLOC_OUTPUT_BUFFER};
-    s.picture = static_cast<uint8_t *>(jpeg_alloc_decoder_mem(need, &out, &s.picture_size));
+    s.picture = picture_engine::output(need, &s.picture_size);
     if (!s.picture) {
       s.picture_size = 0;
       ESP_LOGW(TAG, "no memory for a picture of %dx%d", w, h);
@@ -372,31 +224,28 @@ static void show(Stream &s, size_t length) {
       return;
     }
   }
-  jpeg_decode_cfg_t cfg{};
-  cfg.output_format = JPEG_DECODE_OUT_FORMAT_RGB565;
-  cfg.rgb_order = JPEG_DEC_RGB_ELEMENT_ORDER_BGR;  // little-endian RGB565, as LVGL's own pixels
-  cfg.conv_std = JPEG_YUV_RGB_CONV_STD_BT601;
-  uint32_t written = 0;
   // The decoder works through the 2D-DMA, as the PPA and the panel's copy of each of LVGL's strips do: it decodes
-  // while it holds the glass (above, where the glass is).
-  xSemaphoreTakeRecursive(glass, portMAX_DELAY);
+  // while it holds the glass (glass.h).
+  glass::hold();
   if (s.stopping) {
-    xSemaphoreGiveRecursive(glass);
+    glass::release();
     return;
   }
   const int64_t t0 = esp_timer_get_time();
-  const esp_err_t decoded = jpeg_decoder_process(decoder, &cfg, s.input, length, s.picture, s.picture_size, &written);
+  const bool decoded = picture_engine::decode_into(s.input, length, s.picture, s.picture_size);
   const int64_t t1 = esp_timer_get_time();
-  xSemaphoreGiveRecursive(glass);
-  if (decoded != ESP_OK) {
+  glass::release();
+  if (!decoded) {
     s.skipped++;
     return;
   }
   if (s.shown == 0)
     ESP_LOGD(TAG, "picture %dx%d decoded in %u us, for %dx%d at %d,%d", w, h, (unsigned) (t1 - t0), where.w, where.h,
              where.x, where.y);
-  const size_t glass_size = static_cast<size_t>(panel_w) * panel_h * 2;
+  const glass::Panel panel = glass::panel();
+  const size_t glass_size = static_cast<size_t>(panel.w) * panel.h * 2;
   esp_err_t err = ESP_OK;
+  bool loading = false;
   if (s.look.tile) {
     // The card: the picture cut or fitted into it, on black where it leaves room, then the shade, corners and name.
     const int cw = s.area.w, ch = s.area.h;
@@ -414,33 +263,32 @@ static void show(Stream &s, size_t length) {
     }
     if (!into.covers(cw, ch)) memset(s.canvas, 0, static_cast<size_t>(cw) * ch * 2);
     // Into the card's canvas, not the glass, but through the PPA all the same: with the glass held.
-    xSemaphoreTakeRecursive(glass, portMAX_DELAY);
+    glass::hold();
     err = copy(s, s.picture, stride_w, rows, into.in_x, into.in_y, into.in_w, into.in_h, s.canvas, s.canvas_size, cw,
-               ch, into.out_x, into.out_y, into.sixteenths, 0);
-    xSemaphoreGiveRecursive(glass);
+               ch, into.out_x, into.out_y, into.scale, 0);
+    glass::release();
     if (err == ESP_OK) {
       compose(s.canvas, cw, cw, ch, s.look);
-      const Rect target = on_panel(s.area, s.turn, panel_w, panel_h);
-      xSemaphoreTakeRecursive(glass, portMAX_DELAY);
+      loading = still && lay_loader(s);
+      const Rect target = on_panel(s.area, s.turn, panel.w, panel.h);
+      glass::hold();
       if (!s.stopping) {
-        set_spot(s, s.area);
-        s.armed = true;  // from now on LVGL draws nothing here
-        err = copy(s, s.canvas, cw, ch, 0, 0, cw, ch, frame_buffer, glass_size, panel_w, panel_h, target.x, target.y, 16,
-                   s.turn);
+        glass::place(s.room, s.area);  // from now on LVGL draws nothing here
+        err = copy(s, s.canvas, cw, ch, 0, 0, cw, ch, glass::frame_buffer(), glass_size, panel.w, panel.h, target.x,
+                   target.y, picture_engine::AS_IS, s.turn);
       }
-      xSemaphoreGiveRecursive(glass);
+      glass::release();
     }
   } else {
     // The full view: scaled to fill its room on the way (the app sends the camera's own size where that is smaller).
-    const Rect target = on_panel(where, s.turn, panel_w, panel_h);
-    xSemaphoreTakeRecursive(glass, portMAX_DELAY);
+    const Rect target = on_panel(where, s.turn, panel.w, panel.h);
+    glass::hold();
     if (!s.stopping) {
-      set_spot(s, where);
-      s.armed = true;
-      err = copy(s, s.picture, stride_w, rows, 0, 0, w, h, frame_buffer, glass_size, panel_w, panel_h, target.x,
-                 target.y, sixteenths, s.turn);
+      glass::place(s.room, where);
+      err = copy(s, s.picture, stride_w, rows, 0, 0, w, h, glass::frame_buffer(), glass_size, panel.w, panel.h, target.x,
+                 target.y, scale, s.turn);
     }
-    xSemaphoreGiveRecursive(glass);
+    glass::release();
   }
   if (err != ESP_OK) {
     ESP_LOGW(TAG, "copy to the glass failed: %s", esp_err_to_name(err));
@@ -450,6 +298,11 @@ static void show(Stream &s, size_t length) {
   }
   s.decode_us += static_cast<uint32_t>(t1 - t0);
   s.copy_us += static_cast<uint32_t>(esp_timer_get_time() - t1);
+  s.warming = loading;
+  if (!still && !s.live) {
+    s.live_ms = esphome::millis() - s.started_at;
+    s.live = true;
+  }
   s.shown++;
 }
 
@@ -468,24 +321,33 @@ static void stream(Stream &s) {
     s.failed = true;
     return;
   }
-  auto *chunk = static_cast<uint8_t *>(heap_caps_malloc(CHUNK, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+  // PSRAM first (roomy.h): recv copies into it and no DMA reads it, and internal RAM is what the Wi-Fi link runs short of.
+  auto *chunk = static_cast<uint8_t *>(roomy::allocate(CHUNK));
   if (!chunk) {
     ::close(fd);
     s.failed = true;
     return;
   }
-  Reader reader;
+  // A tile with a loader reads in short waits, so its loader turns between the stills.
+  if (s.under) {
+    timeval step{0, static_cast<suseconds_t>(LOADER_STEP_MS * 1000)};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &step, sizeof(step));
+  }
+  const picture_engine::Limits most = picture_engine::limits();
+  Reader reader(s.look.tile ? most.tile_picture_bytes : most.picture_bytes);
   uint32_t heard = esphome::millis();
   while (!s.stopping) {
     const int n = recv(fd, chunk, CHUNK, 0);
-    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    const int error = errno;
+    turn_loader(s);
+    if (n < 0 && (error == EAGAIN || error == EWOULDBLOCK)) {
       if (esphome::millis() - heard < QUIET_MS) continue;
       ESP_LOGW(TAG, "the stream went quiet");
       s.failed = true;
       break;
     }
     if (n <= 0) {
-      ESP_LOGW(TAG, "the stream ended (%d, errno %d)", n, errno);
+      ESP_LOGW(TAG, "the stream ended (%d, errno %d)", n, error);
       s.failed = true;
       break;
     }
@@ -498,14 +360,24 @@ static void stream(Stream &s) {
           if (audio) return s.sound && length <= SOUND_PART ? s.sound_part : nullptr;
           return length <= s.input_size ? s.input : nullptr;
         },
-        [&s](size_t length, bool audio) {
+        [&s, &reader](size_t length, bool audio) {
           if (!audio) {
-            show(s, length);
+            show(s, length, reader.still());
             return;
           }
-          // Sound: into the buffer the main loop plays from; none of it while muted, and none when it is full.
+          // Sound: into the buffer the main loop plays from; none of it while muted. Whole samples only, so the buffer,
+          // every piece read from it and every write to the speaker stay on a sample's first byte: a speaker one byte
+          // off plays seconds of full-scale noise (a ring on a reTerminal D1001, 2026-10-25), until another odd write
+          // puts it right by chance. So a part goes in whole or not at all, never cut to the room left.
           s.heard = true;
-          if (!s.muted) xStreamBufferSend(s.sound, s.sound_part, length, 0);
+          if (length & 1) s.odd_parts.fetch_add(1, std::memory_order_relaxed);
+          if (s.muted || s.yielded) return;
+          const size_t whole = length & ~static_cast<size_t>(1);
+          // Only this task sends, so the room it saw is there when it sends (the main loop only takes out or empties).
+          if (xStreamBufferSpacesAvailable(s.sound) >= whole)
+            xStreamBufferSend(s.sound, s.sound_part, whole, 0);
+          else
+            s.full_parts.fetch_add(1, std::memory_order_relaxed);
         });
     if (!ok) {
       ESP_LOGW(TAG, "not a stream of pictures (answer %d)", reader.status());
@@ -515,29 +387,25 @@ static void stream(Stream &s) {
     if (!s.answered_ms && reader.status()) s.answered_ms = esphome::millis() - s.started_at;
   }
   ::close(fd);
-  free(chunk);
+  roomy::release(chunk);
 }
 
 static void task_main(void *arg) {
   auto *s = static_cast<Stream *>(arg);
   stream(*s);
+  const bool in_psram = psram_task::in_psram(s->task);  // read before `done`: the main loop frees the stream after it
+  s->stack_left.store(uxTaskGetStackHighWaterMark(nullptr), std::memory_order_relaxed);
   s->done.store(true, std::memory_order_release);
-  vTaskDelete(nullptr);
+  psram_task::finish(in_psram);
 }
 
-Handle open(const std::string &url, const Rect &area, const Look &look, bool sound) {
+Handle open(const std::string &url, const Rect &area, const Look &look, bool sound, audio_owner::Role role) {
   if (!available() || area.empty()) return -1;
   int slot = -1;
   for (int i = 0; i < MAX_STREAMS && slot < 0; ++i)
     if (!streams[i]) slot = i;
   if (slot < 0) return -1;
-  if (!glass) glass = xSemaphoreCreateRecursiveMutex();
-  if (!decoder) {
-    jpeg_decode_engine_cfg_t engine{.intr_priority = 0, .timeout_ms = 200};
-    if (jpeg_new_decoder_engine(&engine, &decoder) != ESP_OK) decoder = nullptr;
-  }
-  if (!frame_buffer && esp_lcd_dpi_panel_get_frame_buffer(panel, 1, &frame_buffer) != ESP_OK) frame_buffer = nullptr;
-  if (!glass || !decoder || !frame_buffer) {
+  if (!picture_engine::start() || !glass::frame_buffer()) {
     ESP_LOGW(TAG, "cannot stream on this panel");
     return -1;
   }
@@ -546,19 +414,24 @@ Handle open(const std::string &url, const Rect &area, const Look &look, bool sou
   s->area = area;
   s->look = look;
   s->look.name = nullptr;
-  s->turn = turn_now();
+  s->turn = glass::turn();
   s->started_at = s->reported_at = esphome::millis();
-  ppa_client_config_t client{};
-  client.oper_type = PPA_OPERATION_SRM;
-  client.max_pending_trans_num = 1;
-  client.data_burst_length = PPA_BURST;
-  jpeg_decode_memory_alloc_cfg_t in{.buffer_direction = JPEG_DEC_ALLOC_INPUT_BUFFER};
-  s->input = static_cast<uint8_t *>(jpeg_alloc_decoder_mem(look.tile ? TILE_PICTURE : MAX_PICTURE, &in, &s->input_size));
-  bool ok = s->input && ppa_register_client(&client, &s->ppa) == ESP_OK;
+  s->input = picture_engine::input(look.tile ? picture_engine::limits().tile_picture_bytes : picture_engine::limits().picture_bytes,
+                                   &s->input_size);
+  s->ppa = picture_engine::client();
+  bool ok = s->input && s->ppa;
   if (ok && sound && has_speaker()) {
-    s->sound = xStreamBufferCreate(SOUND_BUFFER, 1);
-    s->sound_part = static_cast<uint8_t *>(heap_caps_malloc(SOUND_PART, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    s->sound_piece = static_cast<uint8_t *>(heap_caps_malloc(SOUND_PART, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    // The camera's sound between the task and the main loop: its storage in PSRAM (only the task and the speaker's copy
+    // read it), its control inside the chip (see Stream::sound).
+    s->sound_control = static_cast<StaticStreamBuffer_t *>(
+        heap_caps_malloc(sizeof(StaticStreamBuffer_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    // A static stream buffer holds a byte less than its storage (FreeRTOS keeps one free; xStreamBufferCreate adds it
+    // itself): one more, so it holds SOUND_BUFFER, an even count of bytes.
+    s->sound_storage = static_cast<uint8_t *>(roomy::allocate(SOUND_BUFFER + 1));
+    if (s->sound_control && s->sound_storage)
+      s->sound = xStreamBufferCreateStatic(SOUND_BUFFER + 1, 1, s->sound_storage, s->sound_control);
+    s->sound_part = static_cast<uint8_t *>(roomy::allocate(SOUND_PART));
+    s->sound_piece = static_cast<uint8_t *>(roomy::allocate(SOUND_PART));
     ok = s->sound && s->sound_part && s->sound_piece;
   }
   // The name as LVGL drew it, the stream's own copy: its owner may draw the card again meanwhile.
@@ -579,15 +452,50 @@ Handle open(const std::string &url, const Rect &area, const Look &look, bool sou
     free_stream(s);
     return -1;
   }
+  // The loader's square of the card, kept under it while it turns; without the memory the tile simply has none.
+  int lx = 0, ly = 0;
+  if (loader_spot(look, area.w, area.h, lx, ly))
+    s->under = static_cast<uint16_t *>(
+        heap_caps_malloc(static_cast<size_t>(look.loader) * look.loader * 2, MALLOC_CAP_SPIRAM));
+  s->room = glass::reserve(area);
+  if (s->room < 0) {
+    free_stream(s);
+    return -1;
+  }
   streams[slot] = s;
-  if (xTaskCreatePinnedToCore(task_main, "live_view", 6144, s, 5, nullptr, 1) != pdPASS) {
+  if (!psram_task::start(s->task, task_main, "live_view", STACK_BYTES, s, glass::WRITER_PRIORITY, 1)) {
     streams[slot] = nullptr;
     free_stream(s);
     return -1;
   }
-  watch_lvgl();
+  if (s->sound || role == audio_owner::Role::DOORBELL) {
+    // The camera's sound claims the speaker (audio_owner.h) in the role its opener gave: as CAMERA_SOUND music pauses
+    // for it, and a voice session or a doorbell takes it and gives it back, since the camera stays open; as DOORBELL
+    // (the view a ring opened) nothing takes it, and the ring takes the microphone too, sound or not: the wake word
+    // rests while someone is at the door (and the talk, section 5 of PLATFORM_PLAN.md, will speak into it). Given back in
+    // tick when the stream ends: a ring whose stream ends while its view stays (stills after its third break) lets the
+    // wake word listen again under the open ring, until module_doorbell holds the claim for as long as the ring is up
+    // (PLATFORM_PLAN.md 3.4).
+    s->sound_role = role;
+    s->claimed = role == audio_owner::Role::DOORBELL ? audio_owner::Side::BOTH : audio_owner::Side::OUT;
+    s->claims = true;
+    audio_owner::Claim claim;
+    claim.role = role;
+    claim.id = static_cast<uint32_t>(slot);
+    claim.lost = [slot]() {
+      Stream *t = streams[slot];
+      if (!t || !t->sound) return;
+      t->yielded = true;
+      xStreamBufferReset(t->sound);  // as mute() does: what waited is stale by the time the speaker is back
+    };
+    claim.regained = [slot]() {
+      if (Stream *t = streams[slot]) t->yielded = false;
+    };
+    audio_owner::the().claim(s->claimed, claim);
+  }
+  glass::watch();
   ESP_LOGI(TAG, "stream %d into %dx%d at %d,%d%s, turned %d, PPA bursts of %d bytes", slot, area.w, area.h, area.x, area.y,
-           look.tile ? (look.contain ? " (a tile, whole picture)" : " (a tile)") : "", s->turn, PPA_BURST_BYTES);
+           look.tile ? (look.contain ? " (a tile, whole picture)" : " (a tile)") : "", s->turn, picture_engine::limits().burst_bytes);
   return slot;
 }
 
@@ -609,10 +517,26 @@ static void speak(Stream &s, bool on) {
     return;
   }
   if (!s.speaking) {
-    if (xStreamBufferBytesAvailable(s.sound) < SOUND_RATE * 2 * 150 / 1000) return;
+    if (xStreamBufferBytesAvailable(s.sound) < SOUND_LOW) return;
     speaker->set_audio_stream_info(esphome::audio::AudioStreamInfo(16, 1, SOUND_RATE));
     speaker->start();
     s.speaking = true;
+  }
+  // Behind the picture (a burst after a hiccup in the stream): the oldest goes, down to SOUND_LOW, the rest of the piece
+  // the speaker had not taken first. Every tick, whatever the speaker takes, so a speaker that is full does not hold it
+  // back until the buffer runs full. Whole samples: the buffer holds only those, both marks are even, and a piece goes
+  // only from a sample's first byte.
+  const size_t held = xStreamBufferBytesAvailable(s.sound);
+  if (held > SOUND_HIGH && (s.piece_at & 1) == 0) {
+    ++s.caught_up;
+    s.caught_up_bytes += s.piece_left;
+    s.piece_left = 0;
+    for (size_t drop = held - SOUND_LOW; drop > 0;) {
+      const size_t n = xStreamBufferReceive(s.sound, s.sound_piece, std::min(drop, SOUND_PART), 0);
+      if (n == 0) break;
+      s.caught_up_bytes += n;
+      drop -= n;
+    }
   }
   for (int rounds = 0; rounds < 8; ++rounds) {
     if (s.piece_left == 0) {
@@ -620,7 +544,10 @@ static void speak(Stream &s, bool on) {
       s.piece_at = 0;
       if (s.piece_left == 0) return;
     }
+    // Every piece is whole samples (the task writes only those); a write the speaker took an odd number of bytes of goes
+    // on from the very next byte, the other half of that sample first, so its count is even again.
     const size_t taken = speaker->play(s.sound_piece + s.piece_at, s.piece_left, 0);
+    if (taken & 1) ++s.odd_taken;
     s.piece_at += taken;
     s.piece_left -= taken;
     if (taken == 0) return;  // the speaker's own buffer is full: the rest next tick
@@ -631,15 +558,19 @@ static void speak(Stream &s, bool on) {
 #endif
 }
 
+size_t held_bytes() {
+  size_t held = 0;
+  for (auto *s : streams)
+    if (s && !s->stopping) held += s->input_size + static_cast<size_t>(std::max(0, s->area.w)) * std::max(0, s->area.h) * 2;
+  return held;
+}
+
 void close(Handle handle) {
   if (handle < 0 || handle >= MAX_STREAMS || !streams[handle]) return;
   Stream &s = *streams[handle];
   s.stopping = true;
-  // A copy on its way finishes; none starts after this, and LVGL draws there again.
-  xSemaphoreTakeRecursive(glass, portMAX_DELAY);
-  const bool was_armed = s.armed.exchange(false);
-  xSemaphoreGiveRecursive(glass);
-  if (was_armed) invalidate(lv_rect(s.area));
+  // A copy on its way finishes; none starts after this, and LVGL draws there again (glass::disarm, under the glass).
+  glass::disarm(s.room, true);
 }
 
 static void report(int slot, Stream &s, uint32_t now, bool last) {
@@ -651,7 +582,7 @@ static void report(int slot, Stream &s, uint32_t now, bool last) {
            "the panel ran dry %u times since boot",
            last ? "ended" : "stream", slot, frames * 1000.0f / span, (unsigned) ((bytes - s.reported_bytes) / span),
            frames ? (decode - s.reported_decode) / 1000.0f / frames : 0.0f,
-           frames ? (copied - s.reported_copy) / 1000.0f / frames : 0.0f, (unsigned) s.skipped, (unsigned) panel_misses);
+           frames ? (copied - s.reported_copy) / 1000.0f / frames : 0.0f, (unsigned) s.skipped, (unsigned) glass::misses());
   s.reported_at = now;
   s.reported_shown = shown;
   s.reported_bytes = bytes;
@@ -661,44 +592,44 @@ static void report(int slot, Stream &s, uint32_t now, bool last) {
 
 void tick(const std::function<void(Handle, Event)> &tell) {
   const uint32_t now = esphome::millis();
-  const int turn = turn_now();
-  if (available()) count_misses();
+  const int turn = glass::turn();
+  glass::tick();
   for (int slot = 0; slot < MAX_STREAMS; ++slot) {
     Stream *s = streams[slot];
     if (!s) continue;
     if (s->done.load(std::memory_order_acquire)) {
+      const bool in_psram = psram_task::in_psram(s->task);
+      psram_task::reap(s->task);  // its task deleted (a stack in PSRAM) before anything of the stream is freed
       speak(*s, false);
       report(slot, *s, now, true);
+      ESP_LOGI(TAG, "ended %d: its task's stack was in %s, %u of %u bytes of it never used", slot,
+               in_psram ? "PSRAM" : "internal RAM", (unsigned) s->stack_left.load(std::memory_order_relaxed),
+               (unsigned) STACK_BYTES);
+      if (s->sound)
+        ESP_LOGI(TAG, "ended %d: its sound caught up with the picture %u times (%u bytes of the oldest left out), had %u "
+                 "parts left out for a full buffer, %u parts of an odd length and %u odd writes to the speaker", slot,
+                 (unsigned) s->caught_up, (unsigned) s->caught_up_bytes,
+                 (unsigned) s->full_parts.load(std::memory_order_relaxed),
+                 (unsigned) s->odd_parts.load(std::memory_order_relaxed), (unsigned) s->odd_taken);
       const bool turned = s->turn != turn, ended = s->stopping && !s->failed;
-      const bool was_armed = s->armed.exchange(false);
+      glass::disarm(s->room, false);  // its task has ended: nothing of it copies, and LVGL draws the room again
       streams[slot] = nullptr;
-      if (was_armed) invalidate(lv_rect(s->area));
       // A full view's stream gone for good: LVGL draws the whole glass once more, now that its task decodes and copies
       // nothing. Now and then the view's top bar, the back key and the name, stayed over the page after the camera
       // closed while the picture's room below it was drawn again, until something else drew there (2026-10-15, a P4
       // board). The redraw at closing comes while the task may still be busy with its last picture, and its first strip
       // is that bar; this one comes after. The whole glass, as the view covered all of it.
-      if (!s->look.tile) {
-        const lv_area_t whole = {0, 0, lv_display_get_horizontal_resolution(lv_display_get_default()) - 1,
-                                 lv_display_get_vertical_resolution(lv_display_get_default()) - 1};
-        invalidate(whole);
-      }
+      if (!s->look.tile) glass::redraw_all();
+      if (s->claims) audio_owner::the().release(s->claimed, s->sound_role, static_cast<uint32_t>(slot));
       free_stream(s);
-      unwatch_lvgl_when_alone();
       tell(slot, turned ? Event::TURNED : ended ? Event::ENDED : Event::FAILED);
       continue;
     }
     // Its picture lies elsewhere now, or at another size: LVGL draws where it lay again (but where it lies now).
-    if (s->armed) {
-      const Rect spot = spot_of(*s);
-      if (!(spot == s->spot_told)) {
-        if (!s->spot_told.empty()) invalidate(lv_rect(s->spot_told));
-        s->spot_told = spot;
-      }
-    }
+    glass::follow(s->room);
     // The glass turned (a setting): this stream's place is gone; its owner asks again for its new shape.
     if (s->turn != turn && !s->stopping) close(slot);
-    speak(*s, !s->stopping && !s->muted);
+    speak(*s, !s->stopping && !s->muted && !s->yielded);
     if (!s->told_sound && s->heard) {
       s->told_sound = true;
       tell(slot, Event::SOUND);
@@ -711,30 +642,13 @@ void tick(const std::function<void(Handle, Event)> &tell) {
                (unsigned) s->connected_ms, (unsigned) s->answered_ms, (unsigned) s->first_bytes_ms);
       tell(slot, Event::FIRST);
     }
+    if (s->told_first && !s->told_live && s->live.load()) {
+      s->told_live = true;
+      ESP_LOGI(TAG, "stream %d: live %u ms after it started", slot, (unsigned) s->live_ms);
+      tell(slot, Event::LIVE);
+    }
   }
 }
 
 }  // namespace live_view
-
-// ESP-IDF makes the DPI panel for ESPHome's display (mipi_dsi, or the repo's mipi_dsi_v3 copy): its handle and its
-// size are picked up here as they are made (-Wl,--wrap=esp_lcd_new_panel_dpi, smart_display/__init__.py on a P4).
-extern "C" esp_err_t __real_esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_panel_config_t *config,
-                                                   esp_lcd_panel_handle_t *made);
-extern "C" esp_err_t __wrap_esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_panel_config_t *config,
-                                                   esp_lcd_panel_handle_t *made) {
-  const esp_err_t err = __real_esp_lcd_new_panel_dpi(bus, config, made);
-  if (err == ESP_OK && made && config) live_view::panel_made(*made, config);
-  return err;
-}
-// Every PPA client on this screen, ESPHome's for LVGL's turned flushes included, moves in PPA_BURST bytes a burst, so
-// the panel's DMA gets its turn on the bus ("The panel's share of the memory bus" above). The streams' own clients ask
-// for it already; a client that asks for less keeps its own.
-extern "C" esp_err_t __real_ppa_register_client(const ppa_client_config_t *config, ppa_client_handle_t *ret_client);
-extern "C" esp_err_t __wrap_ppa_register_client(const ppa_client_config_t *config, ppa_client_handle_t *ret_client) {
-  if (!config) return __real_ppa_register_client(config, ret_client);
-  ppa_client_config_t own = *config;
-  // A zeroed config means ESP-IDF's default, the longest burst.
-  if (own.data_burst_length == 0 || own.data_burst_length > live_view::PPA_BURST) own.data_burst_length = live_view::PPA_BURST;
-  return __real_ppa_register_client(&own, ret_client);
-}
 #endif

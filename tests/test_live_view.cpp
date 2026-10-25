@@ -8,6 +8,19 @@
 #include <vector>
 
 using namespace live_view;
+using picture_engine::Cut;
+using picture_engine::cut;
+using picture_engine::scaled;
+
+// The most a part may be, as a stream is opened with it (the P4 engine's full view: picture_engine::limits()).
+constexpr size_t MOST = 1024 * 1024;
+
+// fit as live_view asks it, for a room of the screen.
+static Rect fit(int w, int h, const Rect &area, int &scale) {
+  const picture_engine::Fit f = picture_engine::fit(w, h, area.x, area.y, area.w, area.h);
+  scale = f.scale;
+  return f.empty() ? Rect{} : Rect{f.x, f.y, f.w, f.h};
+}
 
 static std::string part(const std::string &body) {
   return "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body + "\r\n";
@@ -15,7 +28,7 @@ static std::string part(const std::string &body) {
 
 // Feeds `stream` in pieces of `step` bytes; returns the pictures that came whole, or "!" once it broke.
 static std::vector<std::string> read(const std::string &stream, size_t step, size_t room = 64) {
-  Reader reader;
+  Reader reader(MOST);
   std::vector<std::string> pictures;
   std::vector<uint8_t> buffer(room);
   for (size_t at = 0; at < stream.size(); at += step) {
@@ -55,8 +68,83 @@ static void framing() {
   assert(read("HTTP/1.0 404 Not Found\r\n\r\nUnknown link", 4) == std::vector<std::string>{"!"});
   assert(read(head + "--frame\r\nContent-Type: image/jpeg\r\n\r\nxyz", 4) == std::vector<std::string>{"!"});
   assert(read(head + std::string(MAX_HEAD + 10, 'h'), 100).back() == "!");
-  // A part over MAX_PICTURE breaks it too: no app sends one, so the stream is not one of pictures.
-  assert(read(head + "--frame\r\nContent-Length: " + std::to_string(MAX_PICTURE + 1) + "\r\n\r\n", 9).back() == "!");
+  // A part over the most a stream was opened with breaks it too: no app sends one, so it is not a stream of pictures.
+  assert(read(head + "--frame\r\nContent-Length: " + std::to_string(MOST + 1) + "\r\n\r\n", 9).back() == "!");
+}
+
+// An engine without a decoder opens its streams with 0: no part at all, never "no limit".
+static void none() {
+  Reader reader(0);
+  const std::string stream = "HTTP/1.0 200 OK\r\n\r\n" + part("x");
+  uint8_t room[8];
+  assert(!reader.feed(reinterpret_cast<const uint8_t *>(stream.data()), stream.size(),
+                      [&](size_t, bool) { return room; }, [](size_t, bool) {}));
+}
+
+// Until it is live: the stills before the camera's stream are marked, part by part, in any pieces.
+static void marking() {
+  const std::string head = "HTTP/1.0 200 OK\r\nContent-Type: multipart/x-mixed-replace;boundary=frame\r\n\r\n";
+  const std::string still = "--frame\r\nContent-Type: image/jpeg\r\nX-Picture: still\r\nContent-Length: 5\r\n\r\nstill\r\n";
+  const std::string stream = head + still + still + part("live") + part("live2");
+  for (size_t step : {stream.size(), size_t(1), size_t(5)}) {
+    Reader reader(MOST);
+    uint8_t buffer[64];
+    std::vector<bool> marks;
+    for (size_t at = 0; at < stream.size(); at += step) {
+      const size_t n = std::min(step, stream.size() - at);
+      assert(reader.feed(reinterpret_cast<const uint8_t *>(stream.data() + at), n,
+                         [&](size_t, bool) -> uint8_t * { return buffer; },
+                         [&](size_t, bool) { marks.push_back(reader.still()); }));
+    }
+    assert((marks == std::vector<bool>{true, true, false, false}));
+  }
+}
+
+// The loader in a live tile's corner while its stills show: where it lies, and the spinner it draws as it turns.
+static void loading() {
+  Look look;
+  look.tile = true;
+  look.loader = 40;
+  look.loader_margin = 8;
+  look.loader_arc = 6;
+  look.loader_ring = 0x39E7;
+  look.loader_turn = 0x001F;
+  int x = 0, y = 0;
+  // In the top right corner of a card, and none in a card too small for it or in the full view.
+  assert(loader_spot(look, 300, 200, x, y) && x == 300 - 8 - 40 && y == 8);
+  assert(!loader_spot(look, 300, 55, x, y));
+  Look view = look;
+  view.tile = false;
+  assert(!loader_spot(view, 1280, 720, x, y));
+  look.loader = 0;
+  assert(!loader_spot(look, 300, 200, x, y));
+  look.loader = 40;
+  // Drawn into a card of 100 x 60 at its spot, over white.
+  const int w = 100, h = 60;
+  std::vector<uint16_t> px(w * h, 0xFFFF);
+  assert(loader_spot(look, w, h, x, y));
+  auto at = [&](int i, int j) { return px[static_cast<size_t>(y + j) * w + x + i]; };
+  draw_loader(px.data(), w, x, y, look, 0);
+  // Outside its round shade nothing changes: the card around it and the square's own corners.
+  assert(px[0] == 0xFFFF && px[w * h - 1] == 0xFFFF && at(0, 0) == 0xFFFF && at(39, 39) == 0xFFFF);
+  // Its middle is shaded, not black; at the start of its turn the arc runs from three o'clock clockwise, so it lies
+  // under the middle and the ring alone above it.
+  assert(at(20, 20) != 0xFFFF && at(20, 20) != 0x0000);
+  assert(at(20, 31) == 0x001F && at(20, 8) == 0x39E7);
+  // Half a turn on (LVGL's 900 ms), the arc has gone round: above the middle, and the ring below it.
+  std::fill(px.begin(), px.end(), 0xFFFF);
+  draw_loader(px.data(), w, x, y, look, LOADER_TURN_MS / 2);
+  assert(at(20, 8) == 0x001F && at(20, 31) == 0x39E7);
+  // The arc is about LOADER_ARC of the ring at the start: count the ring's pixels wholly in one colour or the other.
+  std::fill(px.begin(), px.end(), 0xFFFF);
+  draw_loader(px.data(), w, x, y, look, 0);
+  int arc = 0, ring = 0;
+  for (int j = 0; j < 40; ++j)
+    for (int i = 0; i < 40; ++i) arc += at(i, j) == 0x001F, ring += at(i, j) == 0x39E7;
+  const float share = static_cast<float>(arc) / (arc + ring);
+  assert(share > 0.5f && share < 0.66f);
+  // Nothing outside its square: the rows over and under it are white.
+  for (int i = 0; i < w; ++i) assert(px[static_cast<size_t>(y - 1) * w + i] == 0xFFFF && px[static_cast<size_t>(y + 40) * w + i] == 0xFFFF);
 }
 
 static void links() {
@@ -98,7 +186,7 @@ static void placing() {
     }
   }
   assert(fit(0, 10, area, s).empty() && s == 0);
-  assert(fit(MAX_SIDE + 1, 100, area, s).empty());
+  assert(fit(picture_engine::MAX_SIDE + 1, 100, area, s).empty());
   assert(box_text(area) == "1280x728");
 }
 
@@ -106,21 +194,21 @@ static void placing() {
 static void cutting() {
   // The app sends a filling picture at the card's size or a little more: cut at its own scale, the middle of it.
   Cut c = cut(434, 260, 434, 244, false);
-  assert(c.ok && c.sixteenths == 16 && c.in_x == 0 && c.in_y == 8 && c.in_w == 434 && c.in_h == 244 && c.covers(434, 244));
+  assert(c.ok && c.scale == 16 && c.in_x == 0 && c.in_y == 8 && c.in_w == 434 && c.in_h == 244 && c.covers(434, 244));
   // A substream smaller than the card is scaled up until it covers it, in sixteenths, and cut to it.
   c = cut(512, 288, 868, 488, false);
-  assert(c.ok && c.sixteenths == 28 && c.out_x >= 0 && c.out_y >= 0 && c.out_w <= 868 && c.out_h <= 488);
+  assert(c.ok && c.scale == 28 && c.out_x >= 0 && c.out_y >= 0 && c.out_w <= 868 && c.out_h <= 488);
   assert(868 - c.out_w <= 2 && 488 - c.out_h <= 2);
   // A larger one is scaled down: the least scale that still covers.
   c = cut(1920, 1080, 434, 244, false);
-  assert(c.ok && c.sixteenths == 4 && scaled(1920, 4) >= 434 && scaled(1080, 4) >= 244);
+  assert(c.ok && c.scale == 4 && scaled(1920, 4) >= 434 && scaled(1080, 4) >= 244);
   // Whole: as large as fits, in the middle, the rest of the card black.
   c = cut(1920, 1080, 434, 434, true);
   assert(c.ok && c.in_w == 1920 && c.in_h == 1080 && c.out_w <= 434 && c.out_x + c.out_w <= 434 && c.out_y > 0 && !c.covers(434, 434));
   assert(!cut(0, 10, 100, 100, false).ok && !cut(10, 10, 0, 100, true).ok);
 }
 
-// What a live tile lays over its picture, as tile_art.py does: the shade, the corners, the name.
+// What a live tile lays over its picture, as picture_paint.py does: the shade, the corners, the name.
 static void composing() {
   const int w = 40, h = 20;
   std::vector<uint16_t> px(w * h, 0xFFFF);  // white
@@ -150,7 +238,10 @@ static void composing() {
 }
 
 int main() {
+  none();
   framing();
+  marking();
+  loading();
   links();
   panel();
   placing();

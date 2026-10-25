@@ -1,0 +1,240 @@
+"""How a live camera travels to a screen (docs/CAMERA.md, "Live on the P4 boards"; docs/PICTURE_ARCHITECTURE.md,
+section 4).
+
+A P4 screen opens a camera full screen and asks for it with `live`: the room below its top bar, "1280x728". This app
+answers with a link on its camera port, `/camera/<token>.mjpeg`: a stream of baseline JPEGs (multipart/x-mixed-replace,
+one picture a part with its Content-Length). The screen decodes each in its hardware JPEG decoder and its PPA scales it
+to fill that room, so this app never makes a picture larger than the camera's own, and every picture is the newest the
+camera gave when the screen had taken the last one: a slow Wi-Fi gets fewer pictures, never older ones.
+
+The pictures come from the camera's source (camera_source), made for the screen's room (live_pictures). Here are the
+links on the camera port, the stream each serves with the camera's sound beside its pictures, and the pace a camera tile
+set to Live is sent.
+"""
+import asyncio
+import logging
+import secrets
+import socket
+import time
+
+import camera_source
+import live_pictures
+
+LOG = logging.getLogger(__name__)
+
+MAX_STREAMS = 8           # streams at once: a page of live tiles and a camera full screen, of every screen together
+LINK_SECONDS = 60         # a link nobody opened for this long goes; a stream keeps its link while it runs
+FRAME_SECONDS = 15        # nothing new from the camera for this long: the stream ends and the screen asks again
+DEFAULT_PACE = 15         # picture_sources.TILE_PACE: the pace of a camera tile on a screen that does not stream
+SOUND_QUEUE = 50          # parts of sound that may wait for a screen (about a second); older ones go
+SEND_BUFFER = 65536       # what may wait in this host's socket for a screen: a picture, not a queue of them
+# What a screen that streams says in its hello (live_view.h): a camera tile set to Live, pace 0, streams there, and Live
+# is the default pace of its camera tiles.
+SCREEN_FEATURE = 'live'
+LIVE_PACE = 0
+
+
+def live_pace(message, tile, features):
+    """A camera tile set to Live (pace 0, firmware dev) in a tile's message: a screen whose hello says it streams (or
+    the editor's preview, `features` None) gets pace 0, also for a tile without a pace of its own, where Live is the
+    default; any other screen gets the pace every camera tile has by default, whatever the tile says."""
+    options = tile.get('options') or {}
+    if not tile.get('entity', '').startswith('camera.') or options.get('display') != 'live':
+        return
+    refresh = options.get('refresh')
+    if refresh not in (None, LIVE_PACE):
+        return
+    streams = features is None or SCREEN_FEATURE in features
+    if streams:
+        message.setdefault('o', {})['refresh'] = LIVE_PACE
+    elif refresh == LIVE_PACE:
+        message.setdefault('o', {})['refresh'] = DEFAULT_PACE
+
+
+class Link:
+    __slots__ = ('entity', 'box', 'used', 'streaming', 'made', 'cover', 'sound', 'warm', 'screen', 'tile')
+
+    def __init__(self, entity, box, now, cover=False, sound=False, warm=False, screen=None, tile=False):
+        self.entity, self.box, self.used, self.streaming, self.made = entity, box, now, 0, now
+        self.cover, self.sound, self.warm, self.screen, self.tile = cover, sound, warm, screen, tile
+
+
+class LiveFeed:
+    """The live links and their sources. `fetch(entity)` is a snapshot (the app's own camera_proxy fetch),
+    `websocket()` an authenticated websocket of Home Assistant (an async context manager), `streams(entity)` whether
+    the camera has a stream."""
+
+    def __init__(self, fetch, websocket, streams, clock=time.monotonic, live_tiles=None):
+        self.fetch, self.websocket, self.streams, self.clock = fetch, websocket, streams, clock
+        # `live_tiles(screen)`: how many live tiles that screen streams at once, from its hello (firmware hw.h, the app's
+        # page_delivery.caps_of), or None for a screen that did not say (an older firmware, which keeps its own count).
+        self.live_tiles = live_tiles or (lambda screen: None)
+        self.links, self.sources = {}, {}
+        # Each source's pictures (live_pictures.Pictures), made once per frame and room for every screen that watches it.
+        self.pictures = {}
+
+    def prune(self):
+        now = self.clock()
+        for token in [t for t, link in self.links.items() if not link.streaming and now - link.used > LINK_SECONDS]:
+            del self.links[token]
+
+    def link(self, entity, box, cover=False, sound=False, warm=False, screen=None, tile=False):
+        """A new link's token: the full view's (`box` its room, `sound` with the camera's sound for a screen with a
+        speaker), or a live `tile`'s (`box` its card, `cover` when its picture fills the card rather than showing whole,
+        `warm` when its screen has a speaker: the camera's sound comes along in the source, for the full view). `screen`
+        is the inbox of the screen that asked."""
+        self.prune()
+        token = secrets.token_urlsafe(18)
+        self.links[token] = Link(entity, box, self.clock(), cover, sound, warm, screen, tile)
+        return token
+
+    def hold(self, link):
+        """The cameras the live tiles of `link`'s screen showed until a moment ago, kept running while its full view
+        streams: a screen stops its tiles' streams under a camera full screen, and they are back at once when it closes,
+        rather than after the seconds a WebRTC session takes to start (2026-10-10, the D1001). For as long as the full
+        view streams, as the tiles cost while they were on the glass; then the usual camera_source.LINGER_SECONDS."""
+        now, held = self.clock(), []
+        if link.tile or link.screen is None:
+            return held
+        for other in self.links.values():
+            if not other.tile or other.screen != link.screen or other.entity == link.entity:
+                continue
+            if not other.streaming and now - other.used >= camera_source.LINGER_SECONDS:
+                continue
+            source = self.sources.get(other.entity)
+            if source is None or source in held or source.task is None or source.task.done():
+                continue
+            source.viewers += 1
+            source.idle_since = None
+            held.append(source)
+        return held
+
+    @staticmethod
+    def let_go(held):
+        for source in held:
+            source.viewers -= 1
+            if not source.viewers:
+                source.idle_since = time.monotonic()
+
+    def streaming(self):
+        return sum(link.streaming for link in self.links.values())
+
+    def tiles_streaming(self, screen):
+        """How many live tiles of `screen` stream now (the full view is not a tile)."""
+        return sum(link.streaming for link in self.links.values() if link.tile and link.screen == screen)
+
+    async def latest(self, entity, fresh=2.0):
+        """The JPEG of a camera's newest frame while a stream of it runs (docs/PICTURES.md: one source per camera for
+        stills and streams), at the camera's own size up to MAX_SIDE; None while none runs or its last frame is older than
+        `fresh` seconds, and the caller takes Home Assistant's snapshot."""
+        source = self.sources.get(entity)
+        if source is None or source.task is None or source.task.done() or source.frame is None:
+            return None
+        frame = source.frame
+        if time.monotonic() - frame.at > fresh:
+            return None
+        if frame.jpeg is not None:
+            return frame.jpeg
+        return await self.pictures_of(entity).picture(frame, (live_pictures.MAX_SIDE, live_pictures.MAX_SIDE))
+
+    def source(self, entity):
+        source = self.sources.get(entity)
+        if source is None or (source.task and source.task.done() and not source.viewers):
+            source = self.sources[entity] = camera_source.Source(self, entity, self.streams(entity))
+            self.pictures[entity] = live_pictures.Pictures()
+        return source
+
+    def pictures_of(self, entity):
+        return self.pictures.setdefault(entity, live_pictures.Pictures())
+
+    async def serve(self, request, token):
+        from aiohttp import web
+        link = self.links.get(token)
+        if link is None:
+            return web.Response(status=404, text='Unknown link')
+        if self.streaming() >= MAX_STREAMS:
+            return web.Response(status=503, text='Too many live cameras')
+        # A screen's own count (hw.h LIVE_TILES, docs/PLATFORM_PLAN.md 4.1): its fifth live tile is refused here as the
+        # firmware refuses it there, so a screen whose firmware and app disagree never streams more than the lower says.
+        cap = self.live_tiles(link.screen) if link.tile and link.screen is not None else None
+        if cap is not None and self.tiles_streaming(link.screen) >= cap:
+            return web.Response(status=503, text=f'This screen plays {cap} cameras live at once')
+        link.streaming += 1
+        source = self.source(link.entity)
+        jpegs = self.pictures_of(link.entity)
+        source.wants_sound = source.wants_sound or link.sound or link.warm
+        source.viewers += 1
+        source.idle_since = None
+        source.start()
+        held = self.hold(link)
+        response = web.StreamResponse(headers={'Content-Type': 'multipart/x-mixed-replace;boundary=frame',
+                                               'Cache-Control': 'no-cache'})
+        sent = size = 0
+        began = self.clock()
+        writing = asyncio.Lock()
+        sound = asyncio.Queue(maxsize=SOUND_QUEUE) if link.sound else None
+
+        async def write(head, body):
+            async with writing:
+                await response.write(head + body + b'\r\n')
+
+        async def pictures():
+            nonlocal sent, size
+            last = 0
+            while True:
+                frame = await source.next(last, FRAME_SECONDS)
+                if frame is None or request.transport is None:
+                    return
+                last = frame.number
+                jpeg = await jpegs.picture(frame, link.box, link.cover)
+                if not jpeg:
+                    continue
+                await write(b'--frame\r\nContent-Type: image/jpeg\r\n%sContent-Length: %d\r\n\r\n'
+                            % (b'X-Picture: still\r\n' if frame.still else b'', len(jpeg)), jpeg)
+                if not sent:
+                    LOG.info('Live %s: first picture %.1f s after the link went out (the screen came %.1f s after it); '
+                             'its source: %s', link.entity, self.clock() - link.made, began - link.made,
+                             ', '.join(f'{what} {at:.1f} s' for what, at in sorted(source.marks.items(), key=lambda m: m[1]))
+                             or 'running already')
+                sent += 1
+                size += len(jpeg)
+                # The next picture is made once this one has left this host: the newest, never a queue of old ones.
+                while request.transport is not None and request.transport.get_write_buffer_size():
+                    await asyncio.sleep(0.005)
+
+        async def sounds():
+            # As it comes, a few parts at once: the sound never waits for a picture's turn.
+            while True:
+                data = await sound.get()
+                while not sound.empty() and len(data) < 3200:
+                    data += sound.get_nowait()
+                await write(b'--frame\r\nContent-Type: audio/x-s16le;rate=%d\r\nContent-Length: %d\r\n\r\n'
+                            % (camera_source.SOUND_RATE, len(data)), data)
+
+        listening = None
+        try:
+            await response.prepare(request)
+            sock = request.transport.get_extra_info('socket') if request.transport else None
+            if sock is not None:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SEND_BUFFER)
+            if sound is not None:
+                source.listen(sound)
+                listening = asyncio.create_task(sounds())
+            await pictures()
+        except (ConnectionResetError, ConnectionError, asyncio.CancelledError):
+            pass
+        finally:
+            if listening is not None:
+                listening.cancel()
+                source.unlisten(sound)
+            link.streaming -= 1
+            link.used = self.clock()
+            self.let_go(held)
+            source.viewers -= 1
+            if not source.viewers:
+                source.idle_since = time.monotonic()
+            seconds = max(0.001, self.clock() - began)
+            LOG.info('Live %s (%s): %d pictures in %.0f s, %.1f a second, %d KB a picture, %.1f ms CPU to make one',
+                     link.entity, source.route, sent, seconds, sent / seconds, size // max(1, sent) // 1024,
+                     jpegs.made_ms / max(1, jpegs.made))
+        return response

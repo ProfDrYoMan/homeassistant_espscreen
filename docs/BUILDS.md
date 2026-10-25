@@ -41,6 +41,11 @@ What is asked for a profile that already waits joins that build (`Build.join`):
 
 What a person follows (`attended`) never joins and is never joined. The same request twice (a second click) waits once.
 
+A plugin build whose plugin parts changed starts from an empty build folder (`Build.fresh`, `Firmware.clean_build`),
+and so does the build it joins. ESPHome never takes a file it wrote into the build folder away again (it wipes the
+folder only when a component it had is gone), so a part that needs what an earlier build left a placeholder for would
+find the placeholder (docs/CAMERA.md, Screen camera's video). The compile cache outside the folder stays.
+
 ## Rounds
 
 Update all and the nightly round are a `Round`: one build that fails leaves the builds of its round that still wait out

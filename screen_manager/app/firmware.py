@@ -241,7 +241,12 @@ class Firmware:
         if not path.exists():
             return {'state': 'new', 'missing': ['wifi_ssid', 'wifi_password']}
         try:
-            values = yaml.safe_load(path.read_text())
+            text = path.read_text()
+            values = yaml.safe_load(text)
+            # An empty file, or one of comments only (as ESPHome's Device Builder leaves it), has no keys yet, as ESPHome
+            # reads it too (#263). A document of its own, even `~` or `[]`, is not a file of secrets and stays untouched.
+            if values is None and yaml.compose(text) is None:
+                values = {}
             if not isinstance(values, dict):
                 return {'state': 'invalid'}
             missing = [key for key in ('wifi_ssid', 'wifi_password')
@@ -289,10 +294,18 @@ class Firmware:
                 text = pattern.sub(lambda match: line, text, count=1)
             else:
                 text = text + ('' if not text or text.endswith('\n') else '\n') + line + '\n'
-        check = yaml.safe_load(text)
+        check = self._parsed(text)
         if not isinstance(check, dict) or any(check.get(key) != value for key, value in values.items()):
             raise ValueError(t('addon.errors.firmware.wifi_not_set'))
         self._write_secrets(path, text)
+
+    @staticmethod
+    def _parsed(text):
+        # The file as it would be written: a text the appended lines made unreadable is never written, and says so.
+        try:
+            return yaml.safe_load(text)
+        except yaml.YAMLError:
+            return None
 
     def change_wifi(self, data):
         """Another network or password (app 0.4.32): both lines in secrets.yaml replaced in place, every other line and
@@ -312,7 +325,7 @@ class Firmware:
                 text = pattern.sub(lambda match: line, text, count=1)
             else:
                 text = text + ('' if not text or text.endswith('\n') else '\n') + line + '\n'
-        check = yaml.safe_load(text)
+        check = self._parsed(text)
         if not isinstance(check, dict) or check.get('wifi_ssid') != ssid or check.get('wifi_password') != password:
             raise ValueError(t('addon.errors.firmware.wifi_not_set'))
         self._write_secrets(path, text)
@@ -593,6 +606,16 @@ class Firmware:
         self._atomic_write(profile, updated.replace('\n', newline))
         self._names.pop(profile.name, None)
         return True
+
+    async def clean_build(self, name):
+        """An empty build folder for this profile's next build (BuildQueue, a build marked `fresh`): the build folder is
+        this app's own (/data/build/<profile>, build_env), and ESPHome makes it anew, as after its own Clean. The compile
+        cache outside it stays, so the build takes minutes, not the first build's quarter of an hour."""
+        build = self.data / 'build' / self.profile(name).name.removesuffix('.yaml')
+        if build.is_dir() and not build.is_symlink():
+            self.logs.append('A plugin part changed: this build starts from an empty build folder.')
+            await asyncio.to_thread(shutil.rmtree, build, True)
+            LOG.info('Build folder of %s emptied for a changed plugin part', name)
 
     def image_size(self, name):
         """The size in bytes of the image this profile's last build sends over Wi-Fi, or None when there is none."""

@@ -116,6 +116,8 @@ const pictureChoices = (key: "fit" | "overlay") => offer(key, rules.picture[key]
 // A screen that streams a camera live (a P4, its hello's `live`): Live, pace 0, is a camera tile's first pace and its
 // default there; anywhere else a tile keeps the paces in seconds, and the app sends such a screen 15 s for Live.
 const liveCamera = computed(() => domain.value === "camera" && Boolean(scr.currentScreen?.live_camera));
+// How many live cameras the screen plays at once (its caps, docs/PLATFORM_PLAN.md 4.1), for the line under the pace.
+const liveTiles = computed(() => liveCamera.value ? scr.currentScreen?.caps?.live_tiles ?? null : null);
 const refresh = computed(() => current("refresh", liveCamera.value ? 0 : 15) as number);
 const refreshChoices = computed(() => offer("refresh", rules.refresh.filter((seconds) => seconds !== 0 || liveCamera.value)
   .map((seconds) => [seconds, seconds === 0 ? t("editor.tile.refresh.live") : t("editor.tile.refresh.seconds", { n: seconds })] as [number, string]), refresh.value));
@@ -288,6 +290,7 @@ const backgroundName = computed(() => inv.inventory.backgrounds?.[props.tile.opt
       <PropRow v-if="lookShown && display === 'live'" :label="t('editor.tile.refresh.label')" icon="refresh">
         <ChoiceField :choices="refreshChoices" :value="refresh" :aria-label="t('editor.tile.refresh.label')" @pick="(v) => setTileOption(tile, 'refresh', Number(v))" />
       </PropRow>
+      <p v-if="lookShown && display === 'live' && liveTiles !== null" class="hint">{{ t("editor.tile.refresh.cap", { n: liveTiles }) }}</p>
       <PropRow v-if="lookShown && pictureCard" :label="t('editor.tile.picture.fit.label')" icon="resize">
         <ChoiceField :choices="pictureChoices('fit')" :value="current('fit', 'fill')" :tile="tile" preview-key="fit" :aria-label="t('editor.tile.picture.fit.label')" @pick="(v) => setTileOption(tile, 'fit', v)" />
       </PropRow>

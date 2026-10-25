@@ -25,6 +25,8 @@ MODULES = {
     "cover_groups": {"min_tier": "full", "define": "SD_MOD_COVER_GROUPS"},
     # The screensaver's clock faces beside the digital clock: Glass, Classic and Bauhaus; lite keeps the digital clock.
     "clock_faces": {"min_tier": "full", "define": "SD_MOD_CLOCK_FACES"},
+    # A doorbell's ring opens its camera live with a chime, on a screen that streams (a P4); lite shows alerts only.
+    "doorbell": {"min_tier": "full", "define": "SD_MOD_DOORBELL"},
 }
 
 

@@ -47,7 +47,10 @@
 #include "history_view.h"
 #include "camera_view.h"
 #include "picture_fetch.h"
+#include "live_spots.h"
 #include "live_view.h"
+#include "hw.h"
+#include "boot_trial.h"
 #include "kept_pages.h"
 #include "tile_memory.h"
 #include "wifi_status.h"
@@ -61,6 +64,10 @@
 #include "energy_view.h"
 #include "calendar_view.h"
 #include "meter_view.h"
+#include "module_vacuum_tile.h"
+#ifdef SD_MOD_DOORBELL
+#include "module_doorbell.h"
+#endif
 #include "plugin_api.h"
 #include "plugin_host.h"
 #include "screen_hooks.h"
@@ -195,6 +202,9 @@ inline bool prepare_busy() { return preparing.active; }
 inline bool navigation_ready() {
   return protocol_problem == ProtocolProblem::none && transfer.active && model.ready() && !preparing.foreground;
 }
+// A page Home Assistant asked for (show_page) before the layout was ready, 1 up, 0 for none: a layout that came while the
+// screen stood dark is prepared once it is lit, and the page opens then (core.yaml's open_page, from the 1 s interval).
+inline int wanted_page = 0;
 inline uint64_t previous_page_id = 0;
 inline bool had_previous_page = false;
 inline uint32_t history_view_id = 0, options_view_id = 0, camera_view_id = 0, cover_view_id = 0, vacuum_map_view_id = 0;
@@ -255,6 +265,8 @@ struct SaverChoice {
   // and its options and what it draws from as the app sent them ({"o": ..., "x": ...}), handed to the plugin as they are.
   std::string plugin;
   roomy::Text plugin_data;
+  // Its options alone (`pf.o`): other options make the plugin's saver anew, as a tile's do (docs/PLUGINS.md).
+  roomy::Text plugin_options;
   // The photos step's photo moves slowly (app `x.mv`, picture_motion.h).
   bool motion = false;
   bool operator==(const SaverChoice &o) const {
@@ -609,6 +621,10 @@ struct Widgets {
   calendar_view::View *calendar{};
   // A sensor's meter (firmware 0.56.0+, meter_view.cpp); it goes with the card's extra layer.
   meter_view::View *meter{};
+#ifdef SD_MOD_VACUUM_CARD
+  // A robot vacuum's larger tile (module_vacuum_tile.cpp); it goes with the card's extra layer.
+  vacuum_face::View *vacuum_face{};
+#endif
   // A plugin tile's card (docs/PLUGINS.md, plugin_host.cpp): the plugin's object; it goes with the card's extra layer.
   plugin_host::Card *plugin{};
 };
@@ -728,7 +744,9 @@ inline bool tile_picture_marquee_ready(const Widgets &w, const Tile &t);
 // tile since 0.3.3, on every size since 0.3.7 (the small square in the icon's place said too little to be of use).
 // A map (firmware 0.20.0) fills its card on every size too, with its name drawn into the picture by the app.
 // A favourite (firmware 0.24.0+) fills its card with what it plays on every size, as a live camera does.
-inline bool card_art(const Tile &t) {return (t.row_span()>1 && !t.full && t.cover_tile()) || t.live() || t.is_map() || (t.favorite() && t.pictured());}
+// A player's album cover over the whole card on every size (a card of one row since the picture system; taller ones
+// since firmware 0.3.1, when it stood in the icon's place on one row), as a camera's and a favourite's picture are.
+inline bool card_art(const Tile &t) {return (!t.full && t.cover_tile()) || t.live() || t.is_map() || (t.favorite() && t.pictured());}
 // All icon fonts carry the same generated glyph set, so the first bound one answers for all.
 inline bool has_icon_glyph(uint32_t codepoint) {
   for (auto &w : widgets) if (w.icon_font) { lv_font_glyph_dsc_t dsc; return lv_font_get_glyph_dsc(w.icon_font, &dsc, codepoint, 0); }
@@ -1080,6 +1098,52 @@ inline void library_event(const char *service, std::initializer_list<std::pair<c
   }
   esphome::api::global_api_server->send_homeassistant_action(request);
 }
+// ---- The one question for a picture (picture_question.h, docs/PICTURES.md) ----
+// Every owner asks the same way: the question, how an older app would have answered it (`kind`, `entity`) and the
+// owner's own number of it. To an app whose hello says `pictures` it goes as the question (`q`) with one number for every
+// owner (`n`); to an older app as the fields that app reads, with the owner's number (`view`). The answer finds its owner
+// either way (page_receiver, op "camera").
+inline bool app_reads_questions = false;
+inline picture_question::Numbers picture_numbers;
+inline void picture_ask(const picture_question::Question &q, const char *kind, const std::string &entity, uint32_t own) {
+#if defined(USE_ESP32) && !defined(SCREEN_PICTURES)
+  // A board without pictures (the CYD, picture_store.h) never shows one, so it asks for none, and the question's text
+  // (json, legacy) stays out of its flash. The host builds (the render, the WASM preview) ask as a board with pictures.
+  (void) q; (void) kind; (void) entity; (void) own;
+#else
+  if (inbox.empty() || !esphome::api::global_api_server) return;
+  // The values live until the request is sent: the request holds references to them.
+  picture_question::Fields data = {{"inbox", inbox}, {"session", protocol_key(transfer.lease)}, {"rev", layout_rev}};
+  if (app_reads_questions) {
+    // A screen whose engine takes a format whole (a P4 decodes JPEG in hardware, picture_engine::whole_formats) names
+    // it first in its question, and the app picks the format per picture, a photo as JPEG and a drawn map as BMP
+    // (docs/PICTURES.md, "Formats").
+    picture_question::Question asked = q;
+    for (const auto &format : picture_engine::whole_formats())
+      if (std::find(asked.formats.begin(), asked.formats.end(), format) == asked.formats.end())
+        asked.formats.insert(asked.formats.begin(), format);
+    data.emplace_back("n", std::to_string(picture_numbers.ask(kind, entity, own)));
+    data.emplace_back("q", picture_question::json(asked));
+  } else {
+    // An app from before the feature `pictures`. To remove one day, with picture_question::legacy (see there).
+    data.emplace_back("view", std::to_string(own));
+    for (auto &field : picture_question::legacy(q)) data.push_back(std::move(field));
+  }
+  esphome::api::HomeassistantActionRequest request;
+  request.service = esphome::StringRef("esphome.screen_camera");
+  request.is_event = true;
+  request.data.init(data.size());
+  for (const auto &pair : data) {
+    esphome::api::HomeassistantServiceMap entry;
+    entry.key = esphome::StringRef(pair.first);
+    entry.value = esphome::StringRef(pair.second);
+    request.data.push_back(entry);
+  }
+  esphome::api::global_api_server->send_homeassistant_action(request);
+  ESP_LOGD("picture", "asked %s %s as %s", picture_question::owner_text(q.owner),
+           q.sources.empty() ? "" : q.sources.front().c_str(), app_reads_questions ? "a question" : kind);
+#endif
+}
 inline void library_request(const std::string &entity, uint32_t folder, unsigned page) {
   library_event("esphome.screen_browse", {{"entity", entity}, {"folder", std::to_string(folder)}, {"page", std::to_string(page)}, {"view", std::to_string(++library_view_id)}});
   ESP_LOGI("library", "Asked for folder %u of %s, page %u", (unsigned) folder, entity.c_str(), page);
@@ -1093,13 +1157,6 @@ inline void speaker_request(const std::string &entity, const std::string &speake
 inline void play_request(const std::string &entity, uint32_t item, const std::string &source) {
   library_event("esphome.screen_play", {{"entity", entity}, {"item", std::to_string(item)}, {"source", source}});
   ESP_LOGI("library", "Play %u on %s%s%s", (unsigned) item, entity.c_str(), source.empty() ? "" : " on ", source.c_str());
-}
-// The covers of a page: the items by their numbers, the frames they fill (tile_art) and the page's colour behind them.
-inline void library_art_request(const std::string &entity, const std::string &items, const std::string &atlas, uint32_t ground) {
-  char bg[8];
-  snprintf(bg, sizeof(bg), "%06X", (unsigned) ground);  // a theme colour, six digits
-  library_event("esphome.screen_camera", {{"entity", entity}, {"lib", items}, {"atlas", atlas}, {"bg", bg}, {"view", std::to_string(++library_art_view_id)}});
-  ESP_LOGI("library", "Asked for the covers of %s", items.c_str());
 }
 // A detail card asks the manager for its history (app 0.2.59+ answers with op "history"). An event, like
 // setting_event: it needs no permission to call Home Assistant actions.
@@ -1550,6 +1607,9 @@ inline std::string detail_state(const Tile &t){
   if(t.state=="idle")return tr(txt::ha_vacuum_idle);
   if(t.state=="error")return tr(txt::vacuum_check_robot);
   if(!t.available())return tr(txt::ha_unavailable);
+  // A weather's condition is Home Assistant's key ("clear-night"), never a word: the screen says it in its own
+  // language, as the weather cards and the editor do.
+  if(t.domain()=="weather"){const std::string word=weather_text(t.state);if(word!=t.state)return word;}
   // Home Assistant's word where the screen has none of its own (firmware 0.2.58+).
   if(!t.extra().state_word.empty())return t.extra().state_word;
   return t.unit.empty()?t.state:screen_text::localize(t.state);
@@ -5720,10 +5780,9 @@ inline std::string last_run_text(uint32_t epoch, bool compact) {
 // that should not say "Page 3" says nothing at all.
 inline bool chosen_subtitle(const Tile &t, std::string &out) {
   const std::string &choice = t.subtitle;
-  if (choice.empty() || choice == "auto") return false;
+  if (!tile_controls::subtitle_by_hand(choice)) return false;
   if (choice == "none") { out.clear(); return true; }
   if (choice.compare(0, 5, "text:") == 0) { out = choice.substr(5); return true; }
-  if (choice.compare(0, 5, "attr:") != 0) return false;
   // A value of the entity: the app sends the finished line, or seconds for a moment in time, which the screen
   // says in its own words and its own clock.
   const Extra &x = t.extra();
@@ -6013,6 +6072,10 @@ inline void event(lv_event_t *event) {
   if(tile.favorite()&&!held&&tile.tap=="auto"){favorite_tap(w.index);return;}
   // A room's calendar card books on its keys (calendar_view.cpp); the rest of the card opens its full screen.
   if(d=="calendar"&&!held&&calendar_view::card_tap(w,tile))return;
+#ifdef SD_MOD_VACUUM_CARD
+  // A robot's larger tile acts on its own parts (its keys, rooms, routines, mode); the rest of it opens its card.
+  if(d=="vacuum"&&!held&&w.vacuum_face&&vacuum_face::card_tap(w,tile))return;
+#endif
   // tile_controls::tap_route decides; tests/test_tile_controls.cpp keeps every older tap choice routed as before.
   auto tap = tile_controls::tap_route(tile, code == LV_EVENT_LONG_PRESSED);
   switch (tap.route) {
@@ -6380,6 +6443,9 @@ inline void end_extra(Widgets &w) {
     if(w.energy)energy_view::release(w);
     if(w.calendar)calendar_view::release(w);
     if(w.meter)meter_view::release(w);
+#ifdef SD_MOD_VACUUM_CARD
+    if(w.vacuum_face)vacuum_face::release(w);
+#endif
     if(w.plugin)plugin_host::release(w);
     lv_obj_clean(w.extra);w.parts.fill(nullptr);w.extra_mode.clear();free_points(w.points);}
 }
@@ -8504,6 +8570,15 @@ inline void style_tall(Widgets &w,const Tile &t){
     }
     return;
   }
+  // An album cover over a card of one row (card_art): light words on the dimmed picture and the icon in a dark circle,
+  // as on a taller card; while the picture is on its way, or for a player without one, the card's own colours.
+  if(w.extra_mode!="tall"&&t.cover_tile()&&t.row_span()==1&&!t.full){
+    if(!card_art(t)||!w.picture||lv_obj_has_flag(w.picture,LV_OBJ_FLAG_HIDDEN))return;
+    const auto ink=theme::color(theme::CAMERA_INK);
+    set_color(w.title,LV_STYLE_TEXT_COLOR,ink);set_color(w.value,LV_STYLE_TEXT_COLOR,ink);
+    set_color(w.circle,LV_STYLE_BG_COLOR,theme::color(theme::CAMERA_TRACK));set_color(w.icon,LV_STYLE_TEXT_COLOR,ink);
+    return;
+  }
   if(w.extra_mode!="tall"||(!t.live()&&!t.is_map()&&(t.row_span()<2||t.full)))return;
   const bool photo=card_art(t)&&w.picture&&!lv_obj_has_flag(w.picture,LV_OBJ_FLAG_HIDDEN);
   const auto ink=theme::color(photo?theme::CAMERA_INK:theme::INK),muted=theme::color(photo?theme::CAMERA_INK:theme::MUTED);
@@ -8650,6 +8725,7 @@ inline void render_slot(size_t slot) {
   // but not over the two that say the screen cannot answer: an unavailable entity and a refused tap still say so.
   std::string chosen;
   const bool set_by_hand = chosen_subtitle(t, chosen);
+  const bool refused = t.refused_at && esphome::millis() - t.refused_at < 4000;
   // A tile of a plugin this screen does not have (docs/PLUGINS.md) is a plain card that says so; one it has draws itself.
   if (t.is_plugin())
     value = plugin_host::known(t) ? std::string() : std::string(tr(txt::plugin_missing));
@@ -8659,7 +8735,7 @@ inline void render_slot(size_t slot) {
           : t.is_settings() ? std::string(tr(txt::tile_tap_to_open))
           : fill(txt::tile_page, "n", t.page_target());
   else if (!fresh() || !t.available()) value = tr(txt::ha_unavailable);
-  else if (t.refused_at && esphome::millis() - t.refused_at < 4000) value = tr(t.unanswered ? txt::tile_no_answer : txt::tile_refused);
+  else if (refused) value = tr(t.unanswered ? txt::tile_no_answer : txt::tile_refused);
   else if (set_by_hand) value = chosen;
   else if (d == "light" && t.state == "on" && tile_controls::effect_running(t.extra().effect)) value = t.extra().effect;
   else if (d == "light" && t.state == "on" && std::isfinite(t.brightness)) value = screen_text::percent(static_cast<int>(std::lround(std::clamp(t.brightness, 0.0f, 255.0f) * 100 / 255)));
@@ -8711,7 +8787,8 @@ inline void render_slot(size_t slot) {
   if(t.runs() && !t.running && t.state=="on")value_short=last_run_text(t.last_run,true);
   // A lock-only tile's word where the whole of it does not fit.
   if(d=="lock"&&lock_noting(t))value_short=tr(txt::lock_lock_only_short);
-  if(d=="vacuum" && std::isfinite(t.battery)){value_tail=" / "+screen_text::percent((int)t.battery);value+=value_tail;}
+  // A vacuum's status ends on its battery; the unavailable and refused words and a line chosen by hand do not (#293).
+  if(fresh() && t.available() && !refused){value_tail=tile_controls::vacuum_tail(t);value+=value_tail;}
   // A humidifier's humidity stays readable when its action word does not fit ("Humidif… · 38%").
   if(d=="humidifier" && fresh() && t.available() && std::isfinite(t.current) && !set_by_hand)value_tail=" · "+tile_controls::humidity_text(t.current);
   // Direct controls: only a wide card in the standard layout has room for the panel.
@@ -8759,7 +8836,13 @@ inline void render_slot(size_t slot) {
   bool meter=t.is_meter() && !w.key;
   // A plugin's tile (docs/PLUGINS.md) draws itself too, when this screen has its plugin; else it is a plain card.
   bool plugin=t.is_plugin() && plugin_host::known(t);
-  bool custom=clock||forecast||sunpath||bedside||energy||plugin||calendar||meter;
+#ifdef SD_MOD_VACUUM_CARD
+  // A robot's larger tile (docs/VACUUM.md, "A larger tile"): a map, rooms or routines with its keys, on a tall card.
+  bool vacuum=d=="vacuum" && !w.key && vacuum_face::shows(t);
+#else
+  constexpr bool vacuum=false;
+#endif
+  bool custom=clock||forecast||sunpath||bedside||energy||plugin||calendar||meter||vacuum;
   if(!large_tile)pad_vertical(w.tile,watch||custom||graph?2:4);
   // A big value that stepped up to the setpoint's digits (the watch block below) keeps them until that block
   // decides again, so a card is not restyled twice a render.
@@ -8811,6 +8894,14 @@ inline void render_slot(size_t slot) {
     lap(swipe_profile::GEOMETRY);
     meter_view::render(w,t,content_w,content_h);
     lap(swipe_profile::CUSTOM);
+#ifdef SD_MOD_VACUUM_CARD
+  }else if(vacuum){
+    lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);
+    if(w.picture)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);
+    lap(swipe_profile::GEOMETRY);
+    vacuum_face::render(w,t,content_w,content_h);
+    lap(swipe_profile::CUSTOM);
+#endif
   }else if(plugin){
     lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);
     if(w.picture)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);
@@ -9101,17 +9192,19 @@ inline void render_slot(size_t slot) {
 // such as the minute tick and time sync) draws every card.
 inline TileSet dirty_tiles;
 inline bool dirty_all=false, dirty_header=false;
-// The minute turned or a display setting changed (packages/core.yaml says so before its refresh): every card on the
-// glass is drawn, as for a refresh that names nothing, and on a kept page the cards that show the time (firmware 0.3.2+).
+// A display setting changed (packages/core.yaml says so before its refresh): every card on the glass is drawn, as for a
+// refresh that names nothing, and on a kept page the cards that show the time (firmware 0.3.2+). The minute turning is
+// mark_minute: only the cards that show the time.
 inline bool dirty_time=false;
 // A card whose text or drawing moves on with the clock: a clock, a timer, the sun's arc, a graph's window, a playing
-// track's bar, "5 min ago" under a script or a scene, and a second line that names a moment. A forecast changes with
-// its entity, which Home Assistant updates on its own.
+// track's bar, "5 min ago" under a script or a scene, a second line that names a moment, and a calendar's now and
+// minutes left. A forecast changes with its entity, which Home Assistant updates on its own; its today and its hours'
+// window follow the clock once an hour (mark_minute).
 inline bool shows_time(const Tile &t) {
   const std::string d=t.domain();
   return t.is_clock() || t.is_bedside() || t.display=="graph" || t.extra().subtitle_at || d=="timer" || d=="sun" ||
          (d=="media_player" && media_card::playing(t.state)) ||
-         d=="script" || d=="scene" || d=="button" || d=="input_button" || d=="automation";
+         d=="script" || d=="scene" || d=="button" || d=="input_button" || d=="automation" || d=="calendar";
 }
 inline void mark_time() {
   dirty_time=true;
@@ -9125,6 +9218,15 @@ inline void mark_all() { dirty_all=true; changes.mark_all(); }
 inline void mark_tile(size_t index) { changes.mark_tile(index); if(index<dirty_tiles.size())dirty_tiles.set(index); else dirty_all=true; }
 inline void refresh_tile(size_t index) { mark_tile(index); if(refresh)refresh(); }
 inline void refresh_header_only() { dirty_header=true; if(refresh)refresh(); }
+// The minute turned, or Home Assistant set the clock: the top bar's clock and the cards that show the time, on the glass
+// now and on a kept page when it comes back. Not every card: on a 10-inch that redrew the whole glass twice a minute
+// (200 ms each), and a sound that played meanwhile stuttered.
+inline void mark_minute() {
+  dirty_header=true;
+  const bool hour=minute_of_day()%60==0;
+  for(size_t i=0;i<model.count;++i)
+    if(shows_time(model.tiles[i]) || (hour && model.tiles[i].domain()=="weather"))mark_tile(i);
+}
 inline void refresh_all() { mark_all(); if(refresh)refresh(); }
 // The starting screen (firmware 0.2.73+): what the screen waits for in the middle of the page with a spinner under it,
 // until the first layout arrives. The first render() makes it and the first layout deletes it, spinner and all.
@@ -9630,8 +9732,8 @@ inline void render(lv_obj_t *room) {
   name_label(room, !model.configured ? std::string() : !model.ready() ? tr(txt::status_loading_tiles) : !ha_connected() ? tr(txt::status_ha_not_connected) : !feed_alive() ? tr(txt::status_manager_not_active) : model.title_of(applied_page));
   render_header();
   lap(swipe_profile::HEADER);
-  // A refresh that names nothing draws every card (and counts as a change of everything); the minute tick says it is
-  // only the time (dirty_time).
+  // A refresh that names nothing draws every card (and counts as a change of everything); a changed display setting
+  // says it is only the look and the time (dirty_time), the minute marks its own cards (mark_minute).
   if(!dirty_all && dirty_tiles.none() && !dirty_header && !dirty_time)mark_all();
   const bool all=dirty_all || dirty_time;
   const uint32_t upto=changes.last;  // every change asked for so far is drawn below, for the cards on the glass
@@ -9728,6 +9830,13 @@ inline void render_header() {
   // an unavailable entity opens nothing, as its tile does.
   header_renderer.on_item([](size_t item) {
     const auto *bar = shown_bar();
+#ifdef SD_MOD_DOORBELL
+    // A missed ring (module doorbell) opens that ring's view again.
+    if (bar && item < bar->count && bar->items[item].card == header_bar::DOORBELL_CARD) {
+      if (allowed(esphome::millis(), 14, "header doorbell")) doorbell::reopen();
+      return;
+    }
+#endif
     if (!bar || item >= bar->count || bar->items[item].card >= model.count || !fresh()) return;
     const auto &tile = model.tiles[bar->items[item].card];
     if (!tile.received || !tile.available() || !allowed(esphome::millis(), 14, "header item")) return;
@@ -10254,6 +10363,9 @@ inline void drop_card(Widgets &w) {
   if (w.energy) energy_view::release(w);
   if (w.calendar) calendar_view::release(w);
   if (w.meter) meter_view::release(w);
+#ifdef SD_MOD_VACUUM_CARD
+  if (w.vacuum_face) vacuum_face::release(w);
+#endif
   if (w.plugin) plugin_host::release(w);
   if (captured_slider && (captured_slider == w.slider || captured_slider == w.control_slider)) { captured_slider = nullptr; slider_changed = false; }
   if (w.tile) lv_obj_delete(w.tile);
@@ -10325,6 +10437,15 @@ inline unsigned kept_count() { return (unsigned) shelf.pages(); }
 // that next shows a tile without custom parts only hides them (hide_extra, made for paging a slot back and forth), so
 // over a few layouts every kept card held a hidden one, and on a 4-inch Guition two pages added and taken away took
 // the memory inside the chip from 49 to 20 KB until layouts were refused (2026-10-13). The card itself stays.
+// The picture a card's own face draws beside its picture object (a robot's map on its larger tile), for the store's count.
+inline lv_obj_t *face_picture(const Widgets &w) {
+#ifdef SD_MOD_VACUUM_CARD
+  return vacuum_face::picture(w);
+#else
+  (void) w;
+  return nullptr;
+#endif
+}
 inline void forget_kept() {
   shelf.forget();
   for (auto *set : kept_sets) if (set) for (auto &w : *set) {
@@ -10334,7 +10455,7 @@ inline void forget_kept() {
     // Their pictures go with what they showed: a picture object still pointing at a copy counts as drawing it, and the
     // store frees nothing a card draws, so the old layout's pictures stayed beside the new ones until the set showed
     // another page (GitHub #183). The cards are drawn anew with their own.
-    for (lv_obj_t *picture : {w.picture, w.extra_mode == "media" ? w.parts[MEDIA_PICTURE] : nullptr})
+    for (lv_obj_t *picture : {w.picture, w.extra_mode == "media" ? w.parts[MEDIA_PICTURE] : nullptr, face_picture(w)})
       if (picture) { lv_image_set_src(picture, nullptr); lv_obj_add_flag(picture, LV_OBJ_FLAG_HIDDEN); }
     plugin_host::picture_let_go(w, nullptr);
     w.cover_shown.clear();
@@ -10432,8 +10553,11 @@ inline bool warm_page(int page) {
   }
   warming = false;
   lv_display_enable_invalidation(display, true);
-  // The page bar was set for the other page and back: drawn again, the rest of the glass never changed.
-  if (nav_prev && lv_obj_get_parent(nav_prev)) lv_obj_invalidate(lv_obj_get_parent(nav_prev));
+  // The page bar was set for the other page and back: drawn again, the rest of the glass never changed. Its own keys,
+  // never their parent: that is the whole screen, and a freshen drew the whole glass again each time (300 ms on a
+  // 10-inch, and the sound that played meanwhile stuttered).
+  for (lv_obj_t *part : {nav_prev, nav_next, nav_number})
+    if (part) lv_obj_invalidate(part);
   return visit.entry != kept_pages::NONE;
 }
 // The next page to work on: first one that is neither on the glass nor kept (while there is room to keep it), then,
@@ -10756,7 +10880,8 @@ inline std::string vacuum_option(unsigned index) {
 // ---- Camera images (firmware 0.2.57+) ----
 // A camera or image tile, and an alert's image, open the camera full screen: the image as large as fits, the round back
 // key at the top left like on every card, the name beside it. ESP Screen Manager fetches the snapshot, sizes it for this
-// screen and serves it on its own port; camera_view::Feed decides when to ask for a link and when to load it again. The
+// screen and serves it on its own port; the loader decides when to ask for a link and when to load it again
+// (picture_loader.h, with the rhythm's constants of camera_view.h). The
 // board binds the two online_images (the full view and the alert's frame) through ImageHooks; a board without them (the
 // CYD) never opens the view. Nothing here exists while no camera is open, apart from the alert's small frame.
 namespace runtime_tiles {
@@ -10764,6 +10889,9 @@ struct ImageHooks {
   std::function<void(const std::string &)> load;  // set the online_image's URL and download it
   std::function<void()> release;                  // free the decoded image
   std::function<lv_image_dsc_t *()> source;       // the decoded image for LVGL
+  // The store took the decoded image's buffer over (picture_store::adopt): the slot lets go of it without freeing it.
+  // Empty for a slot that cannot give its buffer away (the editor's WASM preview): the store gets a copy of its own.
+  std::function<void()> hand_over;
 };
 // The page's strip (firmware 0.2.77+) comes through the third.
 inline ImageHooks camera_full, camera_thumb, camera_live;
@@ -10774,11 +10902,9 @@ struct ViewPicture {
   uint32_t every = camera_view::REFRESH_MS;
   bool once = false;   // the screensaver's cover: one picture, and a new track is another
   bool shown = false;  // a picture of it is on the glass
-  // Live on a P4 (live_view.h): a stream runs or is about to, its link waiting while the last stream ends, and the
-  // streams that failed for this opening (TRIES of them, and the view takes the stills of every board).
-  bool live = false;
-  live_view::Handle live_handle = -1;
-  uint8_t live_failures = 0;
+  // Live on a P4 (live_view.h, live_spots::ViewStream): a stream runs or is about to, its link waiting while the last
+  // stream ends, and the streams that failed for this opening (TRIES of them, and the view takes the stills of every board).
+  live_spots::ViewStream stream;
   void open(const std::string &e) { *this = ViewPicture{}; entity = e; }
   bool open() const { return !entity.empty(); }
 };
@@ -10888,6 +11014,31 @@ constexpr uint8_t ALERT_IMAGE_RETRIES = 3;
 
 inline bool camera_supported() { return static_cast<bool>(camera_full.load); }
 inline bool camera_visible() { return camera_root != nullptr; }
+// A ring's view keeps the screen from standby (module doorbell, packages/core.yaml's standby interval); lite has none.
+inline bool doorbell_holds() {
+#ifdef SD_MOD_DOORBELL
+  return doorbell::holds();
+#else
+  return false;
+#endif
+}
+// Its bindings, for the YAML of every board: a lambda that holds a ${...} cannot hold an #ifdef (ESPHome reads it as a
+// template), so these take the module's place there. How a ring ended goes to ESP Screens (packages/core.yaml); the chime
+// plays on `speaker` (features/audio-player.yaml).
+inline void doorbell_reports(std::function<void(const std::string &, const std::string &)> report) {
+#ifdef SD_MOD_DOORBELL
+  doorbell::report = std::move(report);
+#else
+  (void) report;
+#endif
+}
+template<class Speaker> inline void doorbell_audio(Speaker *speaker) {
+#ifdef SD_MOD_DOORBELL
+  doorbell::bind_speaker(speaker);
+#else
+  (void) speaker;
+#endif
+}
 
 // ---- Pictures kept until they change (firmware 0.3.2+, picture_store.h) ----
 // On a board with PSRAM every picture a card draws (a page's strip, an album cover) is the store's own copy, never the
@@ -10895,8 +11046,10 @@ inline bool camera_visible() { return camera_root != nullptr; }
 // and a camera shows its last picture at once when its page comes back. A board without PSRAM stores nothing and draws
 // from the download as before.
 inline picture_store::Store<lv_image_dsc_t> pictures;
+// The whole picture budget of this board; the streams that run take their share of it (pictures_share, docs/PICTURES.md).
+inline size_t pictures_budget_whole = 0;
 inline bool pictures_kept() {
-  if (!pictures.allocate) {
+  if (!pictures.release) {
 #ifdef USE_ESP32
     // A fifth of the PSRAM, at most 6 MB: about 1.2 MB on a board with 8 MB (the 4-inch Guition reports 6 MB of PSRAM
     // heap), where a page of four tall covers is 384 KB; 6 MB on the 32 MB of the P4 boards, whose 10-inch glass shows a
@@ -10909,11 +11062,11 @@ inline bool pictures_kept() {
     // Without it the host keeps one download at a time, and a page of several pictured tiles shows only the last.
     pictures.budget = 1200u << 10;
 #endif
-    pictures.allocate = kept_allocate;
+    pictures_budget_whole = pictures.budget;
     pictures.release = kept_free;
     // With every slot taken, a new picture takes the place of the one used longest ago that no card draws.
     pictures.shown = [](const lv_image_dsc_t *image) { return picture_shown(image); };
-    // Each copy's life, for a diagnosis (`logger: level: DEBUG`): kept, renewed, retired, freed and why.
+    // Each picture's life, for a diagnosis (`logger: level: DEBUG`): taken, retired, freed and why.
     pictures.log = [](const char *what, const picture_store::Store<lv_image_dsc_t>::Entry &e) {
       ESP_LOGD("picture", "store %s %s (%ux%u, %u KB)", what, e.key.c_str(), (unsigned) e.image.header.w,
                (unsigned) e.image.header.h, (unsigned) (e.bytes >> 10));
@@ -10935,7 +11088,7 @@ inline bool picture_shown(const lv_image_dsc_t *image) {
 #if LV_USE_IMAGE
   bool shown = false;
   auto on = [&](lv_obj_t *obj) { if (draws(obj, image)) shown = true; };
-  each_card([&](Widgets &w) { on(w.picture); if (w.extra_mode == "media") on(w.parts[MEDIA_PICTURE]); if (plugin_host::picture_draws(w, image)) shown = true; });
+  each_card([&](Widgets &w) { on(w.picture); if (w.extra_mode == "media") on(w.parts[MEDIA_PICTURE]); if (plugin_host::picture_draws(w, image)) shown = true; on(face_picture(w)); });
   on(media_detail_picture);
   on(camera_picture);
   on(alert_picture);
@@ -10953,7 +11106,7 @@ inline bool picture_shown(const lv_image_dsc_t *image) {
 // it may make way (picture_store::collect), and its page asks for it again when it comes back.
 inline bool picture_away(const lv_image_dsc_t *image) {
 #if LV_USE_IMAGE
-  const auto drawn = [&](Widgets &w) { return draws(w.picture, image) || (w.extra_mode == "media" && draws(w.parts[MEDIA_PICTURE], image)) || plugin_host::picture_draws(w, image); };
+  const auto drawn = [&](Widgets &w) { return draws(w.picture, image) || (w.extra_mode == "media" && draws(w.parts[MEDIA_PICTURE], image)) || plugin_host::picture_draws(w, image) || draws(face_picture(w), image); };
   for (auto &w : widgets) if (drawn(w)) return false;
   if (draws(media_detail_picture, image) || draws(camera_picture, image) || draws(alert_picture, image) || media_library::draws(image) ||
       plugin_host::card_draws(image))
@@ -10974,7 +11127,7 @@ inline void picture_let_go(const lv_image_dsc_t *image) {
 #if LV_USE_IMAGE
   for (auto *set : kept_sets) if (set) for (auto &w : *set) {
     bool took = false;
-    for (lv_obj_t *picture : {w.picture, w.extra_mode == "media" ? w.parts[MEDIA_PICTURE] : nullptr})
+    for (lv_obj_t *picture : {w.picture, w.extra_mode == "media" ? w.parts[MEDIA_PICTURE] : nullptr, face_picture(w)})
       if (draws(picture, image)) { lv_image_set_src(picture, nullptr); lv_obj_add_flag(picture, LV_OBJ_FLAG_HIDDEN); took = true; }
     if (plugin_host::picture_let_go(w, image)) took = true;
     if (!took) continue;
@@ -11187,6 +11340,21 @@ inline bool card_open() { return detail_shown() || colour_shown() || effects_pag
 inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a) {
   // A plugin tile's places (plugin API 0.10): its parts, measured by the host.
   if (w.plugin) return plugin_host::picture_ask(w, t, a);
+#ifdef SD_MOD_VACUUM_CARD
+  // A robot's map on its larger tile: the map's place, on the frame's colour, drawn by the app from the robot's map.
+  if (vacuum_face::picture(w)) {
+    int x, y, width, height;
+    if (!t.pictured() || !vacuum_face::map_place(w, x, y, width, height) || width <= 0 || height <= 0) return false;
+    a.frame = tile_picture::frame(width, height, 0, 0, theme::hex(theme::TRACK), theme::hex(theme::TRACK), picture_cap());
+    a.index = w.index;
+    a.entity = t.entity;
+    a.mark = t.extra().vacuum ? t.extra().vacuum->map_mark : std::string();
+    a.dark = theme::dark;
+    a.drawn = true;
+    a.source = picture_question::vacuum_source(t.entity);
+    return true;
+  }
+#endif
   if (!w.tile || !w.circle || !t.pictured()) return false;
   const bool art = card_art(t);
   lv_obj_t *place = art ? w.tile : w.circle;
@@ -11214,22 +11382,17 @@ inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a) {
 }
 // Asks the app for a tile's picture: `esphome.screen_camera` as a page of one tile (tile_picture::fields), numbered so
 // the answer finds its tile.
+// A tile's question (tile_picture::question): a tile's own picture, or a plugin tile's places (plugin API 0.10).
+inline picture_question::Question tile_question(const tile_picture::Ask &a) {
+  const bool plugin = !a.parts.empty();
+  auto q = tile_picture::question(a, plugin ? picture_question::Owner::PLUGIN_TILE : picture_question::Owner::TILE,
+                                  plugin ? a.entity : std::string());
+  q.cap = picture_cap().bytes;
+  return q;
+}
 inline void tile_picture_request(const tile_picture::Ask &a) {
   if (inbox.empty()) return;
-  esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef("esphome.screen_camera");
-  request.is_event = true;
-  auto fields = tile_picture::fields(a);
-  fields.insert(fields.begin(), {{"inbox", inbox}, {"session", protocol_key(transfer.lease)}, {"rev", layout_rev},
-                                 {"view", std::to_string(tile_questions.ask(a.index))}});
-  request.data.init(fields.size());
-  for (const auto &field : fields) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(field.first);
-    entry.value = esphome::StringRef(field.second);
-    request.data.push_back(entry);
-  }
-  esphome::api::global_api_server->send_homeassistant_action(request);
+  picture_ask(tile_question(a), "live", a.entity, tile_questions.ask(a.index));
   ESP_LOGI("camera", "asked for the picture of tile %u, %s", (unsigned) a.index, a.entity.c_str());
 }
 // Whether a card on the glass waits for its picture: until the tile's first try at it (here, failed, or the app has
@@ -11248,6 +11411,9 @@ inline bool tile_picture_waiting(const Widgets &w, const Tile &t) {
 // track's cover, a map before someone moved) until the next is here.
 inline void tile_picture_place(Widgets &w, const Tile &t, int size, int x, int y) {
   w.art_size = size; w.art_x = x; w.art_y = y;
+#ifdef SD_MOD_VACUUM_CARD
+  if (vacuum_face::picture(w)) { vacuum_face::picture_place(w, t); return; }
+#endif
   // A plugin tile's picture is an atlas of its places' pieces (plugin API 0.10): the host lays each on its place.
   if (w.plugin) {
     const bool its = tile_picture::belongs(w.art_key, w.index, t.entity);
@@ -11335,7 +11501,11 @@ inline void tile_picture_done(size_t index, picture_loader::Outcome outcome) {
   // A plugin card that kept its last picture while asking lets go of it when the next one did not come: its places show
   // their blocks, not a picture of the addresses before.
   if (!shows(outcome) && index < model.count)
-    each_card([&](Widgets &w) { if (w.index == index && w.plugin) plugin_host::picture_place(w, nullptr); });
+    each_card([&](Widgets &w) {
+      if (w.index != index || !w.plugin) return;
+      plugin_host::picture_place(w, nullptr);
+      plugin_host::picture_outcome(w, outcome);  // the plugin hears it (0.17, Tile::on_picture)
+    });
   if (shows(outcome) && index < model.count)
     each_card([&](Widgets &w) {
       if (w.index != index || !w.tile) return;
@@ -11370,11 +11540,12 @@ inline void tile_pictures_letgo() {
   if (!download) return;
   each_card([&](Widgets &w) {
     bool took = plugin_host::picture_let_go(w, download);
-    if (draws(w.picture, download)) {
-      lv_image_set_src(w.picture, nullptr);
-      lv_obj_add_flag(w.picture, LV_OBJ_FLAG_HIDDEN);
-      took = true;
-    }
+    for (lv_obj_t *picture : {w.picture, face_picture(w)})
+      if (draws(picture, download)) {
+        lv_image_set_src(picture, nullptr);
+        lv_obj_add_flag(picture, LV_OBJ_FLAG_HIDDEN);
+        took = true;
+      }
     if (took && w.index < model.count) refresh_tile(w.index);
   });
 #endif
@@ -11431,6 +11602,10 @@ inline bool drawn_over(lv_obj_t *owner, int x, int y, int w, int h) {
 }
 // The room below the top bar: the back key and the name stay LVGL's, on the view's black, never over the picture.
 inline live_view::Rect live_area() {
+#ifdef SD_MOD_DOORBELL
+  // A ring's view (module doorbell): the room beside or above its keys.
+  if (doorbell::shown()) return doorbell::area();
+#endif
   const int top = detail_bar::bottom();
   return {0, top, overlay_card::screen_width(), overlay_card::screen_height() - top};
 }
@@ -11438,7 +11613,7 @@ inline live_view::Rect live_area() {
 // failed TRIES times for this opening.
 inline bool live_wanted() {
   if (!live_view::available() || !camera.open() || camera.entity.rfind("camera.", 0) != 0 || camera_map_index >= 0 ||
-      saver_camera || camera.live_failures >= live_view::TRIES)
+      saver_camera || !camera.stream.may() || boot_trial::on(esphome::millis()))
     return false;
   const auto area = live_area();
   return !drawn_over(camera_root, area.x, area.y, area.w, area.h);
@@ -11449,64 +11624,98 @@ inline bool camera_muted = false;
 inline lv_obj_t *camera_sound_key = nullptr;
 inline lv_obj_t *view_key(lv_obj_t *parent, int size, const char *glyph, bool over_map);
 inline void camera_sound_glyph() {
+#ifdef SD_MOD_DOORBELL
+  if (doorbell::shown()) { doorbell::sound_changed(); return; }
+#endif
   if (!camera_sound_key) return;
   lv_label_set_text(lv_obj_get_child(camera_sound_key, 0), camera_muted ? "\U000F0581" : "\U000F057E");  // volume-off, -high
 }
 // The key at the right of the view's top bar, once the camera's sound comes (Event::SOUND): a tap mutes it or lets it in.
 inline void camera_sound_show() {
   if (!camera_root || camera_sound_key) return;
+#ifdef SD_MOD_DOORBELL
+  if (doorbell::shown()) return;  // a ring's view has its sound key from the start
+#endif
   const auto slot = detail_bar::right_slot(camera_root);
   camera_sound_key = view_key(camera_root, slot.h, camera_muted ? "\U000F0581" : "\U000F057E", false);
   lv_obj_set_pos(camera_sound_key, slot.x, slot.y);
   lv_obj_add_event_cb(camera_sound_key, [](lv_event_t *) {
     camera_muted = !camera_muted;
-    live_view::mute(camera.live_handle, camera_muted);
+    live_view::mute(camera.stream.handle, camera_muted);
     camera_sound_glyph();
   }, LV_EVENT_SHORT_CLICKED, nullptr);
 }
-inline void live_begin(const std::string &url) {
-  ESP_LOGI("camera", "live link %u ms after the camera opened", (unsigned) (esphome::millis() - camera_opened_at));
-  camera.live = true;
-  camera.live_handle = live_view::open(url, live_area(), live_view::Look{}, live_view::has_speaker());
-  if (camera.live_handle >= 0) {
-    if (camera_muted) live_view::mute(camera.live_handle, true);
+// Until the camera is live (live_view.h, "Until it is live"): from its first picture, a still, the firmware's spinner
+// turns at the right of the view's top bar, and goes with the first live picture (Event::LIVE). One place for the two:
+// the sound key comes there once the spinner has gone (its sound comes with the live stream anyway), so neither moves
+// the other aside; a stream that starts again while the key is there turns no spinner. LVGL draws it: the bar lies
+// above the stream's room, so nothing of it is over the picture.
+inline lv_obj_t *camera_warm_spinner = nullptr;
+inline bool camera_sound_waiting = false;  // the sound came while the spinner turned: its key follows at LIVE
+inline bool camera_warming() { return camera_warm_spinner && !lv_obj_has_flag(camera_warm_spinner, LV_OBJ_FLAG_HIDDEN); }
+inline void camera_warm(bool on) {
+  if (!on || !camera_root || !camera_title || camera_sound_key) {
+    if (camera_warm_spinner) lv_obj_add_flag(camera_warm_spinner, LV_OBJ_FLAG_HIDDEN);
     return;
   }
-  // No room for another stream, or no memory: the view takes the stills of every board.
-  camera.live = false;
-  camera.live_failures = live_view::TRIES;
+  const bool large = ui::large();
+  const int size = ui::px(large ? 30 : 20);
+  if (!camera_warm_spinner) {
+    camera_warm_spinner = spinner_create(camera_root, size, ui::px(large ? 4 : 3));
+    if (!camera_warm_spinner) return;
+    lv_obj_set_style_arc_color(camera_warm_spinner, theme::color(theme::CAMERA_TRACK), LV_PART_MAIN);
+  }
+#ifdef SD_MOD_DOORBELL
+  // A ring's view has its close key at the edge: the spinner turns beside it.
+  if (doorbell::shown()) { doorbell::spinner_place(camera_warm_spinner, size); lv_obj_remove_flag(camera_warm_spinner, LV_OBJ_FLAG_HIDDEN); return; }
+#endif
+  const auto slot = detail_bar::right_slot(camera_root);
+  lv_obj_set_pos(camera_warm_spinner, slot.x + (slot.w - size) / 2, slot.y + (slot.h - size) / 2);
+  lv_obj_remove_flag(camera_warm_spinner, LV_OBJ_FLAG_HIDDEN);
+}
+inline void live_tiles_halt();
+inline void live_begin(const std::string &url) {
+  ESP_LOGI("camera", "live link %u ms after the camera opened", (unsigned) (esphome::millis() - camera_opened_at));
+  // The live tiles and places of the page under the view stop before the view's stream exists, not at the next
+  // drawing (live_stop_covered): a tile's task could still copy its picture into the frame buffer after LVGL had drawn
+  // the view over the page, and a band of it stayed under the view's top bar until the view's first picture (2026-10-24,
+  // the reTerminal D1001, two live tiles). A page under a full view never streams anyway.
+  live_tiles_halt();
+  // The view a ring opened (module doorbell) holds the speaker as the ring, which nothing takes it from; any other
+  // full view as a camera's sound, which the voice assistant may borrow and a ring takes (audio_owner.h).
+  audio_owner::Role role = audio_owner::Role::CAMERA_SOUND;
+#ifdef SD_MOD_DOORBELL
+  if (doorbell::shown()) role = audio_owner::Role::DOORBELL;
+#endif
+  camera.stream.opened(live_view::open(url, live_area(), live_view::Look{}, live_view::has_speaker(), role));
+  if (camera.stream.live) {
+    if (camera_muted) live_view::mute(camera.stream.handle, true);
+    return;
+  }
+  // No room for another stream, or no memory: the view takes the stills of every board (ViewStream::opened).
   pictures_round();
 }
 
-// ---- Live tiles on a P4 (live_view.h, firmware dev) ----
+// ---- Live tiles and live places on a P4 (live_spots.h, live_view.h) ----
 // A camera tile set to Live (its pace 0) streams while it is on the glass, the pages stand still and nothing lies over
 // them: no card, no camera full screen, no settings, no alert, no screensaver. Otherwise, and until its first live
 // picture, it shows its last still, as a camera tile on every board does. Its pictures come plain at the card's size;
 // the screen lays the card's rounded corners, the shade and the name over each of them (live_view::compose), so the app
 // does nothing per picture a screen can do itself. Opening the camera full screen stops the tiles' streams; the app's
 // source of the camera keeps running a while, so the full view's first picture is there at once.
-struct LiveTile {
-  size_t index = 0;
-  std::string entity;
-  live_view::Rect room;  // the card on the glass when it asked
-  live_view::Handle handle = -1;
-  bool asked = false;    // its link is on its way
-  bool streaming = false;  // its first live picture is on the glass
-  uint32_t asked_at = 0;
-  uint8_t failures = 0;
-};
-inline std::vector<LiveTile> live_tiles;
-inline LiveTile *live_tile(size_t index) {
-  for (auto &l : live_tiles)
-    if (l.index == index) return &l;
-  return nullptr;
-}
-// Whether the loader leaves a tile's still alone: a live tile asking for its link (a still's question would make the
-// link's answer an earlier question's) or streaming (its still is under the live picture, and stays as it was).
-inline bool live_tile_active(size_t index) {
-  const auto *l = live_tile(index);
-  return l && (l->asked || l->handle >= 0);
-}
+// A plugin tile's place with a camera's address that the tile set live (plugin API 0.17, ui::live) streams the same
+// way: while it is on the glass, the page stands still and nothing lies over it, its stills under it until its first
+// live picture, into the place's room with the place's corners, filled or whole as its fit says, on the card's colour.
+// Asked only of an app that reads questions; the app checks that the camera is the tile's own entity. One writer on
+// the glass stays live_view: a plugin never draws a stream itself (docs/PICTURES.md, "For plugins").
+// What streams, asks, stops and gives up is one machine for both, live_spots::Spots; here is what it is bound to: which
+// spots may stream this round, their question, their look, and the stream itself.
+inline live_spots::Spots spots;
+// Whether a tile asked for its stream or streams: the loader leaves its still alone meanwhile (its still's question
+// would make the link's answer an earlier question's; streaming, its still is under the live picture and stays as it was).
+inline bool live_tile_active(size_t index) { return spots.active(static_cast<uint32_t>(index)); }
+// The answer to a live place's question is the one its number names.
+inline bool live_place_question(uint32_t number) { return spots.question(number); }
 inline bool page_clear() {
   return live_view::available() && tiles_seen() && !camera_visible() && !card_open() && !settings_screen::visible() &&
          !(alert_parts.card && lv_obj_is_visible(alert_parts.card)) && camera_view::settled(esphome::millis(), last_turn_ms);
@@ -11524,116 +11733,207 @@ inline live_view::Rect card_room(const Widgets &w) {
   return {static_cast<int>(a.x1), static_cast<int>(a.y1), static_cast<int>(lv_area_get_width(&a)),
           static_cast<int>(lv_area_get_height(&a))};
 }
-inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a);
-// Asks the app for a live tile's stream: its picture's question (tile_picture::fields) with `live`, the card's size.
-inline void live_tile_ask(LiveTile &l, const Widgets &w, const Tile &t) {
-  tile_picture::Ask a;
-  if (inbox.empty() || !tile_ask(w, t, a)) return;
-  esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef("esphome.screen_camera");
-  request.is_event = true;
-  auto fields = tile_picture::fields(a);
-  fields.insert(fields.begin(), {{"inbox", inbox}, {"session", protocol_key(transfer.lease)}, {"rev", layout_rev},
-                                 {"view", std::to_string(tile_questions.ask(l.index))}});
-  fields.emplace_back("live", live_view::box_text(l.room));
-  // A board with a speaker: the app takes the camera's sound along already, so the full view has it at once.
-  if (live_view::has_speaker()) fields.emplace_back("sound", "1");
-  request.data.init(fields.size());
-  for (const auto &field : fields) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(field.first);
-    entry.value = esphome::StringRef(field.second);
-    request.data.push_back(entry);
-  }
-  esphome::api::global_api_server->send_homeassistant_action(request);
-  l.asked = true;
-  l.asked_at = esphome::millis();
-  ESP_LOGI("camera", "asked for tile %u live, %s at %dx%d", (unsigned) l.index, t.entity.c_str(), l.room.w, l.room.h);
+inline live_view::Rect object_room(const lv_obj_t *o) {
+  lv_area_t a;
+  lv_obj_get_coords(o, &a);
+  return {static_cast<int>(a.x1), static_cast<int>(a.y1), static_cast<int>(lv_area_get_width(&a)),
+          static_cast<int>(lv_area_get_height(&a))};
 }
-inline void live_tile_stop(LiveTile &l) {
-  if (l.handle >= 0) live_view::close(l.handle);
-  l.handle = -1;
-  l.asked = l.streaming = false;
-}
-// Every live tile stops at once: a page turns, a card opens over them. They start again on a round with the page clear.
-inline void live_tiles_halt() {
-  for (auto &l : live_tiles) live_tile_stop(l);
-  live_tiles.clear();
-}
-// Every round of the pictures (250 ms): what streams, what stops, what asks.
-inline void live_tiles_round() {
-  const bool clear = page_clear() && model.ready();
-  const uint32_t now = esphome::millis();
-  // What streams but is not wanted any more, or moved, stops; a tile that is not wanted forgets its failures too.
-  for (auto it = live_tiles.begin(); it != live_tiles.end();) {
-    bool keep = false;
-    if (clear && it->index < model.count)
-      each_card([&](Widgets &w) {
-        if (w.index == it->index && live_tile_wanted(w, model.tiles[w.index]) && card_room(w) == it->room) keep = true;
-      });
-    if (keep) { ++it; continue; }
-    live_tile_stop(*it);
-    it = live_tiles.erase(it);
-  }
-  if (!clear) return;
+// Every live place of the plugin tiles on the glass: `each(card, place, camera, contain)`.
+inline void live_places_each(const std::function<void(Widgets &, lv_obj_t *, const std::string &, bool)> &each) {
   each_card([&](Widgets &w) {
-    if (w.index >= model.count) return;
-    const Tile &t = model.tiles[w.index];
-    if (!live_tile_wanted(w, t)) return;
-    LiveTile *l = live_tile(w.index);
-    if (!l) {
-      live_tiles.push_back(LiveTile{});
-      l = &live_tiles.back();
-      l->index = w.index;
-      l->entity = t.entity;
-      l->room = card_room(w);
-    }
-    if (l->failures >= live_view::TRIES || l->handle >= 0) return;
-    // An answer that does not come is asked for again.
-    if (l->asked && now - l->asked_at >= camera_view::ASK_AGAIN_MS) l->asked = false;
-    if (!l->asked && (!l->asked_at || now - l->asked_at >= camera_view::GAP_MS)) live_tile_ask(*l, w, t);
+    if (!w.plugin || !w.tile || w.index >= model.count || !on_glass(w)) return;
+    plugin_host::live_places(w, [&](lv_obj_t *place, const std::string &camera, bool contain) { each(w, place, camera, contain); });
   });
 }
-// The app's answer to a live tile's question: its stream, laid out as its card.
-inline void live_tile_answer(size_t index, const std::string &url) {
-  LiveTile *l = live_tile(index);
-  if (!l || !l->asked) return;
-  l->asked = false;
+inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a);
+// The loader a live tile or place turns in its top right corner while its camera's stills show, until it is live
+// (live_view.h, "Until it is live"): the firmware's spinner, its ring the camera's track and its arc Home Assistant's
+// blue, a little smaller than a loading card's, on a round shade.
+inline void live_loader(live_view::Look &look) {
+  const bool large = ui::large();
+  look.loader = ui::px(large ? 34 : 26);
+  look.loader_margin = ui::px(large ? 10 : 8);
+  look.loader_arc = ui::px(large ? 4 : 3);
+  look.loader_ring = live_view::rgb565(theme::hex(theme::CAMERA_TRACK));
+  look.loader_turn = live_view::rgb565(theme::ha::RAIN);
+}
+// A tile's spot: its card's room on the glass. A place's: the place's room, its camera and its fit.
+inline live_spots::Spot tile_spot(const Widgets &w, const Tile &t) {
+  live_spots::Spot spot;
+  spot.kind = live_spots::Kind::TILE;
+  spot.index = static_cast<uint32_t>(w.index);
+  spot.entity = t.entity;
+  spot.room = card_room(w);
+  return spot;
+}
+inline live_spots::Spot place_spot(const Widgets &w, const lv_obj_t *place, const std::string &camera, bool contain,
+                                   const live_view::Rect &room) {
+  live_spots::Spot spot;
+  spot.kind = live_spots::Kind::PLACE;
+  spot.index = static_cast<uint32_t>(w.index);
+  spot.place = place;
+  spot.entity = camera;
+  spot.contain = contain;
+  spot.room = room;
+  return spot;
+}
+inline uint32_t live_place_numbers = 0;
+// Asks the app for a spot's stream: a live tile's with its picture's question (tile_picture::fields) and `live`, the
+// card's size; a live place's with the question of its camera into the place's room. The question's number, or 0 when
+// nothing could be asked (the spot asks again next round).
+inline uint32_t live_spot_ask(const live_spots::Spot &spot) {
+  if (spot.kind == live_spots::Kind::TILE) {
+    Widgets *card = nullptr;
+    each_card([&](Widgets &w) { if (w.index == spot.index && w.tile && on_glass(w)) card = &w; });
+    if (!card || spot.index >= model.count) return 0;
+    const Tile &t = model.tiles[spot.index];
+    tile_picture::Ask a;
+    if (inbox.empty() || !tile_ask(*card, t, a)) return 0;
+    auto q = tile_question(a);
+    q.live_w = spot.room.w;
+    q.live_h = spot.room.h;
+    // A board with a speaker: the app takes the camera's sound along already, so the full view has it at once.
+    q.sound = live_view::has_speaker();
+    const uint32_t number = tile_questions.ask(spot.index);
+    picture_ask(q, "live", t.entity, number);
+    ESP_LOGI("camera", "asked for tile %u live, %s at %dx%d", (unsigned) spot.index, t.entity.c_str(), spot.room.w, spot.room.h);
+    return number;
+  }
+  if (spot.index >= model.count) return 0;
+  auto *place = const_cast<lv_obj_t *>(static_cast<const lv_obj_t *>(spot.place));
+  picture_question::Question q;
+  q.owner = picture_question::Owner::PLUGIN_TILE;
+  q.index = static_cast<int>(spot.index);
+  q.key = model.tiles[spot.index].entity;
+  q.sources = {picture_question::camera_source(spot.entity)};
+  q.w = spot.room.w;
+  q.h = spot.room.h;
+  q.dark = theme::dark;
+  picture_question::Place at;
+  at.w = spot.room.w;
+  at.h = spot.room.h;
+  at.radius = lv_obj_get_style_radius(place, LV_PART_MAIN);
+  at.fit = spot.contain ? picture_question::Fit::CONTAIN : picture_question::Fit::COVER;
+  q.places = {at};
+  q.live_w = spot.room.w;
+  q.live_h = spot.room.h;
+  const uint32_t number = ++live_place_numbers;
+  picture_ask(q, "plive", spot.entity, number);
+  ESP_LOGI("camera", "asked for a live place of tile %u, %s at %dx%d", (unsigned) spot.index, spot.entity.c_str(), spot.room.w, spot.room.h);
+  return number;
+}
+// Opens a spot's stream as the app answered it: a tile's laid out as its card (the card's corners, the shade and the
+// name over each picture), a place's laid in the place. NOT_NOW when the card is gone or not wanted now.
+inline live_view::Handle live_spot_open(const live_spots::Spot &spot, const std::string &url) {
+  if (spot.kind == live_spots::Kind::TILE) {
+    Widgets *card = nullptr;
+    each_card([&](Widgets &w) { if (w.index == spot.index && spot.index < model.count && live_tile_wanted(w, model.tiles[spot.index])) card = &w; });
+    if (!card) return live_spots::Spots::NOT_NOW;
+    const Tile &t = model.tiles[spot.index];
+    live_view::Look look;
+    look.tile = true;
+    look.contain = url.find("fit=contain") != std::string::npos;
+    look.radius = lv_obj_get_style_radius(card->tile, LV_PART_MAIN);
+    look.ground = live_view::rgb565(theme::hex(theme::PAGE));
+    look.fade = t.overlay;
+    live_loader(look);
+    // The name as LVGL draws it on the card (style_tall's ink, the tile's font), copied by the stream.
+    lv_draw_buf_t *name = nullptr;
+#if LV_USE_SNAPSHOT
+    if (t.overlay && card->title && !lv_obj_has_flag(card->title, LV_OBJ_FLAG_HIDDEN))
+      name = lv_snapshot_take(card->title, LV_COLOR_FORMAT_ARGB8888);
+    if (name) {
+      lv_area_t at;
+      lv_obj_get_coords(card->title, &at);
+      // A snapshot holds what the label draws beyond its box too, as much on every side.
+      const int32_t ext = std::max<int32_t>(0, (static_cast<int32_t>(name->header.w) - lv_area_get_width(&at)) / 2);
+      look.name = reinterpret_cast<const uint32_t *>(name->data);
+      look.name_w = name->header.w;
+      look.name_h = name->header.h;
+      look.name_stride = name->header.stride / 4;
+      look.name_x = at.x1 - ext - spot.room.x;
+      look.name_y = at.y1 - ext - spot.room.y;
+    }
+#endif
+  const live_view::Handle handle = live_view::open(url, spot.room, look);
+#if LV_USE_SNAPSHOT
+    if (name) lv_draw_buf_destroy(name);
+#endif
+    return handle;
+  }
   Widgets *card = nullptr;
-  each_card([&](Widgets &w) { if (w.index == index && index < model.count && live_tile_wanted(w, model.tiles[index])) card = &w; });
-  if (!card || !page_clear()) return;
-  const Tile &t = model.tiles[index];
+  each_card([&](Widgets &w) { if (w.index == spot.index && w.plugin && on_glass(w)) card = &w; });
+  if (!card || spot.index >= model.count) return live_spots::Spots::NOT_NOW;
+  const Tile &t = model.tiles[spot.index];
+  auto *place = const_cast<lv_obj_t *>(static_cast<const lv_obj_t *>(spot.place));
   live_view::Look look;
   look.tile = true;
   look.contain = url.find("fit=contain") != std::string::npos;
-  look.radius = lv_obj_get_style_radius(card->tile, LV_PART_MAIN);
-  look.ground = live_view::rgb565(theme::hex(theme::PAGE));
-  look.fade = t.overlay;
-  // The name as LVGL draws it on the card (style_tall's ink, the tile's font), copied by the stream.
-  lv_draw_buf_t *name = nullptr;
-#if LV_USE_SNAPSHOT
-  if (t.overlay && card->title && !lv_obj_has_flag(card->title, LV_OBJ_FLAG_HIDDEN))
-    name = lv_snapshot_take(card->title, LV_COLOR_FORMAT_ARGB8888);
-  if (name) {
-    lv_area_t at;
-    lv_obj_get_coords(card->title, &at);
-    // A snapshot holds what the label draws beyond its box too, as much on every side.
-    const int32_t ext = std::max<int32_t>(0, (static_cast<int32_t>(name->header.w) - lv_area_get_width(&at)) / 2);
-    look.name = reinterpret_cast<const uint32_t *>(name->data);
-    look.name_w = name->header.w;
-    look.name_h = name->header.h;
-    look.name_stride = name->header.stride / 4;
-    look.name_x = at.x1 - ext - l->room.x;
-    look.name_y = at.y1 - ext - l->room.y;
-  }
-#endif
-  l->handle = live_view::open(url, l->room, look);
-#if LV_USE_SNAPSHOT
-  if (name) lv_draw_buf_destroy(name);
-#endif
-  // No room for another stream, or no memory: this tile keeps its stills.
-  if (l->handle < 0) l->failures = live_view::TRIES;
+  look.radius = lv_obj_get_style_radius(place, LV_PART_MAIN);
+  look.ground = live_view::rgb565(t.transparent ? theme::hex(theme::PAGE) : theme::surface(t.background));
+  look.fade = false;
+  live_loader(look);
+  return live_view::open(url, spot.room, look);
 }
+inline void live_spots_bind() {
+  if (spots.open) return;
+  spots.ask = live_spot_ask;
+  spots.open = live_spot_open;
+  spots.close = [](live_view::Handle handle) { live_view::close(handle); };
+  spots.log = [](const live_spots::Spot &spot, const char *what) {
+    ESP_LOGD("camera", "%s of tile %u, %s: %s", spot.kind == live_spots::Kind::TILE ? "the live tile" : "a live place",
+             (unsigned) spot.index, spot.entity.c_str(), what);
+  };
+}
+// Every live tile and place stops at once: a page turns, a card opens over them. They start again on a round with the
+// page clear.
+inline void live_tiles_halt() { spots.halt(); }
+// Every round of the pictures (250 ms): what streams, what stops, what asks.
+inline void live_tiles_round() {
+  live_spots_bind();
+  const uint32_t now = esphome::millis();
+  // A new firmware on trial streams nothing: the tiles keep their stills until it is confirmed (boot_trial.h).
+  const bool clear = page_clear() && model.ready() && !boot_trial::on(now);
+  spots.begin();
+  if (clear) {
+    // A plugin's live places (0.17), asked only of an app that reads questions.
+    if (app_reads_questions)
+      live_places_each([&](Widgets &w, lv_obj_t *place, const std::string &camera, bool contain) {
+        lv_obj_update_layout(place);
+        const auto room = object_room(place);
+        if (room.w < 64 || room.h < 64 || drawn_over(place, room.x, room.y, room.w, room.h)) return;
+        spots.want(place_spot(w, place, camera, contain, room));
+      });
+    // At most hw::LIVE_TILES camera tiles stream at once (hw.h, docs/PLATFORM_PLAN.md 4.1), the first by tile order; the
+    // rest keep their stills, which a live tile loads every 15 s anyway (its asker's `every`). The app gives those tiles
+    // the same count from the hello, and the editor says so on the fifth tile. Logged when the count of tiles left out
+    // changes, so the log says which page did it.
+    size_t streaming = 0, left_out = 0;
+    each_card([&](Widgets &w) {
+      if (w.index >= model.count) return;
+      const Tile &t = model.tiles[w.index];
+      if (!live_tile_wanted(w, t)) return;
+      if (streaming >= hw::caps().live_tiles) { ++left_out; return; }
+      ++streaming;
+      spots.want(tile_spot(w, t));
+    });
+    static size_t left_out_before = 0;
+    if (left_out != left_out_before) {
+      left_out_before = left_out;
+      if (left_out) ESP_LOGI("camera", "%u live tiles stream; %u more on the page keep their stills (at most %u at once)",
+                             (unsigned) streaming, (unsigned) left_out, (unsigned) hw::caps().live_tiles);
+    }
+  }
+  spots.end(now);
+}
+// The app's answer to a live tile's question: its stream, laid out as its card.
+inline void live_tile_answer(size_t index, const std::string &url) {
+  spots.answer(live_spots::Kind::TILE, static_cast<uint32_t>(index), url, page_clear());
+}
+// The app's answer to a live place's question: its stream, laid in the place. No stream (the camera is not the tile's
+// own, a screen that cannot stream it): the place keeps its stills.
+inline void live_place_answer(uint32_t number, const std::string &url) { spots.answer(number, url, page_clear()); }
 // The board's 50 ms interval (features/camera.yaml), beside the downloads' hand-off: what each stream did, and live tiles
 // stopped the moment something lies over their page (a card, the camera full screen, an alert, the settings).
 // Something came over a live picture (the update's progress, a toast, a sheet): it stops at once, and starts again once
@@ -11641,31 +11941,45 @@ inline void live_tile_answer(size_t index, const std::string &url) {
 // also one the main loop does not run for, as ESPHome's update holds it and has its progress drawn at once (ota_draw,
 // lv_refr_now), where the live pictures went on over it (2026-10-10, the D1001).
 inline void live_stop_covered() {
-  if (live_tiles.empty() && !(camera_root && camera.live && camera.live_handle >= 0)) return;
+  if (spots.empty() && !(camera_root && camera.stream.live && camera.stream.handle >= 0)) return;
   lv_obj_update_layout(lv_layer_top());  // what was made just now has its place before it is asked for it
   lv_obj_update_layout(lv_layer_sys());
-  if (!live_tiles.empty() && !page_clear()) live_tiles_halt();
-  for (auto &l : live_tiles) {
-    if (l.handle < 0) continue;
+  if (!spots.empty() && !page_clear()) live_tiles_halt();
+  const uint32_t now = esphome::millis();
+  for (size_t i = 0; i < spots.all().size(); ++i) {
+    if (spots.all()[i].handle < 0) continue;
+    const live_spots::Spot spot = spots.all()[i].spot;  // its own copy: covered() changes the entry
+    if (spot.kind == live_spots::Kind::PLACE) {
+      bool there = false;
+      live_places_each([&](Widgets &, lv_obj_t *place, const std::string &, bool) { if (place == spot.place) there = true; });
+      auto *place = const_cast<lv_obj_t *>(static_cast<const lv_obj_t *>(spot.place));
+      const bool moved = there && !(object_room(place) == spot.room);
+      if (!there || moved || drawn_over(place, spot.room.x, spot.room.y, spot.room.w, spot.room.h)) {
+        const char *why = !there ? "it is gone" : moved ? "it moved" : drawn_over_by ? drawn_over_by : "nothing over it";
+        ESP_LOGI("camera", "a live place of tile %u stops streaming: %s", (unsigned) spot.index, why);
+        spots.covered(spot, now, why);
+      }
+      continue;
+    }
     Widgets *card = nullptr;
-    each_card([&](Widgets &w) { if (w.index == l.index && w.tile) card = &w; });
+    each_card([&](Widgets &w) { if (w.index == spot.index && w.tile) card = &w; });
     // Its picture lies at the room it asked for, on the glass: a card that moved (a page animated, a layout made anew)
     // leaves the picture where it was, so it stops before LVGL draws, and asks again from where the card is now.
-    const bool moved = card && !(card_room(*card) == l.room);
-    if (!card || moved || drawn_over(card->tile, l.room.x, l.room.y, l.room.w, l.room.h)) {
-      ESP_LOGI("camera", "tile %u stops streaming: %s", (unsigned) l.index,
-               moved ? "its card moved" : drawn_over_by ? drawn_over_by : "nothing over it");
-      live_tile_stop(l);
-      l.asked_at = esphome::millis();
+    const bool moved = card && !(card_room(*card) == spot.room);
+    if (!card || moved || drawn_over(card->tile, spot.room.x, spot.room.y, spot.room.w, spot.room.h)) {
+      const char *why = moved ? "its card moved" : drawn_over_by ? drawn_over_by : "nothing over it";
+      ESP_LOGI("camera", "tile %u stops streaming: %s", (unsigned) spot.index, why);
+      spots.covered(spot, now, why);
     }
   }
-  if (camera_root && camera.live && camera.live_handle >= 0) {
+  if (camera_root && camera.stream.live && camera.stream.handle >= 0) {
     const auto area = live_area();
     if (drawn_over(camera_root, area.x, area.y, area.w, area.h)) {
       ESP_LOGI("camera", "the camera stops streaming: %s over it", drawn_over_by ? drawn_over_by : "nothing");
-      live_view::close(camera.live_handle);
-      camera.live = false;
-      camera.live_handle = -1;
+      live_view::close(camera.stream.handle);
+      camera.stream.stopped();
+      camera_warm(false);
+      camera_sound_waiting = false;
     }
   }
 }
@@ -11677,98 +11991,113 @@ inline void live_tick() {
   }
   live_stop_covered();
   live_view::tick([](live_view::Handle handle, live_view::Event event) {
-    if (camera_root && camera.live && handle == camera.live_handle) {
+    if (camera_root && camera.stream.is(handle)) {
       if (event == live_view::Event::FIRST) {
         ESP_LOGI("camera", "live: first picture %u ms after the camera opened", (unsigned) (esphome::millis() - camera_opened_at));
         camera.shown = true;
         camera_note_text("");  // the spinner goes; LVGL no longer draws there while the camera streams
+        camera_warm(true);     // in the top bar until the camera is live (LIVE, at once for a picture that is)
+        // LVGL draws the whole glass once more, now that the picture lies in its spot and the keep-out holds it: the
+        // bands of the room around the picture, the top bar, and anything a live tile's last copy left under the view
+        // before it stopped (live_begin). The start's twin of the redraw at a full view's end (live_view::tick).
+        glass::redraw_all();
+      } else if (event == live_view::Event::LIVE) {
+        camera_warm(false);
+        if (camera_sound_waiting) camera_sound_show();  // its place is free now
+        camera_sound_waiting = false;
       } else if (event == live_view::Event::SOUND) {
-        camera_sound_show();
+        if (camera_warming()) camera_sound_waiting = true;
+        else camera_sound_show();
       } else if (event == live_view::Event::FAILED || event == live_view::Event::TURNED) {
-        // Asked again: a new stream for the glass as it is now, or after TRIES failures the stills.
-        if (event == live_view::Event::FAILED) ++camera.live_failures;
+        camera_warm(false);
+        camera_sound_waiting = false;  // a new stream tells its sound again
+        // Asked again: a new stream for the glass as it is now, or after TRIES failures the stills (ViewStream::ended).
         ESP_LOGI("camera", "live %s for %s", event == live_view::Event::FAILED ? "failed" : "turned", camera.entity.c_str());
-        camera.live = false;
-        camera.live_handle = -1;
+        camera.stream.ended(event);
         pictures_round();
       }
       return;
     }
-    for (auto &l : live_tiles) {
-      if (l.handle != handle) continue;
-      if (event == live_view::Event::FIRST) {
-        l.streaming = true;
-      } else if (event != live_view::Event::NONE) {
-        if (event == live_view::Event::FAILED) ++l.failures;
-        l.handle = -1;
-        l.streaming = false;
-        l.asked_at = esphome::millis();
-      }
-      return;
-    }
+    // A live tile or place (live_spots.h): its first picture, or a stream that ended, failed or turned.
+    spots.event(handle, event, esphome::millis());
   });
 }
 
-// Asks ESP Screen Manager for a link (app 0.2.66+ answers with op "camera"). An event, like history_request.
-// A cover (firmware 0.2.64+) adds the size it wants and the colour behind its rounded corners; the app bakes both in.
+// Asks ESP Screen Manager for the full view's picture (app 0.2.66+ answers with op "camera"): a camera, a map tile
+// opened over the glass (firmware 0.21.0+), the screensaver's picture (firmware 0.29.0+); or, with a `size`, a media
+// card's cover (firmware 0.2.64+) of that side with rounded corners over `background`. One question (picture_question.h).
 inline void camera_request(const std::string &entity, int size, uint32_t background) {
   if (inbox.empty()) return;
-  esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef("esphome.screen_camera");
-  request.is_event = true;
-  char size_text[12] = "", background_text[8] = "";
-  if (size > 0) { snprintf(size_text, sizeof(size_text), "%d", size); snprintf(background_text, sizeof(background_text), "%06X", (unsigned) background); }
-  // A map's full view (firmware 0.21.0+) adds its tile's index and the look, which the app draws it in; an older app
-  // reads the keys it knows.
-  const bool map = size <= 0 && camera_map_index >= 0;
-  // The screensaver's picture (firmware 0.29.0+): the full view's request with what it shows, "camera" or "media".
-  const bool saver = size <= 0 && saver_camera;
-  // `move` (dev): the zoom steps and the move of the map's own keys, "" for the view the app frames.
-  const std::string keys[] = {"inbox", "entity", "size", "bg", "session", "rev", "view", "idx", "dark", "focus", "move"}, values[] = {inbox, entity, size_text, background_text, protocol_key(transfer.lease), layout_rev, std::to_string(size > 0 ? ++cover_view_id : ++camera_view_id), std::to_string(camera_map_index), theme::dark ? "1" : "0", map_focus, map_move.text()};
-  const int count = map ? 11 : 7;
-  // A board that takes larger pictures than the cap every screen takes says how large (picture_cap, GitHub #183): the
-  // full view, a map's and the screensaver's picture come at its own pixels. An older app reads the keys it knows.
+  using picture_question::Fit;
+  picture_question::Question q;
+  picture_question::Place place;
+  q.dark = theme::dark;
   const auto cap = picture_cap();
-  const std::string cap_text = std::to_string(cap.bytes);
-  const bool larger = size <= 0 && cap.bytes > picture_store::MAX_BYTES;
-  // A P4 takes the camera live (live_view.h): it asks for a stream of pictures for the room below the top bar. An app
-  // without streams reads the keys it knows and answers with a still.
-  const bool live = size <= 0 && live_wanted();
-  const std::string live_text = live ? live_view::box_text(live_area()) : std::string();
-  // With the camera's sound where the board has a speaker (features/audio.yaml binds it).
-  const bool sound = live && live_view::has_speaker();
-  request.data.init(count + (saver ? 1 : 0) + (larger ? 1 : 0) + (live ? 1 : 0) + (sound ? 1 : 0));
-  if (saver) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef("saver");
-    entry.value = esphome::StringRef(saver_now.kind);
-    request.data.push_back(entry);
+  q.cap = cap.bytes;
+  if (size > 0) {
+    q.owner = picture_question::Owner::CARD;
+    q.sources = {picture_question::cover_source(entity)};
+    q.w = q.h = place.w = place.h = size;
+    place.radius = media_card::radius_for(size);
+    place.ground = background;
+    q.places = {place};
+    picture_ask(q, "cover", entity, ++cover_view_id);
+    ESP_LOGI("camera", "asked for the cover of %s", entity.c_str());
+    return;
   }
-  if (larger) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef("cap");
-    entry.value = esphome::StringRef(cap_text);
-    request.data.push_back(entry);
+  // The whole glass, within the board's cap (picture_cap, GitHub #183): a board with the memory gets its own pixels.
+  int glass_w = overlay_card::screen_width(), glass_h = overlay_card::screen_height();
+#ifdef SD_MOD_DOORBELL
+  // A ring's picture fills the room beside its keys.
+  if (doorbell::shown() && camera_map_index < 0 && !saver_camera) { glass_w = doorbell::area().w; glass_h = doorbell::area().h; }
+#endif
+  const int scale = picture_store::fit_scale(glass_w, glass_h, cap);
+  q.w = place.w = std::max(1, picture_store::scaled(glass_w, scale));
+  q.h = place.h = std::max(1, picture_store::scaled(glass_h, scale));
+  const char *kind = "full";
+  if (saver_camera) {
+    // The screensaver's picture: the player's cover over the glass, a camera, or the photo of the photos step, darkened
+    // under the words it carries (not the photo); a photo that moves slowly comes a little larger (picture_motion.h).
+    q.owner = picture_question::Owner::SAVER;
+    kind = "saver";
+    if (saver_now.kind == "photos") {
+      q.sources = {picture_question::PHOTOS_SOURCE};
+      q.of = SAVER_PHOTOS;
+      place.fit = Fit::AUTO;
+      place.move = saver_now.motion ? 8 : 0;
+    } else if (saver_now.kind == "media") {
+      q.sources = {picture_question::cover_source(entity)};
+      place.fit = Fit::SAVER;
+      place.dim = 30;
+    } else {
+      q.sources = {picture_question::camera_source(entity)};
+      place.dim = 30;
+      q.pace = camera.every;  // SAVER_CAMERA_MS, set as the screensaver opens
+    }
+    q.formats = {"bmp8", "bmp24"};
+  } else if (camera_map_index >= 0) {
+    // A map's full view, drawn in the screen's look, with a person a finger picked and the moves of its own keys.
+    q.owner = picture_question::Owner::VIEW;
+    q.of = entity;
+    q.sources = {picture_question::map_source(camera_map_index, map_focus, map_move.text())};
+    place.fit = Fit::EXACT;
+    q.formats = {"bmp8", "bmp24"};
+  } else {
+    // A camera: at its own proportions within the glass, at the view's pace. A P4 streams it into the room below its
+    // top bar (live_view.h), with its sound where the board has a speaker; an app without streams answers with a still.
+    q.owner = picture_question::Owner::VIEW;
+    q.sources = {picture_question::camera_source(entity)};
+    place.fit = Fit::SHRINK;
+    q.pace = camera.every;
+    if (live_wanted()) {
+      const auto room = live_area();
+      q.live_w = room.w;
+      q.live_h = room.h;
+      q.sound = live_view::has_speaker();
+    }
   }
-  if (live) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef("live");
-    entry.value = esphome::StringRef(live_text);
-    request.data.push_back(entry);
-  }
-  if (sound) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef("sound");
-    entry.value = esphome::StringRef("1");
-    request.data.push_back(entry);
-  }
-  for (int i = 0; i < count; ++i) {
-    esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(keys[i]);
-    entry.value = esphome::StringRef(values[i]);
-    request.data.push_back(entry);
-  }
-  esphome::api::global_api_server->send_homeassistant_action(request);
+  q.places = {place};
+  picture_ask(q, kind, saver_camera && saver_now.kind == "photos" ? SAVER_PHOTOS : entity, ++camera_view_id);
   ESP_LOGI("camera", "asked for %s", entity.c_str());
 }
 
@@ -11788,11 +12117,15 @@ inline void camera_release() {
 
 inline void camera_close() {
   if (!camera_root) return;
+#ifdef SD_MOD_DOORBELL
+  doorbell::closing();  // a ring's view says how it ended
+#endif
   // A live picture stops first: nothing of it writes the glass once LVGL draws the page there again.
-  live_view::close(camera.live_handle);
+  live_view::close(camera.stream.handle);
   lv_obj_delete(camera_root);
   camera_root = camera_picture = camera_note = camera_back = camera_title = camera_spinner = map_card_obj = nullptr;
-  camera_sound_key = nullptr;  // it went with the view
+  camera_sound_key = camera_warm_spinner = nullptr;  // they went with the view
+  camera_sound_waiting = false;
   map_zoom_keys = map_pad = map_waiting = nullptr;
   saver_first = saver_second = nullptr;  // they went with the view
   saver_keys = {};
@@ -12022,6 +12355,16 @@ inline void camera_open(const std::string &entity, const std::string &name, int 
     lv_obj_set_style_arc_color(camera_spinner, theme::color(on_page ? theme::TRACK : theme::CAMERA_TRACK), LV_PART_MAIN);
     lv_obj_center(camera_spinner);
   }
+#ifdef SD_MOD_DOORBELL
+  // A ring (module doorbell): the doorbell's own header and keys instead of the back key and the name.
+  if (doorbell::shown()) {
+    doorbell::build(camera_root, name);
+    camera_name = name;
+    ESP_LOGI("camera", "open %s for a ring", entity.c_str());
+    pictures_round();
+    return;
+  }
+#endif
   // The top bar of every page a tap opens (detail_bar), its back key dark over a map.
   const auto home = detail_bar::back_slot(camera_root);
   const int bar = home.h, bar_y = home.y;
@@ -12085,6 +12428,9 @@ inline void camera_open(const std::string &entity, const std::string &name, int 
 // The board's interval (250 ms): the store lets go of what no card draws, every picture says what it wants and the
 // loader asks, loads and breaks off (pictures_round), and the screensaver follows.
 inline void camera_tick() {
+#ifdef SD_MOD_DOORBELL
+  doorbell::tick(esphome::millis());  // its chime, how long ago it rang, the close of a ring nobody answered
+#endif
   pictures_collect();  // copies no card shows any more, and the oldest over the budget
   live_tiles_round();
   pictures_round();
@@ -12131,12 +12477,16 @@ inline std::string camera_tag();
 inline void camera_answer(const std::string &view, const std::string &entity, const std::string &url, uint32_t number) {
   if (!camera_supported()) return;
   const uint32_t now = esphome::millis();
+  if (view == "plive") {  // a live place of a plugin tile (plugin API 0.17), found by its question's number
+    live_place_answer(number, url);
+    return;
+  }
   if (view == "full" || view == "saver") {
     // "saver" (firmware 0.29.0+): the screensaver's picture, into the full view it opened without its keys.
     if (!camera_root || camera.entity != entity || (view == "saver") != saver_camera) return;
     // A stream of pictures (live_view.h), for the view that asked for one; a still goes the way every picture goes.
     if (view == "full" && live_view::is_stream(url)) {
-      if (live_wanted() && !camera.live) live_begin(url);
+      if (live_wanted() && !camera.stream.live) live_begin(url);
       return;
     }
     loader.answer(camera_tag(), url, now);
@@ -12267,6 +12617,9 @@ inline void view_done(picture_loader::Outcome outcome) {
     saver_words();
   } else if (first && camera_picture) {
     camera_note_text("");
+#ifdef SD_MOD_DOORBELL
+    if (doorbell::shown()) doorbell::picture_shown(camera_picture);
+#endif
     if (camera_back) lv_obj_move_foreground(camera_back);
     lv_obj_move_foreground(camera_title);
     // A map's card (firmware 0.21.0+) may have come before its first picture: it lies over the map as the bar does.
@@ -12323,30 +12676,49 @@ inline void slot_letgo(picture_loader::Slot slot) {
   media_library::art_forget_download();
   plugin_host::card_letgo(camera_full.source ? camera_full.source() : nullptr);
 }
-// A download ended (picture_fetch, any slot; packages/features/camera.yaml): the picture goes into the store under its
-// key, a 304 keeps the copy there as it is, and its owner shows it. Without room in the store the owner draws the
-// download itself until the slot loads another picture.
+// A download ended (picture_fetch, any slot; packages/features/camera.yaml): the store takes the picture over under its
+// key, a 304 keeps what the store has, and its owner shows it. Without room in the store the owner draws the download
+// itself until the slot loads another picture.
 inline void picture_done(picture_loader::Slot slot, bool ok, bool cached) {
   const uint32_t now = esphome::millis();
+  auto &hooks = slot_hooks(slot);
+  // A 304 for a picture the store let go meanwhile: the slot handed its pixels over, so nothing is left to show. The link
+  // forgets its ETag (release) and the load counts as failed, so the loader fetches the picture whole.
+  if (ok && cached && pictures_kept()) {
+    const std::string asked = loader.loading_key(slot);
+    const lv_image_dsc_t *held = hooks.source ? hooks.source() : nullptr;
+    if (!asked.empty() && !pictures.entry(asked) && !(held && held->data)) {
+      ESP_LOGD("picture", "%s came back unchanged, but the store let it go: loaded again", asked.c_str());
+      if (hooks.release) hooks.release();
+      ok = cached = false;
+    }
+  }
   const std::string key = loader.loaded(slot, ok, now);
   if (!key.empty()) {
-    auto &hooks = slot_hooks(slot);
     lv_image_dsc_t *src = hooks.source ? hooks.source() : nullptr;
     const int s = static_cast<int>(slot);
     bool kept = false;
-    if (pictures_kept() && src && src->data) {
-      if (cached && pictures.entry(key)) { pictures.touch(key, now); kept = true; }
-      else kept = pictures.put(key, *src, now) != nullptr;
+    if (src) picture_memory("after", key.substr(0, key.find('|')).c_str(), src->header.w * src->header.h);
+    if (pictures_kept() && cached && pictures.entry(key)) {
+      pictures.touch(key, now);
+      kept = true;
+    } else if (pictures_kept() && src && src->data) {
+      // One picture in memory once (docs/PICTURES.md, "Memory"): the store takes the download's own buffer and the slot
+      // lets go of it; no copy, and the picture on the glass until now goes once its cards show this one. A slot that
+      // cannot give its buffer away is copied once into one the store owns.
+      lv_image_dsc_t taken = *src;
+      void *copy = nullptr;
+      if (!hooks.hand_over && (copy = kept_allocate(src->data_size))) {
+        std::memcpy(copy, src->data, src->data_size);
+        taken.data = static_cast<const uint8_t *>(copy);
+      }
+      kept = (hooks.hand_over || copy) && pictures.adopt(key, taken, now) != nullptr;
+      if (!kept && copy) kept_free(copy);
+      if (kept && hooks.hand_over) hooks.hand_over();
+      else if (kept && hooks.release) hooks.release();  // the copy is the store's: the slot's own goes
       if (!kept) ESP_LOGW("picture", "no room to keep %s", key.c_str());
     }
     if (!kept) { slot_key[s] = key; slot_at[s] = now; }
-    if (src) picture_memory("after", key.substr(0, key.find('|')).c_str(), src->header.w * src->header.h);
-    // A tile's picture the store keeps needs its download no more: the slot's buffer goes now, not with the next
-    // picture of another size (one per tile, so most are). The full view keeps its own, which its next refresh reuses.
-    if (kept && slot == picture_loader::Slot::LIVE && hooks.release) {
-      hooks.release();
-      ESP_LOGD("picture", "the tiles' download let go of %s", key.c_str());
-    }
     loader.arrived(key, cached);
   }
   pictures_round();
@@ -12355,7 +12727,7 @@ inline void picture_done(picture_loader::Slot slot, bool ok, bool cached) {
 // ---- What every picture wants, each round ----
 inline void camera_want() {
   if (!camera_root || !camera.open() || !pictures_awake()) return;
-  if (camera.live) return;  // its pictures stream (live_view.h); the loader has nothing to fetch
+  if (camera.stream.live) return;  // its pictures stream (live_view.h); the loader has nothing to fetch
   picture_loader::Want w;
   w.key = camera_key();
   w.tag = camera_tag();
@@ -12502,6 +12874,9 @@ inline void pictures_round() {
   pictures_rounding = true;
   if (!loader.load) loader_bind();
   const uint32_t now = esphome::millis();
+  // One budget for every picture (docs/PICTURES.md): while streams run (live_view.h) they hold their share of it, at
+  // most half, and the store keeps the rest. A store over its budget lets go of what no card draws as it needs room.
+  if (pictures_kept()) pictures.budget = pictures_budget_whole - std::min(pictures_budget_whole / 2, live_view::held_bytes());
   loader.begin();
   alert_want();
   camera_want();
@@ -12530,7 +12905,7 @@ inline void pictures_round() {
 // clock. The app decides which (screen_manager/app/screen_saver.py) and says so in a small message whenever that
 // changes; the screen keeps the last word and shows it the next time it goes into standby. A cover and a camera are the
 // camera's full view without its keys, holding one picture of the whole glass the app made for it (darkened, the cover
-// in its colour on long glass, camera_feed.encode_saver) with a line or two of words over it (saver_view.h); the clock
+// in its colour on long glass, picture_paint's fit `saver`) with a line or two of words over it (saver_view.h); the clock
 // takes the bedside clock's digits. Nothing on it takes a tap: it lies on the top layer without one clickable object,
 // so a finger falls through to dim_wake_overlay and only wakes the screen, the way it always did in standby (and
 // wake_tap leaves the tile it lay over alone).
@@ -12984,9 +13359,10 @@ inline void saver_sync(bool lit) {
   // The camera and the cover stand as they are while nothing changed; the clock is drawn again, a minute later. A
   // plugin's saver stays and draws on its own clock (on_tick).
   if (shown && saver_next == saver_now && (saver_now.kind != "clock" || !saver_now.plugin.empty())) return;
-  // The same plugin's saver for the same step with a new word: it paints that in place (on_state).
+  // The same plugin's saver for the same step with a new word: it paints that in place (on_state). Other options make
+  // it anew, as Tessera's own face is drawn again for another look: a saver reads its options in show().
   if (saver_root && !saver_now.plugin.empty() && saver_next.plugin == saver_now.plugin && saver_next.kind == saver_now.kind &&
-      saver_plugin_draws(saver_next)) {
+      saver_next.plugin_options == saver_now.plugin_options && saver_plugin_draws(saver_next)) {
     // Its backdrop follows the next cover or photo as Tessera's own face does (the last stays until it comes).
     if (saver_bare && camera_root && camera_picture && (saver_next.entity != saver_now.entity ||
         saver_next.picture != saver_now.picture || saver_next.motion != saver_now.motion)) saver_follow();

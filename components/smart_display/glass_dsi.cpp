@@ -1,0 +1,323 @@
+// The glass on an ESP32-P4 with a MIPI-DSI panel (glass.h says what and why): the panel ESPHome's display made, its frame
+// buffer, the one-writer lock with LVGL's refresh hooks, the rooms LVGL keeps out of, the panel's underrun counter and
+// the PPA bursts of every client. Moved out of live_view.cpp as it was (docs/PICTURE_ARCHITECTURE.md, section 6, step 3):
+// the lock's reach, the keep-out's rule and the invalidations are those of the streams before the move.
+#include "glass.h"
+#include "picture_engine.h"
+#if defined(USE_LIVE_VIEW) && defined(SCREEN_PICTURES)
+#include <atomic>
+
+#include "esphome/components/lvgl/lvgl_esphome.h"
+#include "esphome/core/log.h"
+#include "lvgl.h"
+#include "lvgl_private.h"  // lv_inv_area, lv_area_intersect and the display's list, which LVGL 9 keeps out of lvgl.h
+
+#include <driver/ppa.h>
+#include <esp_lcd_mipi_dsi.h>
+// The DSI bridge's own registers, for its underrun flag (misses below); ESP-IDF keeps the chip's registers here.
+#if __has_include(<soc/mipi_dsi_bridge_struct.h>)
+#include <soc/mipi_dsi_bridge_struct.h>
+#define GLASS_COUNTS_MISSES 1
+#endif
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+
+namespace glass {
+
+static const char *const TAG = "glass";
+
+// ---- The panel ESPHome's display made (the wrap of esp_lcd_new_panel_dpi at the end of this file) and LVGL ----
+static esp_lcd_panel_handle_t panel_handle = nullptr;
+static Panel panel_facts;
+static void *buffer = nullptr;
+static esphome::lvgl::LvglComponent *lvgl = nullptr;
+// One writer on the glass at a time (glass.h): made at bind, on the main loop, before any task.
+static SemaphoreHandle_t lock = nullptr;
+
+void bind(esphome::lvgl::LvglComponent *component) {
+  lvgl = component;
+  if (!lock) lock = xSemaphoreCreateRecursiveMutex();
+}
+static void panel_made(esp_lcd_panel_handle_t made, const esp_lcd_dpi_panel_config_t *config) {
+  panel_handle = made;
+  panel_facts.w = config->video_timing.h_size;
+  panel_facts.h = config->video_timing.v_size;
+  // ESPHome names the frame buffer's format in either field, by ESP-IDF version.
+  panel_facts.rgb565 = config->in_color_format == LCD_COLOR_FMT_RGB565 ||
+                       (config->in_color_format == 0 && config->pixel_format == LCD_COLOR_PIXEL_FORMAT_RGB565);
+}
+Panel panel() { return panel_facts; }
+int turn() { return lvgl ? static_cast<int>(lvgl->get_rotation()) : 0; }
+bool direct() { return panel_handle != nullptr && panel_facts.rgb565 && lvgl != nullptr; }
+void *frame_buffer() {
+  if (!buffer && panel_handle && esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &buffer) != ESP_OK) buffer = nullptr;
+  return buffer;
+}
+
+// ---- One writer at a time ----
+void hold() {
+  if (lock) xSemaphoreTakeRecursive(lock, portMAX_DELAY);
+}
+void release() {
+  if (lock) xSemaphoreGiveRecursive(lock);
+}
+static void hold_glass(lv_event_t *) { hold(); }
+static void release_glass(lv_event_t *) { release(); }
+static bool holding = false;  // LVGL holds the glass while it refreshes, from the first stream or still on and for good
+bool watch() {
+  if (!lv_display_get_default() || !lock) return false;
+  if (!holding) {
+    lv_display_add_event_cb(lv_display_get_default(), hold_glass, LV_EVENT_REFR_START, nullptr);
+    lv_display_add_event_cb(lv_display_get_default(), release_glass, LV_EVENT_REFR_READY, nullptr);
+    holding = true;
+  }
+  return true;
+}
+
+// ---- The panel's share of the memory bus ----
+// ESP-IDF only logs an underrun from its interrupt, on the UART and for every frame. Here the bridge's underrun flag is
+// read every tick instead (its interrupt is turned off, so the flag stays up until it is read) and counted, so a
+// tester's log says whether a change helped (the Guition 10.1 P4, pixel clock 70 MHz, saw the flashes; the D1001 at
+// 80 MHz counts none).
+static uint32_t panel_misses = 0;
+#ifdef GLASS_COUNTS_MISSES
+static bool counting_misses = false;
+static void count_misses() {
+  if (!counting_misses) {
+    MIPI_DSI_BRIDGE.int_ena.underrun_int_ena = 0;
+    MIPI_DSI_BRIDGE.int_clr.underrun_int_clr = 1;
+    counting_misses = true;
+    return;
+  }
+  if (MIPI_DSI_BRIDGE.int_raw.underrun_int_raw) {
+    MIPI_DSI_BRIDGE.int_clr.underrun_int_clr = 1;
+    ++panel_misses;
+  }
+}
+#else
+static void count_misses() {}
+#endif
+void tick() {
+  if (direct()) count_misses();
+}
+uint32_t misses() { return panel_misses; }
+
+// ---- LVGL stays out of a live picture's room ----
+// A card on the page behind the view that changes (a sensor's new value), or a page's own redraw around a live tile,
+// has LVGL draw that area again, and what LVGL has there (the view's black, a tile's still with its spinner and name)
+// would cover the live picture until its next one. So what LVGL is about to draw is cut against where the picture of
+// every stream that streams lies (its spot: a full view's picture may leave room beside it, which stays LVGL's), once,
+// as it starts drawing (LV_EVENT_RENDER_START: its areas joined, nothing drawn yet): what lies outside a room stays, in
+// pieces, what lies inside goes. That one place sees every way LVGL comes to draw there: an area as it comes, one it
+// had before a stream's first picture, two it joined into one, and the whole glass, which LVGL draws when more areas
+// come in one frame than its list holds. A filter of each area as it came missed the last three (2026-10-10, the D1001:
+// a tile's spinner and name over its live picture after the camera full screen closed). Each piece goes through the
+// display's own rounding (ESPHome's draw_rounding), as LVGL's own areas do. Once a room is disarmed nothing is cut for
+// it, and LVGL draws its room again.
+struct RoomState {
+  bool used = false;
+  Rect area;
+  // Where the stream's last picture lies (LVGL's coordinates). Written by the task as it copies a picture, read by the
+  // main loop: only that is kept from LVGL, which draws the rest of the room itself, and when it moves (a camera's
+  // still, then its stream at another size) LVGL draws where it lay again (follow).
+  portMUX_TYPE spot_lock = portMUX_INITIALIZER_UNLOCKED;
+  Rect spot;
+  Rect spot_told;  // the main loop's: the spot it last saw
+  // LVGL is kept out from the stream's first picture on (set by the task just before it copies one): until then LVGL
+  // draws as ever, a spinner turning while the camera comes.
+  std::atomic<bool> armed{false};
+};
+static RoomState rooms[MAX_ROOMS];
+static bool filtering = false;
+static lv_area_t lv_rect(const Rect &r) { return {r.x, r.y, r.x + r.w - 1, r.y + r.h - 1}; }
+static Rect spot_of(RoomState &s) {
+  taskENTER_CRITICAL(&s.spot_lock);
+  const Rect spot = s.spot;
+  taskEXIT_CRITICAL(&s.spot_lock);
+  return spot;
+}
+static void set_spot(RoomState &s, const Rect &spot) {
+  taskENTER_CRITICAL(&s.spot_lock);
+  s.spot = spot;
+  taskEXIT_CRITICAL(&s.spot_lock);
+}
+// What LVGL keeps out of: where the stream's last picture lies.
+static lv_area_t room_of(RoomState &s) {
+  const Rect spot = spot_of(s);
+  return lv_rect(spot.empty() ? s.area : spot);
+}
+static void invalidate(const lv_area_t &part) { lv_inv_area(lv_display_get_default(), &part); }
+static bool covered(const lv_area_t &a) {
+  for (auto &o : rooms) {
+    if (!o.used || !o.armed) continue;
+    const lv_area_t room = room_of(o);
+    lv_area_t common;
+    if (lv_area_intersect(&common, &a, &room)) return true;
+  }
+  return false;
+}
+// `area` less every streaming room, as up to MAX_PIECES rectangles; -1 when that takes more.
+constexpr int MAX_PIECES = LV_INV_BUF_SIZE;
+static lv_area_t pieces[MAX_PIECES], next_pieces[MAX_PIECES], kept[LV_INV_BUF_SIZE];
+static int cut_out(const lv_area_t &area) {
+  int count = 1;
+  pieces[0] = area;
+  for (auto &s : rooms) {
+    if (!s.used || !s.armed) continue;
+    const lv_area_t room = room_of(s);
+    int made = 0;
+    for (int i = 0; i < count; ++i) {
+      const lv_area_t r = pieces[i];
+      lv_area_t common;
+      if (!lv_area_intersect(&common, &r, &room)) {
+        if (made == MAX_PIECES) return -1;
+        next_pieces[made++] = r;
+        continue;
+      }
+      const lv_area_t parts[4] = {{r.x1, r.y1, r.x2, room.y1 - 1}, {r.x1, room.y2 + 1, r.x2, r.y2},
+                                  {r.x1, common.y1, room.x1 - 1, common.y2}, {room.x2 + 1, common.y1, r.x2, common.y2}};
+      const bool there[4] = {r.y1 < room.y1, r.y2 > room.y2, r.x1 < room.x1, r.x2 > room.x2};
+      for (int k = 0; k < 4; ++k) {
+        if (!there[k]) continue;
+        if (made == MAX_PIECES) return -1;
+        next_pieces[made++] = parts[k];
+      }
+    }
+    count = made;
+    for (int i = 0; i < count; ++i) pieces[i] = next_pieces[i];
+  }
+  return count;
+}
+static void keep_out(lv_event_t *) {
+  lv_display_t *display = lv_display_get_default();
+  int count = 0;
+  bool whole = false;  // more pieces than LVGL's list holds
+  for (uint32_t i = 0; i < display->inv_p && !whole; ++i) {
+    if (display->inv_area_joined[i]) continue;
+    const lv_area_t &area = display->inv_areas[i];
+    if (!covered(area)) {
+      kept[count++] = area;  // as LVGL had it, rounded on its way in
+      continue;
+    }
+    const int made = cut_out(area);
+    if (made < 0 || count + made > LV_INV_BUF_SIZE) {
+      whole = true;
+      break;
+    }
+    for (int k = 0; k < made; ++k) kept[count++] = pieces[k];
+  }
+  if (whole) {
+    // Then the whole glass less the rooms; should even that take too many, LVGL draws what it has, a frame of its own
+    // over the live pictures.
+    const lv_area_t whole_glass = {0, 0, lv_display_get_horizontal_resolution(display) - 1,
+                                   lv_display_get_vertical_resolution(display) - 1};
+    const int made = cut_out(whole_glass);
+    if (made < 0) return;
+    count = 0;
+    for (int k = 0; k < made; ++k) kept[count++] = pieces[k];
+  }
+  for (int i = 0; i < count; ++i) {
+    lv_display_send_event(display, LV_EVENT_INVALIDATE_AREA, &kept[i]);  // rounding twice changes nothing
+    display->inv_areas[i] = kept[i];
+    display->inv_area_joined[i] = 0;
+  }
+  display->inv_p = count;
+}
+static void filter_when_rooms() {
+  bool any = false;
+  for (auto &s : rooms) any = any || s.used;
+  if (any && !filtering && lv_display_get_default()) {
+    lv_display_add_event_cb(lv_display_get_default(), keep_out, LV_EVENT_RENDER_START, nullptr);
+    filtering = true;
+  } else if (!any && filtering) {
+    lv_display_remove_event_cb_with_user_data(lv_display_get_default(), keep_out, nullptr);
+    filtering = false;
+  }
+}
+
+Room reserve(const Rect &area) {
+  for (int i = 0; i < MAX_ROOMS; ++i) {
+    RoomState &s = rooms[i];
+    if (s.used) continue;
+    s.used = true;
+    s.area = area;
+    set_spot(s, Rect{});
+    s.spot_told = Rect{};
+    s.armed = false;
+    filter_when_rooms();
+    return i;
+  }
+  ESP_LOGW(TAG, "no room for another stream");
+  return -1;
+}
+static RoomState *room_at(Room room) { return room >= 0 && room < MAX_ROOMS && rooms[room].used ? &rooms[room] : nullptr; }
+void place(Room room, const Rect &spot) {
+  RoomState *s = room_at(room);
+  if (!s) return;
+  set_spot(*s, spot);
+  s->armed = true;  // from now on LVGL draws nothing here
+}
+bool armed(Room room) {
+  RoomState *s = room_at(room);
+  return s && s->armed;
+}
+void disarm(Room room, bool under_glass) {
+  RoomState *s = room_at(room);
+  if (!s) return;
+  // A copy on its way finishes; none starts after this, and LVGL draws there again.
+  if (under_glass) hold();
+  const bool was_armed = s->armed.exchange(false);
+  if (under_glass) release();
+  if (was_armed) invalidate(lv_rect(s->area));
+}
+void follow(Room room) {
+  RoomState *s = room_at(room);
+  if (!s || !s->armed) return;
+  // Its picture lies elsewhere now, or at another size: LVGL draws where it lay again (but where it lies now).
+  const Rect spot = spot_of(*s);
+  if (!(spot == s->spot_told)) {
+    if (!s->spot_told.empty()) invalidate(lv_rect(s->spot_told));
+    s->spot_told = spot;
+  }
+}
+void give_back(Room room) {
+  RoomState *s = room_at(room);
+  if (!s) return;
+  s->armed = false;
+  s->used = false;
+  filter_when_rooms();
+}
+void redraw_all() {
+  lv_display_t *display = lv_display_get_default();
+  if (!display) return;
+  const lv_area_t whole = {0, 0, lv_display_get_horizontal_resolution(display) - 1,
+                           lv_display_get_vertical_resolution(display) - 1};
+  invalidate(whole);
+}
+
+}  // namespace glass
+
+// ESP-IDF makes the DPI panel for ESPHome's display (mipi_dsi, or the repo's mipi_dsi_v3 copy): its handle and its
+// size are picked up here as they are made (-Wl,--wrap=esp_lcd_new_panel_dpi, smart_display/__init__.py on a P4).
+extern "C" esp_err_t __real_esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_panel_config_t *config,
+                                                   esp_lcd_panel_handle_t *made);
+extern "C" esp_err_t __wrap_esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_panel_config_t *config,
+                                                   esp_lcd_panel_handle_t *made) {
+  const esp_err_t err = __real_esp_lcd_new_panel_dpi(bus, config, made);
+  if (err == ESP_OK && made && config) glass::panel_made(*made, config);
+  return err;
+}
+// Every PPA client on this screen, ESPHome's for LVGL's turned flushes included, moves in the engine's burst, so
+// the panel's DMA gets its turn on the bus ("The panel's share of the memory bus", glass.h). The streams' own clients
+// ask for it already; a client that asks for less keeps its own.
+static_assert(picture_engine::limits().burst_bytes == 64, "the burst below is the engine's");
+extern "C" esp_err_t __real_ppa_register_client(const ppa_client_config_t *config, ppa_client_handle_t *ret_client);
+extern "C" esp_err_t __wrap_ppa_register_client(const ppa_client_config_t *config, ppa_client_handle_t *ret_client) {
+  if (!config) return __real_ppa_register_client(config, ret_client);
+  ppa_client_config_t own = *config;
+  // A zeroed config means ESP-IDF's default, the longest burst.
+  if (own.data_burst_length == 0 || own.data_burst_length > PPA_DATA_BURST_LENGTH_64) own.data_burst_length = PPA_DATA_BURST_LENGTH_64;
+  return __real_ppa_register_client(&own, ret_client);
+}
+#endif

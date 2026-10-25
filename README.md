@@ -94,6 +94,29 @@ https://github.com/user-attachments/assets/f9f6a933-d388-4c8b-9c9a-011dfa37617b
 </p>
 <p align="center"><sub>Real photos, not renders: the 4-inch Guition next to the lamp it controls.</sub></p>
 
+## Print a stand for your screen
+
+A screen looks best on a stand that was made for it. These are free to download and print on MakerWorld, each with a
+ready Bambu Studio print profile and no supports needed.
+
+<p align="center">
+  <a href="https://makerworld.com/en/models/3485702"><img src="docs/images/stand-d1001.jpg" width="32%" alt="A Seeed reTerminal D1001 on a round white printed base on a wooden desk, showing a Tessera page with the clock, the weather, music, a camera and the lights"></a>
+  <a href="https://makerworld.com/en/models/3410079"><img src="docs/images/stand-guition-v2.jpg" width="32%" alt="The 4-inch Guition in a black printed wedge stand on a wooden table, showing a home page with the weather, a speaker, the airco and two lights"></a>
+  <a href="https://makerworld.com/en/models/3389654"><img src="docs/images/stand-guition.jpg" width="32%" alt="The 4-inch Guition in an upright black printed stand on a wooden table, beside a window"></a>
+</p>
+
+- **[Home Assistant tablet base](https://makerworld.com/en/models/3485702)** for the Seeed reTerminal D1001 (8 inch): a
+  round base with a dock, tilted 30 degrees. Two printed rails hold the screen by its VESA holes, with four M4 x 8 mm
+  screws. The ESP32-P4 inside plays your cameras live and talks to Assist.
+- **[Wedge stand](https://makerworld.com/en/models/3410079)** for the Guition 4" ESP32-S3-4848S040: a calm wedge that
+  holds the square screen at a comfortable angle. Take the small back plate off the screen first (two tiny screws on
+  its back), then push it in.
+- **[Upright stand](https://makerworld.com/en/models/3389654)** for the same Guition 4": the first Tessera stand, with a
+  small heart in its speaker grille. Push the screen in, no screws.
+
+**Printed one?** A like or a Boost on MakerWorld costs you nothing and helps keep Tessera free, and a photo of your
+make with your own layout is always welcome.
+
 ## Five screens supported, 2.8 to 10.1 inch
 
 One home, five panels. A screen is built for the glass it runs on: it measures its own canvas at boot and gives a page
@@ -277,7 +300,7 @@ beside the pages, without a new build: the 10.1-inch Guition holds up to forty t
   <img src="docs/images/guition-camera.png" width="32%" alt="A camera tile tapped: the front door camera full screen, with the round back key and the camera's name at the top">
   <img src="docs/images/guition-alert-camera.png" width="32%" alt="The same camera in an alert: its picture across the top of the card, with the card's rounded corners">
 </p>
-<p align="center"><sub>Cameras are tiles too, not only part of an alert: any camera or snapshot in Home Assistant (a doorbell's last ring, for example) goes on a screen like any other tile. Tap it for the picture full screen, refreshed every four seconds, or let the tile itself show its live picture (Display → Live picture, every 5 to 30 s) over the whole tile, on every size up to a full page, filled or whole, with or without its name; an alert can carry the same picture. Every screen but the CYD, the Waveshare 3.5-inch and the Hosyond 4-inch, which have no memory for pictures (<a href="https://tessera-maxgramser.on-forge.com/docs/cameras">how it works</a>).</sub></p>
+<p align="center"><sub>Cameras are tiles too, not only part of an alert: any camera or snapshot in Home Assistant (a doorbell's last ring, for example) goes on a screen like any other tile. Tap it for the picture full screen, refreshed every four seconds, or let the tile itself show its live picture (Display → Live picture, every 5 to 30 s) over the whole tile, on every size up to a full page, filled or whole, with or without its name; an alert can carry the same picture. Every screen but the CYD and the Hosyond 4-inch, which have no room for pictures, and the Waveshare 3.5-inch, the SenseCAP Indicator and the Freenove FNK0104S, which have no camera package yet (<a href="https://tessera-maxgramser.on-forge.com/docs/cameras">how it works</a>).</sub></p>
 <p align="center">
   <img src="docs/images/cyd-home.png" width="32%" alt="CYD 2.8-inch screen: the weather forecast, a pasta timer, the coffee machine in orange, the kitchen lamp and the power usage as a large value">
   <img src="docs/images/cyd-page-2.png" width="32%" alt="Second CYD page: the Sonos volume, Sam at home, the Movie night scene in lilac and an energy graph">
@@ -393,21 +416,29 @@ while it keeps your country's clock and numbers.
 | CYD ESP32-2432S028 with ILI9342 (experimental) | 320 × 240, 2 × 3 tiles | ILI9342 / resistive XPT2046; hardware acceptance pending |
 | [Guition ESP32-S3-4848S040](https://tessera-maxgramser.on-forge.com/screens/guition), 4 inch | 480 × 480, 2 × 3 tiles | ST7701S RGB / capacitive GT911 |
 | [Waveshare ESP32-S3-Touch-LCD-4.3](https://tessera-maxgramser.on-forge.com/screens/waveshare43) | 800 × 480, 3 × 3 tiles | ST7262 RGB / capacitive GT911 (backlight always on: no standby, no night) |
+| Waveshare ESP32-S3-Touch-LCD-4.3C (experimental) | 800 × 480, 3 × 3 tiles | ST7262 RGB / capacitive GT911, CH32V003 expander (not the 4.3's CH422G); dimmable backlight, hardware acceptance pending ([details](docs/WAVESHARE43C.md)) |
 | Waveshare ESP32-S3-Touch-LCD-5 (new) | 800 × 480, 3 × 3 tiles | RGB / capacitive GT911, the 4.3-inch's board with 5-inch glass (backlight always on: no standby, no night; [details](docs/WAVESHARE5.md)) |
 | Guition JC8048W550C_I, 5 inch (experimental) | 800 × 480, 3 × 3 tiles | ST7262 RGB / capacitive GT911; dimmable backlight, the capacitive variant only ([details](docs/JC8048W550.md)) |
 | [Waveshare ESP32-S3-Touch-LCD-7](https://tessera-maxgramser.on-forge.com/screens/waveshare7) (experimental) | 800 × 480, 4 × 4 tiles | RGB / capacitive GT911; backlight always on, hardware acceptance pending ([details](docs/WAVESHARE7.md)) |
 | Waveshare ESP32-S3-Touch-LCD-7B (experimental) | 1024 × 600, 4 × 4 tiles | RGB / capacitive GT911; dimmable backlight, hardware acceptance pending ([details](docs/WAVESHARE7B.md)) |
+| Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (experimental) | 1024 × 600, 4 × 4 tiles | MIPI-DSI EK79007 / capacitive GT911, rev3 ESP32-P4; dimmable backlight, speaker and microphones (experimental), hardware acceptance pending ([details](docs/WAVESHAREP47B.md)) |
+| Waveshare ESP32-P4-WIFI6-Touch-LCD-7 (experimental) | 1280 × 720, 4 × 4 tiles | MIPI-DSI ILI9881C / capacitive GT911, pre-v3 ESP32-P4; dimmable backlight, speaker and microphones (experimental), hardware acceptance pending ([details](docs/WAVESHAREP47.md)) |
 | Sunton ESP32-8048S070, 7 inch (experimental) | 800 × 480, 4 × 4 tiles | RGB / capacitive GT911; dimmable backlight, hardware acceptance pending ([details](docs/SUNTON8048S070.md)) |
 | [Waveshare ESP32-S3-Touch-LCD-4B](https://tessera-maxgramser.on-forge.com/screens/waveshare4b), 4 inch (experimental) | 480 × 480, 2 × 3 tiles | ST7701S RGB / capacitive GT911; dimmable backlight, hardware acceptance pending ([details](docs/WAVESHARE4B.md)) |
+| Waveshare ESP32-S3-Touch-LCD-4 V4.0, 4 inch (experimental) | 480 × 480, 2 × 3 tiles | ST7701S RGB / capacitive GT911, CH32V003 expander, revision 4.0 only; dimmable backlight, hardware acceptance pending ([details](docs/WAVESHARE4V4.md)) |
+| Seeed SenseCAP Indicator D1, D1S, D1L or D1Pro, GX panel, 4 inch (experimental) | 480 × 480, 2 × 3 tiles | ST7701S RGB / capacitive FT6336U; dimmable backlight, no camera pictures, LoRa and sensors unused, hardware acceptance pending ([details](docs/SENSECAP_INDICATOR.md)) |
 | [Waveshare ESP32-S3-Touch-LCD-3.5](https://tessera-maxgramser.on-forge.com/screens/waveshare35) (new) | 480 × 320, 2 × 2 tiles | ST7796 SPI / capacitive FT6336; dimmable backlight, no camera pictures ([details](docs/WAVESHARE35.md)) |
+| Freenove FNK0104S, 4 inch (experimental) | 480 × 320, 2 × 2 tiles | ST7796 SPI / capacitive FT6336; dimmable backlight, no camera pictures, hardware acceptance pending ([details](docs/FREENOVEFNK0104S.md)) |
 | [Hosyond ESP32-32E](https://tessera-maxgramser.on-forge.com/screens/hosyond40), 4 inch (experimental) | 480 × 320, 2 × 3 tiles | ST7796 SPI / resistive XPT2046; dimmable backlight, no camera pictures, hardware acceptance pending ([details](docs/HOSYOND40.md)) |
 | [Guition JC3248W535](docs/JC3248W535.md), 3.5 inch (new) | 480 × 320, 2 × 2 tiles | AXS15231B QSPI / capacitive AXS15231B; dimmable backlight, camera pictures |
-| [Guition JC8012P4A1](https://tessera-maxgramser.on-forge.com/screens/jc8012p4a1), 10.1 inch | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GSL3680, ESP32-P4 (new) ([details](docs/JC8012P4A1.md)) |
-| Guition JC8012P4A1 V2, 10.1 inch (experimental) | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GSL3680, early ESP32-P4 with the newer LCD; hardware acceptance pending ([details](docs/JC8012P4A1.md)) |
-| Guition JC8012P4A1 V3, 10.1 inch (experimental) | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GSL3680, rev3 ESP32-P4; hardware acceptance pending ([details](docs/JC8012P4A1.md)) |
-| [Waveshare ESP32-P4-86-Panel-ETH-2RO](docs/WAVESHAREP4.md), 4 inch (experimental) | 720 × 720, 2 × 3 tiles | MIPI-DSI ST7703 / capacitive GT911, ESP32-P4; dimmable backlight, Wi-Fi only ([details](docs/WAVESHAREP4.md)) |
-| Guition [JC1060P470](https://tessera-maxgramser.on-forge.com/screens/jc1060p470) and [JC1060P470 V2](https://tessera-maxgramser.on-forge.com/screens/jc1060p470v2), 7 inch (experimental) | 1024 × 600, 4 × 4 tiles | MIPI-DSI JD9165 / capacitive GT911, ESP32-P4; hardware acceptance pending ([details](docs/JC1060P470.md)) |
-| Guition JC4880P443, 4.3 inch (experimental) | 800 × 480, 3 × 3 tiles | MIPI-DSI ST7701 / capacitive GT911, pre-v3 ESP32-P4; dimmable backlight ([details](docs/JC4880P443.md)) |
+| Wireless-Tag WT32-SC01 Plus, 3.5 inch (experimental) | 480 × 320, 2 × 2 tiles | ST7796UI 8-bit / capacitive FT6336U; dimmable backlight, camera pictures, hardware acceptance pending ([details](docs/WT32SC01PLUS.md)) |
+| [Guition JC8012P4A1](https://tessera-maxgramser.on-forge.com/screens/jc8012p4a1), 10.1 inch | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GSL3680, ESP32-P4 (new); speaker and microphone (experimental) ([details](docs/JC8012P4A1.md)) |
+| Guition JC8012P4A1 V2, 10.1 inch (experimental) | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GSL3680, early ESP32-P4 with the newer LCD; speaker and microphone (experimental), hardware acceptance pending ([details](docs/JC8012P4A1.md)) |
+| Waveshare ESP32-P4-WIFI6-Touch-LCD-10.1 (experimental) | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GT911, pre-v3 ESP32-P4; dimmable backlight, speaker and microphones (experimental), hardware acceptance pending ([details](docs/WAVESHARE101.md)) |
+| Guition JC8012P4A1 V3, 10.1 inch (experimental) | 1280 × 800, 5 × 5 tiles | MIPI-DSI JD9365 / capacitive GSL3680, rev3 ESP32-P4; speaker and microphone (experimental), hardware acceptance pending ([details](docs/JC8012P4A1.md)) |
+| [Waveshare ESP32-P4-86-Panel-ETH-2RO](docs/WAVESHAREP4.md), 4 inch (experimental) | 720 × 720, 2 × 3 tiles | MIPI-DSI ST7703 / capacitive GT911, ESP32-P4; dimmable backlight, speaker and microphones, Wi-Fi only ([details](docs/WAVESHAREP4.md)) |
+| Guition [JC1060P470](https://tessera-maxgramser.on-forge.com/screens/jc1060p470) and [JC1060P470 V2](https://tessera-maxgramser.on-forge.com/screens/jc1060p470v2), 7 inch (experimental) | 1024 × 600, 4 × 4 tiles | MIPI-DSI JD9165 / capacitive GT911, ESP32-P4; speaker and microphone (experimental), hardware acceptance pending ([details](docs/JC1060P470.md)) |
+| Guition JC4880P443, 4.3 inch (experimental) | 800 × 480, 3 × 3 tiles | MIPI-DSI ST7701 / capacitive GT911, pre-v3 ESP32-P4; dimmable backlight, speaker and microphone (experimental) ([details](docs/JC4880P443.md)) |
 | Elecrow CrowPanel Advanced 10.1 inch, ESP32-P4 (experimental) | 1024 × 600, 5 × 5 tiles | MIPI-DSI EK79007 / capacitive GT911, pre-v3 ESP32-P4, V1.1 or V1.2; dimmable backlight, speaker and microphone ([details](docs/CROWPANEL101.md)) |
 | M5Stack Tab5 (ST7121 variant, new) | 1280 × 720, 3 × 3 tiles | MIPI-DSI ST7121 / capacitive ST7121, ESP32-P4; hardware tested ([details](docs/TAB5.md)) |
 

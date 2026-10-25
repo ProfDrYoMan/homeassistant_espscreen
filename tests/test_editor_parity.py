@@ -134,6 +134,10 @@ import {{ accent, tileActive }} from "{model / 'tile-palette'}";
 import {{ barKeys }} from "{model / 'tall-controls'}";
 import {{ coverLayout, slats }} from "{model / 'cover-tile'}";
 import {{ humidityText, readingText, stateText, temperatureText }} from "{model / 'tile-text'}";
+import {{ cardHead, cardLook, cardPanel, cardRoom, iconFace, inkBox }} from "{model / 'card-layout'}";
+import {{ climateLayout, tallAction, tallLayout }} from "{model / 'tall-layout'}";
+import {{ mediaLayout }} from "{model / 'media-layout'}";
+import {{ vacuumLayout, vacuumMetrics }} from "{model / 'vacuum-tile'}";
 const DATA = JSON.parse(readFileSync("{Path(tmp) / 'data.json'}", "utf8"));
 {body}
 ''')
@@ -949,6 +953,333 @@ int main() {{
             if not close:
                 wrong.append((case, ts, c))
         self.assertEqual(wrong[:5], [], 'slats() is not cover_tile::slats')
+
+
+def line_of(size):
+    """A Roboto face's line on the glass (the build's line_height): round(size * 1.172), as the editor's lineOf."""
+    return round(size * 1.172)
+
+
+class TallGeometry(unittest.TestCase):
+    """A card more than a row high and a player over a whole page, as plain arithmetic on every board's look: the heading,
+    body and control rows of tall_tile.h (layout, action), a thermostat's forms of climate_tile.h (layout) and the media
+    card of media_card.h (layout), against model/tall-layout.ts and model/media-layout.ts (app 0.4.90) over a grid of
+    rooms. The rooms are any the grid can give a card, and more."""
+
+    WIDTHS = list(range(40, 1290, 61))
+    HEIGHTS = list(range(30, 800, 43))
+    MODES = (0, 2, 4)
+
+    @classmethod
+    def setUpClass(cls):
+        compiler(), node()
+        looks, seen = [], set()
+        for _, _, shape in SHAPES:
+            ident = (shape['dpi'], shape['look'])
+            if ident in seen:
+                continue
+            seen.add(ident)
+            f = shape['fonts']
+            looks.append({'dpi': shape['dpi'], 'look': shape['look'], 'name': line_of(f['label']), 'state': line_of(f['sublabel']),
+                          'circle': shape['spacing']['circle'], 'faces': [line_of(f['setpoint']), line_of(f['watch_value']), line_of(f['sublabel_big'])],
+                          'title': line_of(f['headline']), 'artist': line_of(f['sublabel_big']), 'small': line_of(f['sublabel'])})
+        cls.looks = looks
+        data = {'looks': looks, 'widths': cls.WIDTHS, 'heights': cls.HEIGHTS, 'modes': list(cls.MODES)}
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.ts = run_ts('''
+const r = (b: any) => `${b.x},${b.y},${b.w},${b.h}`, out: string[] = [];
+for (const look of DATA.looks) {
+  const { px, large } = uiScale({ dpi: look.dpi, look: look.look });
+  const gap = px(large ? 8 : 4), touch = Math.max(Math.floor((look.dpi * 7 + 12) / 25), px(large ? 48 : 34)), reach = px(large ? 740 : 620);
+  for (const width of DATA.widths) for (const height of DATA.heights) {
+    for (const rows of [[], [touch + 2], [touch + 2, touch + 2]]) {
+      const l = tallLayout({ width, height, nameH: look.name, stateH: look.state, icon: look.circle, gap, touch: Math.floor((look.dpi * 7 + 12) / 25), reach, rows });
+      out.push(`tall ${l ? `${l.state ? 1 : 0} ${r(l.header)} ${r(l.body)} ${l.rows.map(r).join(" ")}` : "none"}`);
+    }
+    const a = tallAction(width, height, look.circle, look.circle - 10, look.name, look.state, gap, Math.min(width, 2 * touch), touch);
+    out.push(`action ${a ? `${r(a.icon)} ${r(a.title)} ${r(a.state)} ${r(a.control)}` : "none"}`);
+    for (const modes of DATA.modes) for (const wide of [0, 60, 200]) {
+      const c = climateLayout({ large, touch, gap, faceH: look.faces, faceW: [wide * 2, wide, Math.floor(wide / 2)], captionH: look.state, maxWidth: reach, px },
+        width, Math.floor(height / 4), height, modes);
+      out.push(`climate ${c.form} ${c.face} ${c.caption ? 1 : 0} ${r(c.stepper)} ${r(c.minus)} ${r(c.plus)} ${r(c.number)} ${r(c.captionBox)} ${r(c.bar)} ${c.room}`);
+    }
+    for (const art of [false, true]) for (const clockW of [0, 70]) {
+      const m = mediaLayout({ large, art, clockW, titleH: look.title, artistH: look.artist, smallH: look.small, px }, width, height);
+      out.push(`media ${m.wide ? 1 : 0} ${m.times ? 1 : 0} ${m.artist ? 1 : 0} ${[m.art, m.title, m.artistLine, m.bar, m.elapsed, m.total, m.prev, m.play, m.next, m.minus, m.volume, m.plus].map(r).join(" ")} ${m.artRadius}`);
+    }
+  }
+}
+console.log(JSON.stringify(out));''', data, tmp)
+            entries = ',\n'.join(f'  {{{l["dpi"]}, "{l["look"]}", {l["name"]}, {l["state"]}, {l["circle"]}, {{{", ".join(map(str, l["faces"]))}}}, {l["title"]}, {l["artist"]}, {l["small"]}}}'
+                                 for l in looks)
+            cls.cpp = build_and_run(f'''#include "screen_text_en.h"
+#define THEME_TEST
+#include "components/smart_display/ui_scale.h"
+#include "components/smart_display/tall_tile.h"
+#include "components/smart_display/climate_tile.h"
+#include "components/smart_display/media_card.h"
+#include <array>
+#include <cstdio>
+struct Look {{ int dpi; const char *look; int name, state, circle; int faces[3]; int title, artist, small; }};
+static const Look LOOKS[] = {{
+{entries}
+}};
+static const int WIDTHS[] = {{{', '.join(map(str, cls.WIDTHS))}}};
+static const int HEIGHTS[] = {{{', '.join(map(str, cls.HEIGHTS))}}};
+static const int MODES[] = {{{', '.join(map(str, cls.MODES))}}};
+template <class R> static void r(const R &b) {{ std::printf(" %d,%d,%d,%d", b.x, b.y, b.w, b.h); }}
+int main() {{
+  for (const auto &look : LOOKS) {{
+    ui::configure(look.dpi, look.look);
+    const bool large = ui::large();
+    const int gap = ui::px(large ? 8 : 4), touch = std::max(ui::touch_min(), ui::px(large ? 48 : 34)), reach = ui::control_max_width();
+    for (int width : WIDTHS) for (int height : HEIGHTS) {{
+      for (int count = 0; count < 3; ++count) {{
+        tall_tile::Metrics m{{width, height, look.name, look.state, look.circle, gap, ui::touch_min(), reach, {{touch + 2, touch + 2}}, count}};
+        const auto l = tall_tile::layout(m);
+        std::printf("tall");
+        if (!l.fits) std::printf(" none");
+        else {{ std::printf(" %d", l.state ? 1 : 0); r(l.header); r(l.body); for (int i = 0; i < l.count; ++i) r(l.rows[i]); }}
+        std::printf("\\n");
+      }}
+      const auto a = tall_tile::action(width, height, look.circle, look.circle - 10, look.name, look.state, gap, std::min(width, 2 * touch), touch);
+      std::printf("action");
+      if (!a.fits) std::printf(" none"); else {{ r(a.icon); r(a.title); r(a.state); r(a.control); }}
+      std::printf("\\n");
+      for (int modes : MODES) for (int wide : {{0, 60, 200}}) {{
+        climate_tile::Metrics cm;cm.large = large;cm.touch = touch;cm.gap = gap;cm.max_width = reach;cm.caption_h = look.state;
+        for (int f = 0; f < 3; ++f) cm.face_h[f] = look.faces[f];
+        cm.face_w = {{wide * 2, wide, wide / 2}};
+        const auto c = climate_tile::layout(cm, width, height / 4, height, modes);
+        const char *form = c.form == climate_tile::Form::big ? "big" : c.form == climate_tile::Form::row ? "row" : "none";
+        std::printf("climate %s %d %d", form, c.face, c.caption ? 1 : 0);
+        r(c.stepper); r(c.minus); r(c.plus); r(c.number); r(c.caption_box); r(c.bar); std::printf(" %d\\n", c.room);
+      }}
+      for (int art = 0; art < 2; ++art) for (int clock : {{0, 70}}) {{
+        media_card::Metrics mm;mm.large = large;mm.art = art;mm.clock_w = clock;mm.title_h = look.title;mm.artist_h = look.artist;mm.small_h = look.small;
+        const auto m = media_card::layout(mm, width, height);
+        std::printf("media %d %d %d", m.wide ? 1 : 0, m.times ? 1 : 0, m.artist ? 1 : 0);
+        for (const auto &b : {{m.art, m.title, m.artist_line, m.bar, m.elapsed, m.total, m.prev, m.play, m.next, m.minus, m.volume, m.plus}}) r(b);
+        std::printf(" %d\\n", m.art_radius);
+      }}
+    }}
+  }}
+}}
+''', tmp)
+
+    def compare(self, tag):
+        fw = [line for line in self.cpp.splitlines() if line.startswith(tag + ' ')]
+        ts = [line for line in self.ts if line.startswith(tag + ' ')]
+        self.assertEqual(len(fw), len(ts), f'{tag}: as many rooms')
+        wrong = [(i, a, b) for i, (a, b) in enumerate(zip(ts, fw)) if a.split() != b.split()]
+        self.assertEqual(wrong[:3], [], f'{tag}: the editor is not the firmware in {len(wrong)} of {len(fw)} rooms')
+        return fw
+
+    def test_a_tall_cards_heading_body_and_rows_are_tall_tiles(self):
+        fw = self.compare('tall')
+        self.assertTrue(any(line != 'tall none' for line in fw) and 'tall none' in fw)
+
+    def test_one_centred_stack_is_tall_tiles_action(self):
+        self.compare('action')
+
+    def test_a_thermostats_forms_are_climate_tiles(self):
+        fw = self.compare('climate')
+        self.assertEqual({line.split()[1] for line in fw}, {'none', 'row', 'big'}, 'every form is met')
+
+    def test_a_player_over_a_page_is_media_cards(self):
+        fw = self.compare('media')
+        self.assertEqual({line.split()[1] for line in fw}, {'0', '1'}, 'the wide and the stacked card are both met')
+
+
+class CardHead(unittest.TestCase):
+    """The head of a card of one row (app 0.4.90), from the WebAssembly build on every board's shape: where its circle,
+    its name and its line stand (runtime_tiles head_row), the face of the name (name_font), which face its icon takes
+    (center_icon) and the switch of a wide card at its right (layout_panel), against model/card-layout.ts. As in WatchCard,
+    a density's build carries the frame and fonts of the first board that has them, and the editor gets the same."""
+
+    @classmethod
+    def setUpClass(cls):
+        need(shutil.which('node'), 'node')
+        need(WASM if WASM.exists() else None, 'web/src/wasm/firmware_preview.wasm')
+        sys.path.insert(0, str(WEB / 'wasm'))
+        import preview_profiles  # noqa: E402
+        drawn = {(dpi, look): core.SHAPES[entry] for dpi, look, entry in preview_profiles.variants()}
+        cls.cases, screens = [], []
+        attrs = {'brightness': 128, 'supported_color_modes': ['brightness']}
+        for key, board, shape in SHAPES:
+            profile = drawn[(shape['dpi'], shape['look'])]
+            mine = {**shape, 'fonts': profile['fonts'], 'spacing': profile['spacing']}
+            layouts = []
+            for size, columns in (('single', 1), ('wide', 2)):
+                if columns > shape['columns']:
+                    continue
+                for name in ('Lamp', 'The lamp over the long table in the dining room'):
+                    o = core.screen_options({'entity': 'light.parity', 'options': {'size': size, 'controls': 'toggle'}}, attrs, 'on') or {}
+                    layouts.append({'key': str(len(cls.cases)), 'tiles': [{'entity': 'light.parity', 'name': name, 'state': 'on', 'a': attrs, 'slot': 0, 'o': o}]})
+                    cls.cases.append({'key': f'{key} {size} {name[:8]}', 'shape': mine, 'columns': columns, 'name': name})
+            screens.append({'key': key, 'width': shape['width'], 'height': shape['height'], 'columns': shape['columns'],
+                            'rows': shape['rows'], 'dpi': shape['dpi'], 'layouts': layouts})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'screens.json'
+            path.write_text(json.dumps(screens))
+            out = subprocess.run(['node', str(WEB / 'wasm/layout_audit.mjs'), str(path)], check=True, capture_output=True, text=True).stdout
+        cls.firmware = {}
+        for report in json.loads(out):
+            if 'error' in report:
+                raise AssertionError(f"{report['screen']}: {report['error']}")
+            objects = [o for o in report['objects'] if o['card'] == 0]
+            root = report['cards'][0]['object']
+            box = next(o for o in objects if o['id'] == root)
+            children = [o for o in objects if o['parent'] == root]
+            circle = next(o for o in children if o['type'] == 'object' and o['radius'] >= 999)
+            icon = next(o for o in objects if o['parent'] == circle['id'] and o['type'] == 'label')
+            labels = [o for o in children if o['type'] == 'label' and not o['icon']]
+            key = next((o for o in objects if o['radius'] == 32767 and any(p['id'] == o['parent'] and p['parent'] == root for p in objects)), None)
+            panel = next((o for o in objects if key and o['id'] == key['parent']), None)
+            cls.firmware[int(report['layout'])] = {'box': box, 'circle': circle, 'icon': icon, 'title': labels[0], 'value': labels[1], 'panel': panel}
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.ts = run_ts('''
+console.log(JSON.stringify(DATA.cases.map((c: any) => {
+  const s = c.shape, room = cardRoom(s, { across: s.columns, down: s.rows, column: 0, row: 0, columns: c.columns, rows: 1, paged: false });
+  const panel = c.columns > 1 ? cardPanel(s, "toggle", restContent(s, s.columns, c.columns), room) : null;
+  return { room, panel, head: cardHead(s, cardLook(s), room, panel?.taken ?? 0, "F0335", true, c.columns > 1) };
+})));''', {'cases': cls.cases}, tmp)
+
+    def test_the_circle_the_name_and_the_line_stand_where_head_row_puts_them(self):
+        for i, case in enumerate(self.cases):
+            fw, ts, where = self.firmware[i], self.ts[i], self.cases[i]['key']
+            room, head = ts['room'], ts['head']
+            x0, y0 = fw['box']['x1'] + 1 + room['pad'], fw['box']['y1'] + 1 + room['padY']
+            self.assertEqual(room['outer'], fw['box']['y2'] - fw['box']['y1'] + 1, f'{where}: the card\'s height')
+            circle = fw['circle']
+            self.assertEqual([head['circle']['x'], head['circle']['y'], head['circle']['size']],
+                             [circle['x1'] - x0, circle['y1'] - y0, circle['x2'] - circle['x1'] + 1], f'{where}: the circle')
+            self.assertEqual(head['circle']['icon'], fw['icon']['line_height'], f'{where}: the icon\'s face (center_icon)')
+            for part in ('title', 'value'):
+                label, mine = fw[part], head[part]
+                self.assertEqual([mine['x'], mine['y'], mine['line'], mine['width']],
+                                 [label['x1'] - x0, label['y1'] - y0, label['line_height'], label['x2'] - label['x1'] + 1], f'{where}: the {part}')
+
+    def test_a_wide_cards_switch_stands_where_layout_panel_puts_it(self):
+        for i, case in enumerate(self.cases):
+            if case['columns'] < 2:
+                continue
+            fw, ts, where = self.firmware[i], self.ts[i], case['key']
+            room, panel = ts['room'], ts['panel']
+            x0, y0 = fw['box']['x1'] + 1 + room['pad'], fw['box']['y1'] + 1 + room['padY']
+            p = fw['panel']
+            self.assertEqual([panel['x'], panel['y'], panel['width'], panel['height']],
+                             [p['x1'] - x0, p['y1'] - y0, p['x2'] - p['x1'] + 1, p['y2'] - p['y1'] + 1], f'{where}: the switch')
+
+
+class VacuumTile(unittest.TestCase):
+    """A robot vacuum's larger tile (vacuum_tile.h, docs/VACUUM.md "A larger tile") in model/vacuum-tile.ts: the header,
+    the chips, the keys in the dock or the header, the mode, the frame, the map, the rooms with their "+N", the routines
+    and the corners, on every board's shape over a sweep of rooms, for each face and for robots that offer less. Both
+    sides measure a text the same way (half a face's size per letter), so only the planning is compared."""
+
+    ROOMS = ['Kitchen', 'Living room', 'Hallway', 'Bedroom', 'Office', 'Bathroom', 'Guest room', 'Laundry', 'Nursery', 'Garage']
+    ROUTINES = ['After dinner', 'Daily clean', 'Deep clean', 'Empty the bin', 'Mop the kitchen']
+    # (rooms, routines, modes, second, state, battery, charging, progress, radius, pad)
+    ROBOTS = [(6, 5, 3, 1, 'docked', 100, 1, -1, 22, 12), (10, 2, 0, 0, 'cleaning', 64, 0, 42, 16, 8),
+              (0, 1, 2, 1, 'error', 15, 0, -1, 22, 12), (3, 0, 4, 1, 'cleaning', -1, 0, 7, 12, 6)]
+    FACES = ('map', 'rooms', 'routines', 'map_rooms')
+    STATES = ('docked', 'cleaning', 'error')
+
+    TS = '''
+const b = (x: any) => x && x.w > 0 && x.h > 0 ? `${x.x},${x.y},${x.w},${x.h}` : "-";
+const list = (v: any[]) => v.map((r: any) => `${b(r)}:${r.index}`).join("/") || "-";
+const out: string[] = [];
+const fonts: Record<string, any> = {};
+for (const key of Object.keys(DATA.shapes)) fonts[key] = vacuumMetrics(DATA.shapes[key]).fonts;
+for (const c of DATA.cases) {
+  const s = DATA.shapes[c[0]];
+  const l = vacuumLayout(s, { face: c[1], width: c[2], height: c[3], rooms: DATA.rooms.slice(0, c[4]), routines: DATA.routines.slice(0, c[5]),
+    map: true, modes: c[6], second: !!c[7], state: c[8], battery: c[9] < 0 ? null : c[9], charging: !!c[10], progress: c[11] < 0 ? null : c[11],
+    radius: c[12], pad: c[13], measure: (text: string, size: number) => Math.floor(text.length * size * 55 / 100) });
+  out.push([l.head, l.text.x, l.text.w, l.chips.map((x: any) => b(x.box)).join("/") || "-", b(l.dock), b(l.start), b(l.mode), b(l.frame),
+    l.frameRadius, l.tileRadius, b(l.map), list(l.rooms), +l.bigIcons, l.more ? `${b(l.more)}+${l.more.count}` : "-", list(l.routines),
+    l.routinesMore ? `${b(l.routinesMore)}+${l.routinesMore.count}` : "-"].join(" "));
+}
+console.log(JSON.stringify({ out, fonts }));'''
+
+    CPP = r'''#include "components/smart_display/vacuum_tile.h"
+#include <cstdio>
+using namespace vacuum_tile;
+struct C { int dpi; const char *look; int face, w, h, rooms, routines, modes, second, state, battery, charging, progress, radius, pad,
+           label, small, mini, icon, watch, circle; };
+static const C CASES[] = {
+@CASES@
+};
+static const char *FACE_NAMES[] = {"map", "rooms", "routines", "map_rooms"};
+static const char *STATES[] = {"docked", "cleaning", "error"};
+static const std::vector<std::string> ROOMS = {@ROOMS@}, ROUTINES = {@ROUTINES@};
+static std::string b(const Box &x) { return x.empty() ? "-" : std::to_string(x.x) + "," + std::to_string(x.y) + "," + std::to_string(x.w) + "," + std::to_string(x.h); }
+template <class T> static std::string list(const std::vector<T> &v) {
+  std::string o;
+  for (const auto &p : v) o += (o.empty() ? "" : "/") + b(p) + ":" + std::to_string(p.index);
+  return o.empty() ? "-" : o;
+}
+static std::string more(const More &m) { return m.empty() ? "-" : b(m) + "+" + std::to_string(m.count); }
+int main() {
+  for (const auto &c : CASES) {
+    ui::configure(c.dpi, c.look);
+    const int sizes[FACES] = {c.label, c.small, c.mini, c.icon, c.watch};
+    Measure me;
+    for (int i = 0; i < FACES; ++i) me.line[i] = (int) std::lround(sizes[i] * 1.172);
+    me.circle = c.circle ? c.circle : ui::px(54);
+    me.width = [&](Face f, const std::string &s) { return (int) (s.size() * sizes[f] * 55 / 100); };
+    Input in;
+    in.face = FACE_NAMES[c.face]; in.width = c.w; in.height = c.h;
+    in.rooms.assign(ROOMS.begin(), ROOMS.begin() + c.rooms);
+    in.routines.assign(ROUTINES.begin(), ROUTINES.begin() + c.routines);
+    in.map = true; in.modes = c.modes; in.second = c.second; in.state = STATES[c.state]; in.battery = c.battery;
+    in.charging = c.charging; in.progress = c.progress; in.radius = c.radius; in.pad = c.pad;
+    const Layout l = plan(me, in);
+    std::string chips;
+    for (const auto &x : l.chips) chips += (chips.empty() ? "" : "/") + b(x.box);
+    std::printf("plan %d %d %d %s %s %s %s %s %d %d %s %s %d %s %s %s\n", l.head, l.text.x, l.text.w, chips.empty() ? "-" : chips.c_str(),
+                b(l.second).c_str(), b(l.first).c_str(), b(l.mode).c_str(), b(l.frame).c_str(), l.frame_radius, l.tile_radius,
+                b(l.map).c_str(), list(l.rooms).c_str(), l.big_icons ? 1 : 0, more(l.more).c_str(), list(l.routines).c_str(),
+                more(l.routines_more).c_str());
+  }
+}
+'''
+
+    @classmethod
+    def setUpClass(cls):
+        compiler(), node()
+        cls.cases = [(key, shape, face, w, h, robot)
+                     for key, _, shape in SHAPES
+                     for w in range(140, min(shape['width'], 1100), 67)
+                     for h in range(130, min(shape['height'], 760), 59)
+                     for face in cls.FACES for robot in cls.ROBOTS]
+        with tempfile.TemporaryDirectory() as tmp:
+            data = {'shapes': {key: shape for key, _, shape in SHAPES}, 'rooms': cls.ROOMS, 'routines': cls.ROUTINES,
+                    'cases': [[c[0], c[2], c[3], c[4], *c[5]] for c in cls.cases]}
+            cls.ts = run_ts(cls.TS, data, tmp)
+            rows = []
+            for key, shape, face, w, h, robot in cls.cases:
+                f = cls.ts['fonts'][key]
+                rooms, routines, modes, second, state, battery, charging, progress, radius, pad = robot
+                rows.append('{%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}' % (
+                    shape.get('dpi') or 0, json.dumps(shape.get('look') or 'standard'), cls.FACES.index(face), w, h, rooms, routines, modes,
+                    second, cls.STATES.index(state), battery, charging, progress, radius, pad,
+                    f['label'], f['small'], f['mini'], f['icon'], f['watchIcon'], (shape.get('spacing') or {}).get('circle') or 0))
+            source = (cls.CPP.replace('@CASES@', ',\n'.join(rows)).replace('@ROOMS@', cpp_strings(cls.ROOMS))
+                      .replace('@ROUTINES@', cpp_strings(cls.ROUTINES)))
+            cls.cpp = build_and_run(source, tmp)
+
+    def test_the_editors_tile_is_the_firmwares_plan(self):
+        fw = [line[5:] for line in self.cpp.splitlines() if line.startswith('plan ')]
+        ts = self.ts['out']
+        self.assertEqual((len(fw), len(ts)), (len(self.cases), len(self.cases)))
+        # Every arrangement is met: keys in the dock with a mode, rooms with a last "+N", routines with theirs.
+        self.assertTrue(any(line.split()[6] != '-' for line in fw))
+        self.assertTrue(any(line.split()[13] != '-' for line in fw))
+        self.assertTrue(any(line.split()[15] != '-' for line in fw))
+        wrong = [(c[0], c[2], c[3], c[4], c[5], t, f) for c, t, f in zip(self.cases, ts, fw) if t != f]
+        self.assertEqual(wrong[:3], [], f'vacuumLayout is not vacuum_tile::plan in {len(wrong)} of {len(fw)} rooms')
 
 
 if __name__ == '__main__':

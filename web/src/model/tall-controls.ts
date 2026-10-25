@@ -86,6 +86,8 @@ export function availableControl(domain: string, kind: string | null, state: str
   if (kind === 'stepper' || kind === 'slider') return ['number', 'input_number'].includes(domain) || kind === 'slider' && domain === 'humidifier' ? kind : '';
   if (kind === 'toggle') return ['light', 'switch', 'input_boolean', 'automation', 'remote', 'fan', 'humidifier'].includes(domain) ? kind : '';
   if (kind === 'run') return ['scene', 'script', 'button', 'input_button', 'automation'].includes(domain) ? kind : '';
+  // A robot's larger tile (docs/VACUUM.md, "A larger tile"): its map, rooms or routines with its keys.
+  if (['map', 'rooms', 'routines', 'map_rooms'].includes(kind)) return domain === 'vacuum' ? kind : '';
   return '';
 }
 

@@ -301,6 +301,19 @@
     },
     "plugins": {
       "changes": "What changed"
+    },
+    "alerts": {
+      "wizard": {
+        "steps": {
+          "look": {
+            "help": "An icon, a colour, a camera picture if you like, and whether it blinks."
+          }
+        },
+        "buttons": {
+          "color": "Colour",
+          "own_color": "Its own colour"
+        }
+      }
     }
   },
   "addon": {

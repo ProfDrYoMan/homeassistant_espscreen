@@ -42,6 +42,8 @@ inline Kind kind(const std::string &name) {
 
 // An item that opens no card (Item::card).
 inline constexpr uint16_t NO_CARD = 0xFFFF;
+// A missed ring (`b`, module doorbell): a tap opens that ring's view again instead of a tile's card.
+inline constexpr uint16_t DOORBELL_CARD = 0xFFFE;
 struct Item {
   Kind kind = Kind::none;
   uint32_t icon = 0;   // Material Design Icons codepoint, 0 without an icon
@@ -54,7 +56,7 @@ struct Item {
   // Kind::plugin: its icon without the plugin's words (`o`, plugin API 0.8), as a person chose in the editor.
   bool icon_only = false;
   // An entity's item (`d`, firmware 0.56.0+): the index of the tile whose card a tap on it opens
-  // (runtime_tiles::open_card), NO_CARD for an item that opens nothing.
+  // (runtime_tiles::open_card), NO_CARD for an item that opens nothing, DOORBELL_CARD for a missed ring.
   uint16_t card = NO_CARD;
   bool operator==(const Item &o) const {
     return kind == o.kind && icon == o.icon && text == o.text && epoch == o.epoch && color == o.color && has_color == o.has_color &&

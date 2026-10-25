@@ -401,6 +401,8 @@ a:hover { text-decoration: underline; }
 .tiles { display: grid; grid-template-columns: repeat(var(--screen-columns, 2), minmax(0, 1fr)); grid-template-rows: repeat(var(--screen-rows, 3), minmax(0, 1fr)); gap: 8px; min-height: 0; }
 /* manipulation, not pan-y (app 0.2.78): on a phone the row of pages scrolls sideways, also when the swipe starts on a
    tile. The hold before a drag and the blocked touchmove during one still keep the page from scrolling. */
+/* A card's letters are the screens' Roboto, laid side by side without kerning as LVGL lays them (app 0.4.90). */
+.device .tile { font-family: "Bar Roboto", var(--ui-font); font-kerning: none; }
 .tile { position: relative; background: #fff; border: 1px solid #dcdcdc; border-radius: 12px; padding: 8px 9px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; min-height: 0; cursor: pointer; text-align: left; overflow: hidden; isolation: isolate; color: #1b1b1b; touch-action: manipulation; }
 .tile:hover { border-color: #b9c4d3; }
 .tile.chosen { outline: 2px solid var(--kind-tile); outline-offset: 1px; }
@@ -485,6 +487,9 @@ a:hover { text-decoration: underline; }
 .cell small { font-size: 10.5px; color: inherit; }
 .cell:hover, .cell:focus-visible { border-color: #9eb6cf; color: #4b5563; background: #f6f7f9; }
 .cell.insert-here { border: 2px dashed var(--accent); color: var(--accent); background: var(--accent-soft); }
+/* A card carried in a copy of its glass (drag.ts carried): the glass's sizes without its frame, the card filling it. */
+.device.drag-glass { display: block; padding: 0; background: none; aspect-ratio: auto; }
+.device.drag-glass > .tile { width: 100%; height: 100%; box-sizing: border-box; }
 .drag-ghost { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50; opacity: 0.92; box-shadow: var(--shadow); border-radius: 12px; }
 
 /* Library: a drawer along the bottom (app 0.4.32). Folded it is its head alone; it glides open to the height it was
@@ -1021,15 +1026,28 @@ details.log-wrap pre { margin-top: 8px; }
   .notice.choice .notice-text + .btn { margin-left: auto; }
 }
 
+/* Events: one big way into a part's wizard, its automations under it, the rest folded away */
+.event-create { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: center; padding: 26px 28px; }
+.event-create-text { display: grid; gap: 12px; justify-items: start; }
+.event-create-text h2 { font-size: 21px; margin: 0; }
+.event-create-text p { margin: 0; color: var(--muted); line-height: 1.55; max-width: 52ch; }
+.event-create-button { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; font-size: 15px; margin-top: 4px; }
+.wizard .field > .f-label { font-size: 12.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.event-more > summary { cursor: pointer; font-weight: 600; }
+.event-more[open] { display: grid; gap: 12px; }
+
 /* Alerts cheatsheet */
+.alerts { display: grid; gap: 14px; }
 .alerts section { display: grid; gap: 10px; }
 .alerts h2 { font-size: 15px; }
+.alerts-reference { display: grid; gap: 10px; margin-top: 10px; }
+.alerts-reference p { margin: 0; color: var(--muted); }
 .alerts-nav { display: flex; flex-wrap: wrap; gap: 6px; }
 .alerts-nav button { background: var(--accent-soft); color: var(--accent); padding: 5px 11px; font-size: 12px; border-radius: 20px; font-weight: 500; }
 .alert-hero { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 20px; align-items: center; }
 .alert-mock { background: #101820; border-radius: 16px; padding: 22px 18px; display: grid; place-items: center; }
 .alert-mock-card { position: relative; width: 100%; background: #ffe1c6; border: 1px solid #0001; border-radius: 14px; padding: 12px 12px 48px 52px; color: #1b1b1b; display: grid; gap: 2px; }
-.alert-mock-icon { position: absolute; left: 12px; top: 12px; font-size: 30px; }
+.alert-mock-card > .alert-mock-icon { position: absolute; left: 12px; top: 12px; font-size: 30px; color: inherit; }
 .alert-mock-card strong { font-size: 15px; line-height: 1.2; }
 .alert-mock-card > span { font-size: 12px; color: #3a3a3c; }
 .alert-mock-card .fake { position: absolute; right: 10px; bottom: 10px; padding: 6px 16px; border-radius: 999px; background: #1b1b1b; color: white; font-size: 13px; }
@@ -1073,7 +1091,7 @@ td code { white-space: nowrap; }
 .empty p { color: var(--muted); }
 
 /* Toast */
-.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--ink); color: var(--surface); border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; z-index: 60; max-width: min(92vw, 560px); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--ink); color: var(--surface); border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; z-index: 85; max-width: min(92vw, 560px); }
 .toast button { color: var(--accent-soft); font-weight: 650; }
 
 /* Responsive */
@@ -1112,6 +1130,7 @@ td code { white-space: nowrap; }
   .drawer-enter-active, .drawer-leave-active { transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .panel { padding: 16px; }
   .alert-hero { grid-template-columns: 1fr; }
+  .event-create { grid-template-columns: minmax(0, 1fr); padding: 20px; }
 }
 
 /* Updates with content: progress and what's new */
@@ -1523,7 +1542,7 @@ section.advanced code { font-size: 11.5px; }
 .app.phone .toast { left: 16px; right: 16px; bottom: calc(80px + env(safe-area-inset-bottom)); transform: none; max-width: none; justify-content: space-between; border-radius: 14px;
   padding: 13px 16px; font-size: 14.5px; }
 /* With a sheet open the word goes to the top, clear of the sheet's buttons. */
-.app.phone:has(.drawer, .library.open, .phone-sheet) .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; z-index: 60; }
+.app.phone:has(.drawer, .library.open, .phone-sheet) .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; z-index: 85; }
 
 /* Sheets: from the bottom, over a dimmed page; a tap on the dim closes them. */
 .sheet-dim { position: fixed; inset: 0; z-index: 40; background: rgba(10, 12, 18, 0.32); }
@@ -1963,6 +1982,9 @@ section.advanced code { font-size: 11.5px; }
    The tabs reuse the segmented control; topics are quiet pills that read like the chips on a card, one chosen at a
    time. What fits none of the screens folds away under the list. A heart is a count first and a control only where
    the plugin runs. What comes along sits in the action box as rows like the tray's, never as a second dialog. */
+.plugin-counting { margin: 0 0 12px; }
+.plugin-counting > .ui-icon { font-size: 18px; color: var(--accent); flex: none; }
+.plugin-counting strong { display: block; color: var(--ink); }
 .plugin-misfits { display: grid; gap: 10px; margin-top: 6px; }
 .plugin-misfits-head { justify-self: start; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); padding: 4px 6px 4px 0; }
 .plugin-misfits-head:hover { color: var(--ink-2); }
@@ -1970,6 +1992,11 @@ section.advanced code { font-size: 11.5px; }
 .plugin-likes { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
 .plugin-likes .ui-icon { font-size: 14px; }
 .plugin-likes.mine .ui-icon { color: var(--danger); }
+.plugin-likes { border: 0; background: none; padding: 2px 4px; margin: -2px -4px; border-radius: 6px; cursor: pointer; }
+.plugin-likes:hover { color: var(--ink); background: var(--seg); }
+.plugin-numbers { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plugin-numbers .ui-icon { font-size: 13px; }
+.plugin-numbers .ui-icon.star { color: var(--star); }
 .plugin-chip.topic { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .pd-top-end { display: inline-flex; align-items: center; gap: 4px; }
 .pd-like { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border-radius: 999px; font-size: 13px; font-weight: 550;
@@ -1978,6 +2005,11 @@ section.advanced code { font-size: 11.5px; }
 .pd-like:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
 .pd-like.on .ui-icon { color: var(--danger); transform: scale(1.08); }
 .pd-like:disabled { opacity: 0.6; cursor: default; }
+.pd-numbers { display: flex; align-items: center; gap: 5px; margin: -4px 0 0; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pd-star { color: var(--star); font-size: 15px; }
+.pd-rate { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px; border-radius: 12px; background: var(--surface-2); font-size: 12.5px; }
+.pd-rate-label { color: var(--ink-2); font-weight: 550; }
+.pd-rate-clear { font-size: 12px; }
 .pd-confirm { display: grid; gap: 10px; padding: 12px 14px; margin: 10px 0 2px; border-radius: 12px; background: var(--surface-2); font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
 .pd-confirm a { color: var(--accent); }
 .pd-confirm .btn { height: 32px; font-size: 12.5px; }

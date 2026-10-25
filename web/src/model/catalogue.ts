@@ -6,7 +6,9 @@
 import data from "./catalogue.json";
 import { spanOf } from "./sizes";
 
-type Needs = { actions?: { action: string; field?: string }[]; features?: string[]; attributes?: string[]; history?: string; unless?: Needs };
+// `device`: what the entity's device must have (a vacuum's map, its routines); the add-on finds it there and answers it in
+// the entity's capabilities, so the editor reads it from those.
+type Needs = { actions?: { action: string; field?: string }[]; features?: string[]; attributes?: string[]; history?: string; unless?: Needs; device?: string[] };
 type Screen = { firmware?: string; feature?: string; pictures?: boolean; else?: string };
 type Option = { key: string; needs?: Needs; screen?: Screen; sizes?: { full: boolean }; wide?: boolean; rows?: number; of?: string[];
   one_row?: string; fallback?: string; range?: { when?: Needs; screen?: Screen }; room?: Screen };
@@ -55,6 +57,13 @@ export function condition(domain: string, when: Needs | undefined, attributes: A
   return !(when.unless && holdsStrictly(domain, when.unless, attributes));
 }
 /** Whether a screen meets `screen`; what is not known (null) is not held against it. */
+/** Every feature a screen's hello may name that an option of the catalogue asks for (`screen: {feature}`). */
+export function screenFeatures() {
+  const found = new Set<string>();
+  for (const type of Object.values(TYPES))
+    for (const item of [...(type.controls ?? []), ...(type.displays ?? [])]) if (item.screen?.feature) found.add(item.screen.feature);
+  return found;
+}
 export function screenHolds(requirement: Screen | undefined, features: Set<string> | null = null) {
   return !requirement?.feature || features === null || features.has(requirement.feature);
 }

@@ -48,6 +48,8 @@ substitutions:
     settings_screen::board_rows.push_back(settings_screen::toggle(screen_text::txt::settings_microphone,
         []() -> int32_t { return id(ts_microphone_on).state ? 1 : 0; },
         [](int32_t on) { if (on) id(ts_microphone_on).turn_on(); else id(ts_microphone_on).turn_off(); }));
+    // The doorbell's chime (module doorbell, docs/DOORBELL.md) on the speaker for announcements.
+    runtime_tiles::doorbell_audio(id(ts_speaker));
 
 # Whether the microphone listens: off mutes it for everything that reads it, kept over a restart. The same switch in
 # Home Assistant, in the app (boards.yaml `settings`) and on the screen's settings page.
@@ -81,6 +83,10 @@ speaker:
     id: ts_speaker
     output_speaker: ts_announcement_input
     task_stack_in_psram: true
+    # A plugin's sound (plugin_sound.h) is handed over from the screen's loop: half a second ahead, so a long redraw of
+    # the glass (a popup coming up over a 10-inch, 300 ms) never runs it dry. ESPHome's default of 100 ms stuttered the
+    # voice assistant's wake sound. Announcements and voice fill it from their own task, as before.
+    buffer_duration: 500ms
   - platform: resampler
     id: ts_media_speaker
     output_speaker: ts_media_input
@@ -99,6 +105,21 @@ media_player:
     volume_initial: 0.5
     volume_min: ${ ((AUDIO_VOLUME_DB_LOW | float) - (AUDIO_DAC_DB_AT_0 | float)) / ((AUDIO_DAC_DB_AT_1 | float) - (AUDIO_DAC_DB_AT_0 | float)) }
     volume_max: ${ ((AUDIO_VOLUME_DB_HIGH | float) - (AUDIO_DAC_DB_AT_0 | float)) / ((AUDIO_DAC_DB_AT_1 | float) - (AUDIO_DAC_DB_AT_0 | float)) }
+    # Who may play (components/smart_display/audio_owner.h, docs/PLATFORM_PLAN.md 3.4): music claims the speaker as
+    # MEDIA when it starts playing and gives it back when it pauses or ends. A camera's sound, the voice assistant or a
+    # doorbell outranks it and pauses it, and the music does not start again by itself; while one of them holds the
+    # speaker, music that starts is paused at once. Announcements take the mixer's other input and are not claimed.
+    on_play:
+      - lambda: |-
+          audio_owner::Claim claim;
+          claim.role = audio_owner::Role::MEDIA;
+          claim.lost = []() { id(ts_media_player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_PAUSE).perform(); };
+          if (!audio_owner::the().claim(audio_owner::Side::OUT, claim))
+            id(ts_media_player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_PAUSE).perform();
+    on_pause:
+      - lambda: audio_owner::the().release(audio_owner::Side::OUT, audio_owner::Role::MEDIA);
+    on_idle:
+      - lambda: audio_owner::the().release(audio_owner::Side::OUT, audio_owner::Role::MEDIA);
     announcement_pipeline:
       speaker: ts_speaker
       sources: [ts_announcement_source]

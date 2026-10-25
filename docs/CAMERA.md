@@ -117,6 +117,17 @@ cut square with the tile's rounded corners, delivered as described below.
   double-width media player tile. The app fetches the player's picture only when its address changes (a new track);
   the screen asks again the moment the picture's mark in the player's state changes. A player without a picture keeps
   its icon; the tile over the whole page keeps the card's big cover.
+- **The library while nothing plays.** A media player's tile on *Album cover* that is 1 x 2, 2 x 2 or larger shows
+  the covers of the player's library while it has nothing to show (idle, on, off or standby, or paused with no song,
+  and no picture of its own), darkened as much as a cover under its track. The app takes the first folder of the
+  library that holds songs (Spotify's "Liked songs", newest first), else albums, else playlists, each picture once,
+  and reads it again every half hour. The covers stay square and all one size, two along the tile's shorter side and
+  as many along the longer one as fill it; what reaches past the tile is cut off evenly at both ends, never squeezed.
+  Every minute one of them moves on to the next cover of the folder: the one longest on the tile goes, and none shows
+  twice. It is the tile's own picture by a mark in the player's state, so the firmware asks for it as for a cover and
+  nothing in the firmware changed; a screen gets it once its firmware draws a player's extras (0.24.0+). A library
+  whose pictures the app may not fetch, such as Music Assistant's covers of files in the house, which come from an
+  address in the house, keeps the tile as it was. The rules are in `screen_manager/app/rest_mosaic.py`.
 - The tiles' pictures come through the third of the screen's three downloads (`picture_fetch::live`, decoded into
   PSRAM), bound in `packages/features/camera.yaml`, which every board with camera pictures includes; the CYD, the
   Waveshare 3.5 and the Hosyond have none.
@@ -152,7 +163,7 @@ alone, and a board with more memory takes larger pictures: one picture may be a 
 2048 pixels a side (`picture_store::cap_for`). The P4 boards with 32 MB keep 6 MB of pictures, so 2 MB a picture: the
 10-inch glass gets a camera over its whole page, its full view, a map and the screensaver at its own 1280 x 800. The
 screen says so with `cap` (the bytes) when it asks for a picture of the whole glass, and the app honours up to 4 MB
-(`camera_feed.picture_cap`); an older app keeps the common cap. A picture that is still smaller than its place sits in
+(`picture_question.cap_of`); an older app keeps the common cap. A picture that is still smaller than its place sits in
 the middle of its card on a dark ground, so the name under it stays readable.
 
 A screen with firmware 0.3.3 or newer gets its live pictures in 8-bit colour: a palette of the picture's own
@@ -168,6 +179,9 @@ icon and name as any tile does. Firmware before 0.3.7 ignores both settings on a
 or full-page tile and keeps the small picture in the icon's place there.
 
 ## A doorbell
+
+The doorbell's own event, `esp_screens_doorbell`, opens its camera live with its sound on the ESP32-P4 screens and shows
+its picture in an alert on the others (docs/DOORBELL.md). An alert alone brings the doorbell's picture along:
 
 ```yaml
 triggers:
@@ -196,7 +210,7 @@ The screen never talks to Home Assistant about images, and it never holds a Home
    at most the board's canvas (`camera.full` in boards.json: 480×480 on the 4-inch Guition, 800×480 on
    the Waveshare 4.3, 5 and 7, 1024×600 on the JC1060P470), an alert card at its frame (`camera.thumb`,
    392×220 on the 4-inch Guition), proportions kept. Neither is ever larger than the cap above
-   (`camera_feed.PICTURE_MAX_SIDE` and `PICTURE_MAX_BYTES`): the JC8012P4A1's 1280×800 canvas gets a
+   (`picture_question.MAX_SIDE` and `MAX_BYTES`): the JC8012P4A1's 1280×800 canvas gets a
    full-screen picture of at most 1024×640, shown in the middle.
 3. It serves the result as an uncompressed BMP on **port 8098** under a random link, and sends the
    link to the screen. The screen downloads it in a task of its own, beside its main loop
@@ -211,7 +225,7 @@ The screen never talks to Home Assistant about images, and it never holds a Home
 
 While a camera is open, the screen loads its link every four seconds, one image at a time. Each load sets the
 camera's next fetch for just before the next load: four seconds on, less the time the camera took to answer last
-time and half a second (`camera_feed.CameraFeed.ahead`), so the next load finds a snapshot a fraction of a second old
+time and half a second (`picture_sources.Snapshots.ahead`), so the next load finds a snapshot a fraction of a second old
 and the picture changes at the screen's steady pace. A load whose fetch is still on its way waits up to 1.5 seconds
 for it, then takes the last snapshot. (Firmware before 0.52.0 got the snapshot fetched at the load before, a picture
 four seconds old; a fetch on its own clock next to the screen's made the picture change after 1.5 s one time and 6 s
@@ -236,9 +250,11 @@ bar in pixels (`1280x715`). An app that knows streams answers with a link on its
 older app answers with a still, and the screen shows stills. The link serves `multipart/x-mixed-replace`: one baseline
 JPEG a part, each with its Content-Length, over plain HTTP/1.0. The app makes the next picture once the last one has
 left its host, always of the newest frame the camera gave, so a slow Wi-Fi gets fewer pictures and never older ones.
-At most four screens stream at once.
+The app serves at most eight streams at once, of every screen together (a page of live tiles and a camera full
+screen); a stream it refuses leaves that screen with its stills. A screen runs at most seven of its own.
 
-**Where the pictures come from** (`screen_manager/app/live_feed.py`). Most of the work lands on Home Assistant's host,
+**Where the pictures come from** (`screen_manager/app/camera_source.py`; the JPEG per room is `live_pictures.py`, the
+stream on the camera port `live_stream.py`). Most of the work lands on Home Assistant's host,
 often a Raspberry Pi, so each kind of camera takes the cheapest road:
 
 - A camera with a stream of its own (an RTSP camera through Generic Camera, ONVIF, Reolink, UniFi Protect and others)
@@ -247,7 +263,9 @@ often a Raspberry Pi, so each kind of camera takes the cheapest road:
   software decoder takes only the baseline profile most cameras do not send), so Home Assistant's host does, once per
   camera however many screens watch it. The JPEG is made straight from the decoder's YUV with FFmpeg's encoder, at the
   camera's own size where that fits the room, or scaled down to it. Until the first frame (WebRTC waits for the
-  camera's next key frame, a few seconds on some cameras) the screen gets the camera's still.
+  camera's next key frame, a few seconds on some cameras) the screen gets the camera's still, again every two seconds,
+  each such part marked `X-Picture: still` (see "Until it is live" below). The app offers WebRTC without a STUN server:
+  it and Home Assistant share a network, and gathering a STUN candidate first cost about five seconds.
 - Any other camera (a snapshot camera, an ESPHome camera, a picture an integration draws) gives its snapshot, asked again
   as soon as the last one came, at most 15 a second. A JPEG the P4 decodes as it is (baseline, at most 1920 pixels a
   side) goes out untouched, which costs the app nothing; anything else is made into one.
@@ -279,6 +297,15 @@ Measured on the reTerminal D1001 (2026-10-10):
 
 Home Assistant's LL-HLS was 0.6 to 1.2 seconds behind the same camera and came in bursts of a second; its WebRTC 0.12.
 
+**Until it is live.** The stills before WebRTC's first frame show at once, but they stand still, so the screen says
+they are not live yet: a live tile (and a plugin's live place) turns the firmware's spinner, small, in its top right
+corner on a round shade, and the full view turns it at the right of its top bar, the place its sound key takes once
+the picture is live (the sound comes with the live stream). The stream's task draws the tile's loader itself,
+over the picture it composed and every 50 ms between the stills, since LVGL draws nothing over a stream; the full
+view's is LVGL's, beside the picture. The first part without the mark ends it, and `live_view` tells its owner
+(`Event::LIVE`, logged as "stream N: live after ... ms"). A camera without a stream sends no marks, so it is live from
+its first picture, and so is everything an older app sends; an older screen reads the mark as a header it does not know.
+
 **Live tiles.** A camera tile with **Display → Live picture** has one more pace on a P4: **Live**, its first and default
 one, so a camera tile on a P4 is live unless its pace says otherwise. The editor offers it for a screen that streams
 (its hello says `live`, or, while it is offline, a P4 board with pictures); any other screen refreshes such a tile at 15
@@ -289,12 +316,26 @@ asks for its stream with its picture's question and `live`, the card's size; the
 size (cut to fill it, or whole, as the tile says: the link ends in `?fit=contain` for a whole one), and the screen lays
 over each of them what the app bakes into a still: the card's rounded corners over the page, the shade under the name
 (the bottom 42 %, to 150/255 black) and the name as LVGL draws it. A camera opened full screen from a live tile has its
-first picture in about 0.3 seconds instead of five: the tile's streams stop, and the app's source of the camera, still
-running, has the newest frame ready. The other way round, the cameras of a screen's live tiles keep running in the app
+first picture in about 0.3 seconds instead of five: the tile's streams stop before the view's own stream is opened
+(`live_begin`, not the next drawing's `live_stop_covered`, so no tile's picture lands under the view once LVGL has drawn
+it), and the app's source of the camera, still running, has the newest frame ready. At the view's first picture the
+screen draws the whole glass once more (`glass::redraw_all`, as it does when the view's stream ends): the bands of the
+room around the picture, the top bar, and whatever a tile's last picture left under them. The other way round, the cameras of a screen's live tiles keep running in the app
 for as long as that screen's full view streams (`LiveFeed.hold`), so its tiles are live again within a tenth of a second
 when it closes, rather than after the seconds a WebRTC session takes to start. Measured on the reTerminal D1001 with the EZVIZ: a 2 x 2 tile of its substream at
 8 pictures a second (decoding 2 ms, laying out 32 ms), a single tile of its main stream at 15 (1 ms, 11 ms), beside each
 other.
+
+**Four at once.** A P4 screen streams at most four live tiles at a time (`caps.live_tiles`, PLATFORM_PLAN.md 4.1): the
+first four on the page stream, the others show a still every 15 seconds, and the log says so ("4 live tiles stream; 1
+more on the page keep their stills (at most 4 at once)"). What four cost, measured on a reTerminal D1001 with its own
+video watched by three viewers beside them (2026-10-25): 4.2 to 5.4 pictures a second each with laying out a picture at
+122 to 134 ms, against 12 to 14 at 60 ms with two; the video kept 12 fps, the panel never ran dry and 142 KB of internal
+RAM stayed free. The PPA, one device for every copy to the glass, is the limit, not the memory, and that is the reason
+for four. A screen counts the connections of its streams and downloads into ESPHome's socket total
+(`smart_display/__init__.py`, `_sockets`, and the video's server in Screen camera): with ESPHome's own count of 12 the
+four streams and the video's viewers took every socket, and the fifth tile's still found no connection. A still that
+fails waits its tile's pace before it is tried again (`picture_loader.h`), where it was tried every second.
 
 **The camera's sound.** On a P4 with a speaker (a board that includes `features/audio.yaml`) the full view plays the
 camera's sound, with a key at the right of its top bar that mutes it; muted stays muted for every camera until the
@@ -322,7 +363,7 @@ update holds the loop and has its progress drawn at once.
 full view's black, a tile's still with its spinner and name) would cover the live picture until its next one. So the
 list of what LVGL is about to draw is cut against where the picture of every stream lies (a tile's whole card, a full
 view's picture as large as fits its room; beside a picture of another shape LVGL draws the room's black itself), once,
-as LVGL starts drawing (`LV_EVENT_RENDER_START`, `keep_out` in `live_view.cpp`). That one place catches every way LVGL
+as LVGL starts drawing (`LV_EVENT_RENDER_START`, `keep_out` in `glass_dsi.cpp`). That one place catches every way LVGL
 comes to draw there: a card that changes beside a tile, an area queued before a stream's first picture, two areas LVGL
 joined into one, and the whole glass, which LVGL draws when more areas come in one frame than its list holds. Each piece
 goes through the display's own rounding, as LVGL's own areas do. When a picture lies elsewhere or at another size (a
@@ -333,7 +374,7 @@ beside the new one. When a stream ends, LVGL draws its room again.
 every 16 ms. When another DMA holds the bus too long (the PPA scaling and turning a picture, the JPEG decoder, the
 DMA2D that copies what LVGL drew), the bridge runs dry and the panel shows a frame of blue, its colour for no data;
 ESP-IDF only logs that from its interrupt, on the UART. A tester with a Guition 10.1-inch P4 (pixel clock 70 MHz) saw
-such flashes while a camera streamed. So the firmware does two things on a P4 (`live_view.cpp`, "The panel's share of
+such flashes while a camera streamed. So the firmware does two things on a P4 (`glass.h`, "The panel's share of
 the memory bus"). It counts: the bridge's underrun flag is read every 50 ms and the count stands in every stream report
 (`the panel ran dry N times since boot`), so a log says whether a change helped. And it shortens every PPA burst on the
 screen from ESP-IDF's 128 bytes to 64, the streams' own clients and ESPHome's LVGL (which turns every flush of a turned
@@ -341,9 +382,56 @@ glass with the PPA) alike, through a linker wrap of `ppa_register_client`: betwe
 bridge. LVGL took the same way for the same underrun under its own PPA draw unit (lvgl/lvgl #9590). A copy takes a
 little longer for it. The reTerminal D1001 (pixel clock 80 MHz) counts none, with or without the change.
 
+**A turned copy the 2D-DMA never finishes.** The P4's picture engine (the PPA) cuts a copy into units of 64 pixels
+by 16 rows, and when the last unit holds fewer bits than the DMA's FIFO the DMA never counts it as received: the DONE
+never comes and the task that asked waits for good on the driver's semaphore, without an error or a log line
+(Espressif's hardware bug DIG-734). ESP-IDF knows and sets "bypass macro block order" for such a block, but in the
+5.5 releases it works the leftover out from the input's width and height even when the block is turned, where the
+hardware cuts the turned output (espressif/esp-idf #19023; the fix, 469aa16, is on master only). On a screen whose
+glass is turned a quarter every copy is turned, LVGL's flush of each strip as much as a live tile's picture, so sooner
+or later one hangs, the main loop stops behind it (it holds the glass, above) and the task watchdog restarts the
+screen. A tester's M5Stack Tab5 (a 720x1280 panel shown as 1280x720, the one turned P4 glass) restarted every few
+minutes with two live camera tiles; its crash record showed the crashed core idle, the sign of a main loop waiting
+rather than working (2026-10-23). So the firmware guards every `ppa_do_scale_rotate_mirror` call through a linker wrap
+(`ppa_guard.h`, `ppa_guard.cpp`): it works out both rules, the hardware's and the driver's, and a turned block the
+hardware would stall on while the driver leaves the bypass off is copied in pieces, each of which the engine takes
+whole; two in almost every case, never more than six. A block the driver takes as it is costs nothing. The log names
+the first eight such copies (`ppa_guard: a turned copy of WxH would hang the 2D-DMA`); `tests/test_ppa_guard.cpp`
+proves the pieces cover the block once and land where the whole would.
+
+**The main loop and the C6's answers.** On a P4 the Wi-Fi runs on the ESP32-C6, and some things the main loop asks
+about it (the signal strength for the Wi-Fi sensor, the access point, the power save mode at standby and at wake, the
+whole setup of the Wi-Fi at boot) are questions to that chip over esp_hosted's RPC, answered over the same SDIO link
+the pictures come in on. Each such wait gives up after 5 seconds, and ESPHome's task watchdog gave up on the main loop
+after 5 seconds too, so when the link was busy (two live tiles, the video going out) a lost answer restarted the
+screen instead of failing one call. Three screens showed it in one day: a reTerminal D1001 ten minutes after boot
+with two streams just started, a Tab5 in the first minute of every boot while its two streams started (and ESPHome's
+rollback then put the old firmware back), a Guition 10.1 with a live tile and the video. The main loop's stack at the
+watchdog (docs/REPORTS.md) read `wait_for_sync_response` in esp_hosted's `rpc_core.c`. The answer is not slow, the
+chip's work is microseconds: it is thrown away. esp_hosted's SDIO reader hands each received block to a copy task
+through a double buffer, and when that task still holds the previous block (it waits on a full queue) the reader
+frees the new block whole and logs `H_SDIO_DRV: task still writing Rx data to queue!` (espressif/esp-hosted-mcu #197,
+open); an answer in that block never arrives, and the main loop waits the full 5 seconds for nothing. So every P4
+board runs the task watchdog at 20 seconds (`packages/hardware/esp32p4-c6.yaml`): a lost answer is a failed call,
+logged by ESPHome as the Wi-Fi taking long, and the screen goes on. While it waits, LVGL stands still: a standby or
+a wake under that load comes 5 seconds late. A screen whose main loop truly hangs restarts after 20 seconds. The most
+frequent of those questions was the top bar's: its Wi-Fi item read the signal at every draw, about once a second, so
+`wifi_status::link()` now asks it at most every five seconds (`wifi_status::Signal`) and remembers it in between.
+
+**A new firmware's first minute.** After an update ESPHome's safe mode keeps the new firmware on trial until it has
+run a minute (`boot_is_good_after`); a restart before that and the bootloader puts the old firmware back, with every
+fix it held and its crash record. A P4 screen with live tiles starts its streams in that same minute, while the Wi-Fi
+on the C6 is set up over the SDIO link the pictures come in on, and a Tab5 with two live tiles fell back that way on
+every update, the watchdog of 20 seconds or not. So live streams wait while the running firmware is on trial
+(`boot_trial.h`: the partition's state is `ESP_OTA_IMG_PENDING_VERIFY`, read every two seconds until it is confirmed):
+the live tiles and places show their stills and the full view asks for stills, and the first round after the
+confirmation starts them. The log says `boot_trial: A new firmware on trial` and later `The new firmware is
+confirmed`. An ordinary restart is never on trial, so its streams start as before. A restart after the minute leaves
+the new firmware in place, and its next boot logs where the main loop was (docs/REPORTS.md).
+
 **One writer on the glass at a time.** LVGL holds the glass for the whole of each refresh (from `LV_EVENT_REFR_START`
 to `LV_EVENT_REFR_READY`: deciding what to draw, drawing it, flushing it to the panel) and a stream's task holds it for
-each copy of a picture, one recursive mutex in `live_view.cpp` (`glass`). Without it a stream's first picture could land
+each copy of a picture, one recursive mutex, the glass's (`glass.h`: `hold` and `release`). Without it a stream's first picture could land
 while LVGL was still drawing the still and the name it had decided on before the stream armed, and that drawing then lay
 over the picture until the next one: a tile's name stood over its live picture after the camera full screen closed
 (2026-10-12, the D1001). `close()` takes the same lock, so once it returns nothing of the stream writes the glass.
@@ -363,6 +451,10 @@ board without PSRAM has no room for it.
 - **Home Assistant OS:** the app publishes port 8098 on the Home Assistant host. When another app
   already uses 8098, pick another port in the app's network settings: the app sends the screens
   links on the port you chose (app 0.4.24+). The screens need to reach Home Assistant's address on it.
+- **Home Assistant on more than one network:** each screen gets the address Home Assistant has on the screen's own
+  network, found from the screen's IP address and the networks Home Assistant lists. A screen on a network where Home
+  Assistant has no address of its own (one reached through a router) gets the address of Home Assistant's default
+  network, as every screen did before. It then needs a route to that address.
 - **Docker** (docs/DOCKER.md): the container uses the host network, so 8098 is open as is. When
   the screens reach the host under another address, set `SCREEN_CAMERA_URL`, for example
   `http://192.168.1.20:8098`.
@@ -410,11 +502,109 @@ through, how much it matters, and how the app is asked for it. One loader decide
   places, the picture used longest ago that nothing draws makes way (`picture_store.h`). The screen's log says what
   the store holds whenever that changes (`store: 5 pictures, 578 of 1638 KB (cover tile tile cover tile), 0 to go`).
 
+## The screen's own camera as video in Home Assistant
+
+The rest of this page is about pictures coming to a screen. This section goes the other way: a screen with a camera of
+its own (the reTerminal D1001 and the M5Stack Tab5, the feature `camera_sensor`) as a live camera in Home Assistant,
+with sound, playing in the browser and the app with about a third of a second of delay.
+
+Measured and open: watched as a live tile on the screen itself, the video comes to the app at about 0.1 s behind the
+camera on average but in bursts of 1.5 to 3 s behind now and then (a reTerminal D1001, 2026-10-25, camera_source's
+"behind the camera" line), where another camera through Home Assistant stays within 0.3 s. Likely the wait for a key
+frame or the encoder on the screen while it streams two tiles; not looked into yet.
+
+**Which way up.** The camera turns its picture upright by itself (plugin API 0.19, `camera_turn.h`): half way round
+on a board whose sensor sits upside down against the glass (the board file's `CAMERA_ORIENTATION: "180"`, the Tab5),
+and half way again while the screen is turned half way round from lying down. The sensor turns its own readout
+(Screen camera's `FrameHub::turn`, its flip and mirror), so the pictures, the video and the light level and motion all
+stand the same way, at no cost. A screen stood up (a quarter turn) keeps the picture lying down, as the sensor sees the
+room: a quarter turn of the picture is not built. For a screen mounted the other way round from how its board is built,
+the plugin's setting **Camera upside down** turns it half way on top.
+
+**Setting it up.** Add the plugin Screen camera to the screen; its part **Video** is on when it is added (the plugin's
+details, on the screen's Plugins tab, turn it off). Then, once for the whole home, open **Settings, Video in Home
+Assistant** in Tessera, press **Install in Home Assistant** and then **Restart Home Assistant**. From then on Tessera
+adds a camera **Video** to the device of each screen with the video by itself, and takes it away again when the part is
+turned off. Nobody types a password or an address.
+
+**What travels.** The camera hands its frames to the ESP32-P4's hardware H.264 encoder at the camera's own size, at
+15 frames a second, 1 Mbit/s, a key frame every second. The encoder wants whole macroblocks of 16 pixels, so a camera
+whose size is not (the Guition screens' OV02C10 gives 1288 x 728) has the edge of its frames cut off on the way, by
+the P4's pixel engine: the middle, 1280 x 720. The whole of a larger mode, scaled down in the same pass, was measured
+and left out (a reTerminal D1001, 2026-10-25, a forced pass of its 1280 x 720 into 960 x 528 beside two live tiles and
+three viewers): the panel never ran dry, but the pass took 77 to 89 ms a frame, the video fell from 12-13 to 7-9 fps,
+and the live tiles from 12-14 to 6-9 pictures a second with laying out a picture going from 60 to 92-137 ms. The PPA
+is one device that the video and the tiles share (PICTURE_ARCHITECTURE.md, section 2.4, has what its driver allows), so
+the Guition shows the middle of its camera. The encoder keeps its reference frame in internal RAM and that grows
+with the size, so the video takes no camera above 1280 x 800; a sensor whose modes are all larger gets a smaller one
+in the part's YAML (`esp_video_camera: resolution`), never in a board file. The microphone goes as Opus, 16 kHz in one channel at 32 kbit/s. A small
+RTSP server on the screen (port 8554, RTP over the RTSP connection) serves up to three viewers from the one encoder.
+Home Assistant's integration `tessera_video` (shipped by the app, `screen_manager/app/ha_integration/tessera_video`)
+gives Home Assistant that address as the camera's stream, and Home Assistant's go2rtc passes H.264 and Opus on to the
+browser as WebRTC without transcoding. Stills come from the same stream. Both ends work the password out of the API key
+Home Assistant already keeps for the screen (`sha256("tessera-video:" + key)`, its first 24 hexadecimal digits), user
+`tessera`.
+
+**What changes on the screen.** The camera runs from boot, in its raw mode. Its JPEG pictures are gone, and so is the
+camera "Camera" of the screen's device: "Video" gives the stills now. Light level and motion of Screen camera keep
+working: they read the same frames the video gets. The dot in the top right corner shows while anyone watches. The
+microphone listens only while someone watches, and the voice assistant can listen at the same time.
+
+**What it takes, measured on a reTerminal D1001.** Each of these cost a build to find, and each is kept in the code:
+
+- lwIP's TCP send buffer of 5760 bytes lets four segments travel at once, which over the ESP32-C6's Wi-Fi caps one
+  connection near 1.5 Mbit/s and holds the sound up behind the picture for seconds. Every P4 gets 65534
+  (`P4_NETWORK` in `components/smart_display/__init__.py`).
+- Internal RAM is what a P4 runs short of. The encoder keeps about 104 KB of it and Opus about 25 KB, for as long as
+  the screen runs. What every connection holds unsent or unread lived there too: with live camera tiles on the glass
+  and the video playing, free internal RAM fell from 160 KB to 13 KB in two seconds and the C6's driver aborted the
+  chip. So on every P4 the network's buffers go to PSRAM first (`CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`, the option
+  ESPHome's `wifi: use_psram` sets), and the video skips frames while less than 80 KB is free, starting again with a
+  key frame above 110 KB.
+- The encoder keeps its reference frame in internal RAM: a strip of three rows of macroblocks across the picture (92 KB
+  at 1280 wide, esp_h264 1.3.8), most of the 104 KB. In PSRAM it would free that, and its DMA reaches PSRAM, but its
+  traffic then shares the memory bus with the panel's frame buffer: on a reTerminal D1001 with two live camera tiles
+  and three viewers of the video (2026-10-25), the panel ran dry 39 to 53 times within a minute (blue frames over the
+  live tiles; 0 with the strip inside) and laying out a live picture went from 60 to 78 ms, for 100 KB more internal
+  RAM free. So it stays inside: PSRAM is one bus with the panel (docs/PLATFORM_PLAN.md, 4.4a). With the encoder's DMA
+  in bursts of 64 bytes instead of its 128 as well (a wrap of h264_dma_hal_init, the same day, eight minutes), the
+  panel never ran dry and laying out stayed at 50 to 70 ms, but encoding took 105 to 130 ms a frame and the video fell
+  to 6 to 7 fps: a smaller burst saves the panel and halves the video, so the strip stays inside and the test's wraps
+  are gone. The video's line every minute gives the encoder's time a frame (48 to 50 ms there, at
+  12 to 13 fps) and what it holds of internal RAM. It is made once, at the camera's first frame, on the camera's
+  own task, with the camera started at boot. Made when someone starts watching, after the pages were built, there was
+  no memory left for it. Made in `setup()`, before the camera driver ran, the first frame hung the whole chip.
+- An encoder whose output did not fit stays stuck, so its output buffer holds 1 MB (a key frame of a dark room is over
+  200 KB), it is never closed and opened again, and a viewer never chooses another size.
+- The server's own buffers (a 64 KB send batch, a second of sound) live in PSRAM, and so does its task's 32 KB stack
+  (Opus needs about 27 KB of it). With less than about 90 KB of internal RAM free the Wi-Fi starved and the chip
+  stalled now and then.
+- The microphone's chunks go to the server whole or not at all. A partial write of an odd number of bytes split every
+  later 16-bit sample in two, which sounds like white noise. A chunk that does not fit is dropped whole, and its
+  samples move the sound's clock on, so picture and sound stay in step.
+- Opus counts at 48 kHz in RTP whatever it carries, and the SDP says `opus/48000/2`. Sender reports every second on both
+  tracks, against the same clock the camera stamps its frames with, line picture and sound up in the browser.
+- One viewer at a time was not enough: Home Assistant's own stream (for HLS and stills) opens a connection beside
+  go2rtc's, and while it waited the frontend fell back to HLS, three seconds late and without sound.
+- esp_audio_codec 2.5.0: from 2.6 on it builds only for P4 chips of revision 3.
+- A JPEG-only build of Screen camera puts an empty esp_h264 in the build folder (its component
+  `esp_h264_placeholder`), and ESPHome never takes a file it wrote away again: it wipes a build folder only when a
+  component it had is gone. The video's build goes without that component, which covers a screen built with Screen
+  camera 0.4.0 before. For one that ran an older Screen camera, the app starts a build whose plugin parts changed from
+  an empty build folder (`Build.fresh` in `build_queue.py`); in Device Builder, use Clean Build Files once. When a build
+  fails to compile, ESPHome's upload sends the previous firmware: after a flash, check that the screen runs the new
+  build's compile time.
+
 ## For developers
 
-- `screen_manager/app/camera_feed.py`: fetching, sizing, links and the port; `CameraFeed.live` makes a tile's picture
-  (with `tile_art.encode`) and an older screen's strip (`encode_live`); `Manager.answer_live` in `server.py` checks the
-  tiles against the layout.
+- The layers under all of this, on the screen, in the app and in the Screen camera plugin, and where the code is still
+  being moved into them: docs/PICTURE_ARCHITECTURE.md.
+- The app's side is one picture system, docs/PICTURES.md: `picture_question.py` (the question and its answer),
+  `picture_legacy.py` (an older screen's fields read as the same question), `picture_sources.py` (what each address
+  is, fetched once per camera and checked against the layout), `picture_paint.py` (sizing, cutting, the shade and the
+  corners), `picture_links.py` (the links and the port), `lan_address.py` (where the screens reach the app, the address
+  the links carry) and `picture_service.py` (the question in, the link out);
+  `Manager.answer_camera` in `server.py` hands a screen's question to it.
 - `components/smart_display/camera_view.h`: when to ask for a link and when to load again
   (`tests/test_camera_view.cpp`).
 - `components/smart_display/picture_loader.h`: the one route every picture goes (`tests/test_picture_loader.cpp`
@@ -425,6 +615,8 @@ through, how much it matters, and how the app is asked for it. One loader decide
 - `components/smart_display/runtime_tiles.h`: what each picture wants (`pictures_round` and the `*_want` functions
   beside it), the full-screen view, the alert picture, the tiles' pictures (`card_picture_wants`, `tile_ask`,
   `tile_picture_place`), the store (`picture_of`, `pictures_collect`) and the `camera` message.
+- `components/smart_display/picture_jpeg.h`: the JPEG a screen takes, one profile with the app's `picture_paint`
+  (`tests/test_picture_jpeg.cpp`, and `tests/test_camera.py` for the two sides).
 - `components/smart_display/picture_fetch.h` and `picture_fetch.cpp`: the download beside the main loop, one task per
   picture, and the BMP decoder (`tests/test_picture_fetch.cpp` checks the link, the answer's head and the decoder).
 - `packages/features/camera.yaml` (included by every board with camera pictures): the three pictures bound to their
@@ -432,11 +624,22 @@ through, how much it matters, and how the app is asked for it. One loader decide
   finished download, the `LV_USE_IMAGE` flag, the alert frame, and the diagnostic action `preview_camera` (an entity
   opens it, an empty entity closes it).
 - `tests/test_camera.py`: the app side and the words both sides share.
-- `screen_manager/app/live_feed.py`: a camera live on a P4, its links, the source per camera (WebRTC or snapshots), the
-  stream and a tile's pace (`live_pace`) (`tests/test_live_feed.py`); `components/smart_display/live_view.h` and
+- `components/smart_display/picture_engine.h` and `picture_engine_p4.cpp`: the picture engine (docs/PICTURE_ARCHITECTURE.md):
+  which formats this screen's decoder takes whole, the hardware JPEG decoder for the stills and the streams alike, and the
+  PPA copy with its scale and turn, through the guard; the software engine is the BMP rows of `picture_fetch`.
+- `components/smart_display/glass.h` and `glass_dsi.cpp`: the panel as a surface (docs/PICTURE_ARCHITECTURE.md): its
+  size and turn, the frame buffer a stream writes past LVGL, the one-writer lock LVGL holds for a refresh and a stream's
+  task for a copy, the rooms LVGL keeps out of, the panel's underrun count and the PPA bursts of every client.
+- `screen_manager/app/camera_source.py`: a camera live on a P4, the source per camera (WebRTC or snapshots, its stills
+  first, its sound) (`tests/test_camera_source.py`); `live_pictures.py`: the JPEG of a frame for a screen's room
+  (`tests/test_live_pictures.py`); `live_stream.py`: the links, the stream and a tile's pace (`live_pace`)
+  (`tests/test_live_stream.py`); `components/smart_display/live_view.h` and
   `live_view.cpp`: the screen's streams, up to seven at once (`tests/test_live_view.cpp` checks the stream's framing,
   where a picture lies on a turned panel, how it is scaled, cut into a card and what is laid over it);
-  `runtime_tiles.h` (`live_tiles_round`, `live_tile_answer`, `live_tick`): which tiles stream and when.
+  `live_spots.h`: the one machine of the live tiles and a plugin's live places (what streams, asks, stops and gives up;
+  `tests/test_live_spots.cpp`), and the full view's handle and tries; `runtime_tiles.h` (`live_tiles_round`,
+  `live_spot_ask`, `live_spot_open`, `live_stop_covered`, `live_tick`) binds it: which spots may stream, their question,
+  their look.
 - Every step of every picture is in the screen's log at DEBUG (`logger: level: DEBUG` in a screen's Override YAML),
   under the tag `picture`: who wants which picture, the question and its answer, the download, the store keeping,
   renewing, retiring and freeing each copy (and why), a picture put on its card on the glass or on a kept page, and an

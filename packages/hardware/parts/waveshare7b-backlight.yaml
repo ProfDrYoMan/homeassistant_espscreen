@@ -1,0 +1,15 @@
+# Only the 7B switches EXIO2 through the native output power supply. Keep the shared PWM and touch wiring.
+# Brightness changes without fading; enabling waits 50 ms and zero brightness holds power for 5 s.
+power_supply:
+  - id: backlight_enable
+    pin:
+      waveshare_io_ch32v003: expander
+      number: 2
+      mode:
+        output: true
+    enable_time: 50ms
+    keep_on_time: 5s
+
+output:
+  - id: !extend gpio_backlight_pwm
+    power_supply: backlight_enable

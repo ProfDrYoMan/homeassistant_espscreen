@@ -17,6 +17,7 @@ import TilePicture from "./tile/TilePicture.vue";
 import TilePlugin from "./tile/TilePlugin.vue";
 import TileRoundKey from "./tile/TileRoundKey.vue";
 import TileTall from "./tile/TileTall.vue";
+import TileVacuum from "./tile/TileVacuum.vue";
 import TileWatch from "./tile/TileWatch.vue";
 import { useUiStore } from "../stores/ui";
 import { placeTile, removeTile } from "../editor/tiles";
@@ -58,13 +59,13 @@ const classes = computed(() => {
   const face = card.face;
   return { wide: face.wide, full: face.full, tall: face.tall, "watch-card": kind.value === "watch", "tall-action": face.tallAction || face.tallStack, "big-key": face.bigKey,
     photo: card.loaded.artwork && !!card.artwork, camera: (kind.value === "camera" && card.loaded.camera) || (kind.value === "favorite" && card.loaded.favorite),
-    bare: props.tile.options?.background === "none", placeholder: props.placeholder || (!card.live && !card.foreign), chosen: card.chosen,
+    glass: !!card.head, bare: props.tile.options?.background === "none", placeholder: props.placeholder || (!card.live && !card.foreign), chosen: card.chosen,
     "just-added": !props.preview && !!props.tile.id && doc.justAdded === props.tile.id };
 });
 const style = computed(() => {
   const background = card.background;
   return { gridColumn: `${props.at % card.grid.columns + 1} / span ${card.shape.columns}`, gridRow: `${Math.floor(props.at % card.grid.slots / card.grid.columns) + 1} / span ${card.shape.rows}`,
-    ...(background && props.tile.options?.background !== "none" ? { backgroundColor: background } : {}),
+    ...card.glassStyle.frame, ...(background && props.tile.options?.background !== "none" ? { backgroundColor: background } : {}),
     "--tile-cols": card.shape.columns, "--tile-icon": card.palette.icon, "--tile-circle": card.palette.circle, "--tile-accent": card.palette.accent, ...(card.watchStyle?.pad ?? {}) };
 });
 
@@ -108,6 +109,7 @@ async function onKey(e: KeyboardEvent) {
     <TileClockFace v-else-if="CLOCKS.includes(kind)" :card="card" />
     <TilePicture v-else-if="kind === 'favorite' || kind === 'camera'" :card="card" />
     <TileWatch v-else-if="kind === 'watch'" :card="card" />
+    <TileVacuum v-else-if="kind === 'vacuum'" :card="card" />
     <TileTall v-else-if="kind === 'tall' || kind === 'big-key'" :card="card" />
     <TileLine v-else :card="card" />
     <TileResize v-if="card.live && !preview && !placeholder" :tile="tile" />

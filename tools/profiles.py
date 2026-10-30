@@ -43,7 +43,7 @@ SAMPLE = ('cyd', 'guition', 'jc8012p4a1', 'waveshare7')
 # board, so one board says it. The CYD, for its flash budget. tools/affected_boards.py --older-sample adds a board for a
 # changed file the CYD doesn't build (a feature package, another board's file), and CI builds every board on both
 # ESPHomes each night.
-MIN_VERSION_SAMPLE = ('cyd',)
+MIN_VERSION_SAMPLE = ('guition',)  # the CYD asks 2026.9.0 since 0.4.91 (its flash), so the Guition 4848S040 says it
 # The boards a render check draws the UI on: the smallest glass, one in the middle and the largest.
 RENDER_SAMPLE = ('cyd', 'guition', 'jc8012p4a1')
 ENTRIES = {**{profile: board for board, _, profile in BOARD_TABLE},
@@ -93,10 +93,12 @@ def chain(path, *, all_variants=False):
 
 def flash_mb(board):
     """The flash chip a board's firmware is built for, in MB: the `flash_size` of the `esp32:` block in the board's
-    files, the last one that says it, and ESPHome's own 4 MB when none does (the CYD's esp32dev)."""
+    files, the last one that says it, and ESPHome's own 4 MB when none does (the CYD's esp32dev). A size named by a
+    substitution (the Waveshare 4.3's FLASH_SIZE, a choice of New screen) is the board file's own value of it."""
     found = 4
     for path in chain(BOARDS[board]):
         block = re.search(r'(?m)^esp32:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)*)', path.read_text())
+        block = [None, resolve(block[1], board_values(board))] if block and '${' in block[1] else block
         size = re.search(r'(?m)^  flash_size:[ \t]*"?(\d+)MB"?', block[1]) if block else None
         if size:
             found = int(size[1])
@@ -309,7 +311,8 @@ def glyphs(source, font):
     if not block:
         return None
     lists = [block.group(1)] + re.findall(r'glyphs: ' + flow, block.group(2))
-    return {char for found in lists for char in yaml.safe_load(found)}
+    # "${SCRIPT_GLYPHS}" is the letters of another script, there only on a screen built in such a language.
+    return {char for found in lists for item in yaml.safe_load(found) if '${' not in item for char in item}
 
 
 def merged(name):

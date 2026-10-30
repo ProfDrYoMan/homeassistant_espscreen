@@ -26,6 +26,7 @@ import { slug } from "../model/slug";
 import type { ChildTile, Inventory, Layout, PageDocument, PageGrid, PageLayout, PageTile, PageWorkspace, Screen, Tile } from "../types";
 import { useDragStore } from "./drag";
 import { useEntitiesStore } from "./entities";
+import { presetRowEntities } from "../model/light-presets";
 import { useInventoryStore } from "./inventory";
 import { lookups } from "./lookup";
 import { usePluginsStore } from "./plugins";
@@ -184,7 +185,7 @@ export const useDocumentStore = defineStore("document", () => {
   // when anything changed. A change of a page's top bar is the top bar store's (stores/topbar.ts).
   function applyDocument(next: PageLayout, remember = true, nextGrid = documentGrid.value, said?: ChangeLabel) {
     if (!document.value || !documentGrid.value || !nextGrid) return false;
-    pages.validatePages(next, screenGridOf(nextGrid));
+    pages.validatePages(next, screenGridOf(nextGrid), document.value);
     if (pages.sameValue(next, document.value) && pages.sameGrid(nextGrid, documentGrid.value)) return false;
     if (remember) {
       history.remember(snapshot(), "document", said ?? describeChange(document.value, next, documentGrid.value, nextGrid, nameOf));
@@ -223,7 +224,13 @@ export const useDocumentStore = defineStore("document", () => {
   /** An edit of the draft in place (model/pages.ts changePages); a refused one is said, and changes nothing. */
   function editDocument(apply: (draft: PageLayout) => void, field?: string) {
     if (!document.value || !documentGrid.value) return false;
-    try { return applyEdit(pages.changePages(document.value, heldTo(documentGrid.value), apply), field); }
+    // A tile that does not fit is put right rather than the edit refused, and the toast says what went (0.4.92).
+    const repairs: string[] = [];
+    try {
+      const changed = applyEdit(pages.changePages(document.value, heldTo(documentGrid.value), apply, repairs), field);
+      if (repairs.length) ui.toast(repairs.join(" "));
+      return changed;
+    }
     catch (error: any) { ui.toast(error.message); return false; }
   }
   function restoreSnapshot(value: DraftSnapshot, scope: HistoryScope) {
@@ -294,9 +301,10 @@ export const useDocumentStore = defineStore("document", () => {
     return () => { followers.delete(follower); };
   }
   const replaced = (opened: boolean) => { for (const follower of followers) follower(opened); };
-  // The states of the open layout's entities, for the mockup.
+  // The states of the open layout's entities, for the mockup, with the device's settings a light's presets name (their ring).
   function loadStates() {
-    return entities.loadStates((layout.value?.tiles || []).map((tile) => tile.entity), stillSelected());
+    return entities.loadStates((layout.value?.tiles || []).flatMap((tile) =>
+      [tile.entity, ...(tile.entity.startsWith("light.") ? presetRowEntities(tile.options) : [])]), stillSelected());
   }
   // A screen's saved document becomes the draft, with nothing to undo and nothing unsaved: when a screen is opened, when it
   // is read again, and for the tests' fixtures (tests/helpers/fixtures.ts), which so start from what the editor starts from.

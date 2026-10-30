@@ -41,9 +41,10 @@
    "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 19,
+   "icon": 29,
    "icon_home": 24,
    "icon_mini": 18,
    "label": 12,
@@ -63,7 +64,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -124,6 +128,7 @@
    "gap_y": 8,
    "margin": 11,
    "page_bar": 32,
+   "radius": 15,
    "tile_pad": 8,
    "top": 39
   },
@@ -160,9 +165,10 @@
   "dimmable": true,
   "dpi": 143,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 18,
+   "icon": 28,
    "icon_home": 25,
    "icon_mini": 18,
    "label": 11,
@@ -218,6 +224,7 @@
    "gap_y": 4,
    "margin": 9,
    "page_bar": 36,
+   "radius": 18,
    "tile_pad": 8,
    "top": 37
   },
@@ -249,9 +256,10 @@
   "dimmable": true,
   "dpi": 143,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 18,
+   "icon": 28,
    "icon_home": 25,
    "icon_mini": 18,
    "label": 11,
@@ -307,12 +315,112 @@
    "gap_y": 4,
    "margin": 9,
    "page_bar": 36,
+   "radius": 18,
    "tile_pad": 8,
    "top": 37
   },
   "tier": "lite",
   "wide_slots": true,
   "width": 320
+ },
+ "checkout/freenovefnk0104s.yaml": {
+  "alert": {
+   "line": 21,
+   "title_line": 27
+  },
+  "battery": false,
+  "board": "freenovefnk0104s",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "FNK0104S",
+   "name": "Freenove",
+   "order": 25,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT63X6"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 144,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 23,
+   "icon": 36,
+   "icon_home": 29,
+   "icon_mini": 22,
+   "label": 15,
+   "setpoint": 54,
+   "sublabel": 14,
+   "sublabel_big": 18,
+   "watch_icon": 15,
+   "watch_value": 32
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 4,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 46,
+   "gap": 10,
+   "gap_y": 10,
+   "margin": 14,
+   "page_bar": 40,
+   "radius": 19,
+   "tile_pad": 10,
+   "top": 48
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
  },
  "checkout/guition.yaml": {
   "alert": {
@@ -348,9 +456,10 @@
   "dimmable": true,
   "dpi": 170,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -370,7 +479,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -431,6 +543,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -462,9 +575,10 @@
   "dimmable": true,
   "dpi": 146,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 18,
+   "icon": 29,
    "icon_home": 26,
    "icon_mini": 18,
    "label": 11,
@@ -520,6 +634,7 @@
    "gap_y": 4,
    "margin": 9,
    "page_bar": 37,
+   "radius": 18,
    "tile_pad": 8,
    "top": 38
   },
@@ -547,12 +662,20 @@
   "can_standby": true,
   "catalog": {
    "calibrate": false,
-   "choices": {},
+   "choices": {
+    "BOARD_VARIANT": [
+     "black",
+     "yellow"
+    ]
+   },
    "inch": 7.0,
    "model": "JC1060P470",
    "name": "Guition",
    "order": 9,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -561,11 +684,15 @@
   "dimmable": true,
   "dpi": 170,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -585,7 +712,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -646,6 +776,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -678,7 +809,10 @@
    "model": "JC1060P470 V2",
    "name": "Guition",
    "order": 10,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -687,11 +821,16 @@
   "dimmable": true,
   "dpi": 170,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -711,7 +850,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -772,6 +914,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -813,9 +956,10 @@
   "dimmable": true,
   "dpi": 165,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 26,
+   "icon": 41,
    "icon_home": 33,
    "icon_mini": 25,
    "label": 17,
@@ -835,7 +979,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -896,6 +1043,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 45,
+   "radius": 21,
    "tile_pad": 12,
    "top": 55
   },
@@ -928,7 +1076,10 @@
    "model": "JC4880P443",
    "name": "Guition",
    "order": 21,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -937,11 +1088,16 @@
   "dimmable": true,
   "dpi": 217,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 34,
+   "icon": 54,
    "icon_home": 43,
    "icon_mini": 33,
    "label": 23,
@@ -961,7 +1117,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1022,6 +1181,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 60,
+   "radius": 28,
    "tile_pad": 15,
    "top": 64
   },
@@ -1054,7 +1214,10 @@
    "model": "JC8012P4A1",
    "name": "Guition",
    "order": 4,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "new",
    "touch": "GSL3670"
   },
@@ -1063,11 +1226,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -1087,7 +1255,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1148,6 +1319,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -1180,7 +1352,10 @@
    "model": "JC8012P4A1 V2",
    "name": "Guition",
    "order": 15,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GSL3680"
   },
@@ -1189,11 +1364,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -1213,7 +1393,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1274,6 +1457,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -1306,7 +1490,10 @@
    "model": "JC8012P4A1 V3",
    "name": "Guition",
    "order": 5,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GSL3680"
   },
@@ -1315,11 +1502,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -1339,7 +1531,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1400,6 +1595,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -1441,9 +1637,10 @@
   "dimmable": true,
   "dpi": 187,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 46,
    "icon_home": 37,
    "icon_mini": 29,
    "label": 20,
@@ -1463,7 +1660,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1524,6 +1724,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 51,
+   "radius": 24,
    "tile_pad": 13,
    "top": 58
   },
@@ -1575,9 +1776,10 @@
    "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 47,
    "icon_home": 38,
    "icon_mini": 29,
    "label": 20,
@@ -1597,7 +1799,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1658,12 +1863,112 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 52,
+   "radius": 24,
    "tile_pad": 13,
    "top": 59
   },
   "tier": "full",
   "wide_slots": false,
   "width": 1280
+ },
+ "checkout/sensecapd1.yaml": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "sensecapd1",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "Indicator D1, D1S, D1L, D1Pro (GX)",
+   "name": "SenseCAP",
+   "order": 24,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT6336U"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 172,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 65,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 55,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
  },
  "checkout/sunton8048s070.yaml": {
   "alert": {
@@ -1699,9 +2004,10 @@
   "dimmable": true,
   "dpi": 133,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 21,
+   "icon": 33,
    "icon_home": 26,
    "icon_mini": 20,
    "label": 14,
@@ -1721,7 +2027,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1782,6 +2091,7 @@
    "gap_y": 9,
    "margin": 13,
    "page_bar": 37,
+   "radius": 17,
    "tile_pad": 9,
    "top": 43
   },
@@ -1809,9 +2119,14 @@
   "can_standby": true,
   "catalog": {
    "calibrate": false,
-   "choices": {},
+   "choices": {
+    "DISPLAY_MODEL": [
+     "ST7121",
+     "ST7123"
+    ]
+   },
    "inch": 5.0,
-   "model": "Tab5 ST7121",
+   "model": "Tab5",
    "name": "M5Stack Tab5",
    "order": 16,
    "settings": [
@@ -1820,7 +2135,7 @@
     "echo_cancellation"
    ],
    "status": "new",
-   "touch": "ST7121"
+   "touch": "ST7121/ST7123"
   },
   "chip": "ESP32-P4",
   "columns": 3,
@@ -1833,9 +2148,10 @@
    "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 47,
+   "icon": 73,
    "icon_home": 59,
    "icon_mini": 45,
    "label": 31,
@@ -1855,7 +2171,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -1916,8 +2235,149 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 81,
+   "radius": 38,
    "tile_pad": 21,
    "top": 81
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1280
+ },
+ "checkout/waveshare101.yaml": {
+  "alert": {
+   "line": 21,
+   "title_line": 28
+  },
+  "battery": false,
+  "board": "waveshare101",
+  "camera": {
+   "full": [
+    1280,
+    800
+   ],
+   "thumb": [
+    343,
+    193
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 10.1,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-10.1",
+   "name": "Waveshare",
+   "order": 29,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 5,
+  "dimmable": true,
+  "dpi": 149,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 24,
+   "icon": 37,
+   "icon_home": 30,
+   "icon_mini": 23,
+   "label": 16,
+   "setpoint": 56,
+   "sublabel": 14,
+   "sublabel_big": 18,
+   "watch_icon": 16,
+   "watch_value": 33
+  },
+  "height": 800,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1280,
+      800
+     ],
+     "thumb": [
+      343,
+      193
+     ]
+    },
+    "columns": 5,
+    "height": 800,
+    "max": [
+     8,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 270,
+    "rows": 5,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      800,
+      1280
+     ],
+     "thumb": [
+      343,
+      193
+     ]
+    },
+    "columns": 5,
+    "height": 1280,
+    "max": [
+     6,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 5,
+    "width": 800
+   }
+  },
+  "rows": 5,
+  "spacing": {
+   "circle": 47,
+   "gap": 11,
+   "gap_y": 11,
+   "margin": 14,
+   "page_bar": 41,
+   "radius": 19,
+   "tile_pad": 11,
+   "top": 50
   },
   "tier": "full",
   "wide_slots": false,
@@ -1947,9 +2407,10 @@
   "dimmable": true,
   "dpi": 165,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 26,
+   "icon": 41,
    "icon_home": 33,
    "icon_mini": 25,
    "label": 17,
@@ -1969,7 +2430,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2010,6 +2474,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 45,
+   "radius": 21,
    "tile_pad": 12,
    "top": 55
   },
@@ -2037,7 +2502,12 @@
   "can_standby": false,
   "catalog": {
    "calibrate": false,
-   "choices": {},
+   "choices": {
+    "FLASH_SIZE": [
+     "16MB",
+     "8MB"
+    ]
+   },
    "inch": 4.3,
    "model": "ESP32-S3-Touch-LCD-4.3",
    "name": "Waveshare",
@@ -2051,9 +2521,10 @@
   "dimmable": false,
   "dpi": 217,
   "features": [],
-  "firmware": "0.57.1",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 34,
+   "icon": 54,
    "icon_home": 43,
    "icon_mini": 33,
    "label": 23,
@@ -2073,7 +2544,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2134,6 +2608,136 @@
    "gap_y": 13,
    "margin": 16,
    "page_bar": 60,
+   "radius": 28,
+   "tile_pad": 15,
+   "top": 64
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "checkout/waveshare43c.yaml": {
+  "alert": {
+   "line": 32,
+   "title_line": 40
+  },
+  "battery": false,
+  "board": "waveshare43c",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    349,
+    196
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.3,
+   "model": "ESP32-S3-Touch-LCD-4.3C",
+   "name": "Waveshare",
+   "order": 30,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 3,
+  "dimmable": true,
+  "dpi": 217,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 34,
+   "icon": 54,
+   "icon_home": 43,
+   "icon_mini": 33,
+   "label": 23,
+   "setpoint": 82,
+   "sublabel": 20,
+   "sublabel_big": 27,
+   "watch_icon": 23,
+   "watch_value": 48
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      349,
+      196
+     ]
+    },
+    "columns": 3,
+    "height": 480,
+    "max": [
+     4,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      386,
+      217
+     ]
+    },
+    "columns": 1,
+    "height": 800,
+    "max": [
+     2,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 4,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 69,
+   "gap": 12,
+   "gap_y": 13,
+   "margin": 16,
+   "page_bar": 60,
+   "radius": 28,
    "tile_pad": 15,
    "top": 64
   },
@@ -2175,9 +2779,10 @@
   "dimmable": true,
   "dpi": 170,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -2197,7 +2802,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2258,6 +2866,136 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "checkout/waveshare4v4.yaml": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "waveshare4v4",
+  "camera": {
+   "full": [
+    480,
+    480
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "ESP32-S3-Touch-LCD-4 V4.0",
+   "name": "Waveshare",
+   "order": 23,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -2299,9 +3037,10 @@
   "dimmable": false,
   "dpi": 187,
   "features": [],
-  "firmware": "0.57.1",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 46,
    "icon_home": 37,
    "icon_mini": 29,
    "label": 20,
@@ -2321,7 +3060,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2382,6 +3124,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 51,
+   "radius": 24,
    "tile_pad": 13,
    "top": 58
   },
@@ -2423,9 +3166,10 @@
   "dimmable": false,
   "dpi": 133,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 21,
+   "icon": 33,
    "icon_home": 26,
    "icon_mini": 20,
    "label": 14,
@@ -2445,7 +3189,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2506,6 +3253,7 @@
    "gap_y": 9,
    "margin": 13,
    "page_bar": 37,
+   "radius": 17,
    "tile_pad": 9,
    "top": 43
   },
@@ -2547,9 +3295,10 @@
   "dimmable": true,
   "dpi": 170,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 26,
    "icon_mini": 26,
    "label": 18,
@@ -2569,7 +3318,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2630,6 +3382,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 53
   },
@@ -2682,9 +3435,10 @@
    "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 40,
+   "icon": 63,
    "icon_home": 51,
    "icon_mini": 39,
    "label": 27,
@@ -2704,7 +3458,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -2765,6 +3522,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 70,
+   "radius": 33,
    "tile_pad": 18,
    "top": 72
   },
@@ -2772,61 +3530,65 @@
   "wide_slots": false,
   "width": 720
  },
- "crowpanel101": {
+ "checkout/wavesharep47.yaml": {
   "alert": {
-   "line": 18,
-   "title_line": 22
+   "line": 30,
+   "title_line": 39
   },
   "battery": false,
-  "board": "crowpanel101",
+  "board": "wavesharep47",
   "camera": {
    "full": [
-    1024,
-    600
+    1280,
+    720
    ],
    "thumb": [
-    269,
-    151
+    484,
+    272
    ]
   },
   "can_standby": true,
   "catalog": {
    "calibrate": false,
    "choices": {},
-   "inch": 10.1,
-   "model": "Advanced 10.1 ESP32-P4",
-   "name": "CrowPanel",
-   "order": 22,
+   "inch": 7.0,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-7",
+   "name": "Waveshare",
+   "order": 28,
    "settings": [
     "media_player",
-    "microphone"
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
    ],
    "status": "experimental",
    "touch": "GT911"
   },
   "chip": "ESP32-P4",
-  "columns": 5,
+  "columns": 4,
   "dimmable": true,
-  "dpi": 118,
+  "dpi": 210,
   "features": [
    "speaker",
    "microphone",
    "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
-   "headline": 19,
-   "icon_home": 24,
-   "icon_mini": 18,
-   "label": 12,
-   "setpoint": 44,
-   "sublabel": 11,
-   "sublabel_big": 15,
-   "watch_icon": 12,
-   "watch_value": 26
+   "headline": 33,
+   "icon": 52,
+   "icon_home": 42,
+   "icon_mini": 32,
+   "label": 22,
+   "setpoint": 79,
+   "sublabel": 20,
+   "sublabel_big": 26,
+   "watch_icon": 22,
+   "watch_value": 47
   },
-  "height": 600,
+  "height": 720,
   "hotspot": true,
   "look": "standard",
   "max_bar_items": 12,
@@ -2836,477 +3598,85 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
     "camera": {
      "full": [
-      1024,
-      600
+      1280,
+      720
      ],
      "thumb": [
-      269,
-      151
-     ]
-    },
-    "columns": 5,
-    "height": 600,
-    "max": [
-     8,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 5,
-    "width": 1024
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      600,
-      1024
-     ],
-     "thumb": [
-      269,
-      151
+      484,
+      272
      ]
     },
     "columns": 4,
-    "height": 1024,
+    "height": 720,
     "max": [
-     5,
+     7,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 270,
+    "rows": 4,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      720,
+      1280
+     ],
+     "thumb": [
+      484,
+      272
+     ]
+    },
+    "columns": 2,
+    "height": 1280,
+    "max": [
+     3,
      8
     ],
     "min": [
      1,
      1
     ],
-    "rotation": 90,
-    "rows": 6,
-    "width": 600
-   }
-  },
-  "rows": 5,
-  "spacing": {
-   "circle": 37,
-   "gap": 8,
-   "gap_y": 8,
-   "margin": 11,
-   "page_bar": 32,
-   "tile_pad": 8,
-   "top": 39
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 1024
- },
- "cyd": {
-  "alert": {
-   "line": 16,
-   "title_line": 21
-  },
-  "battery": false,
-  "board": "cyd",
-  "can_standby": true,
-  "catalog": {
-   "calibrate": true,
-   "choices": {
-    "DISPLAY_MODEL": [
-     "ILI9341",
-     "ST7789V"
-    ]
-   },
-   "inch": 2.8,
-   "model": "ESP32-2432S028",
-   "name": "CYD",
-   "order": 0,
-   "settings": [],
-   "status": "stable",
-   "touch": "XPT2046"
-  },
-  "chip": "ESP32",
-  "columns": 2,
-  "dimmable": true,
-  "dpi": 143,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 18,
-   "icon_home": 25,
-   "icon_mini": 18,
-   "label": 11,
-   "setpoint": 40,
-   "sublabel": 11,
-   "sublabel_big": 14,
-   "watch_icon": 12,
-   "watch_value": 22
-  },
-  "height": 240,
-  "hotspot": false,
-  "look": "compact",
-  "max_bar_items": 6,
-  "max_pages": 8,
-  "max_tiles": 64,
-  "modules": [],
-  "orientations": {
-   "landscape": {
-    "columns": 2,
-    "height": 240,
-    "max": [
-     3,
-     4
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 3,
-    "width": 320
-   },
-   "portrait": {
-    "columns": 1,
-    "height": 320,
-    "max": [
-     2,
-     6
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 180,
-    "rows": 4,
-    "width": 240
-   }
-  },
-  "rows": 3,
-  "spacing": {
-   "circle": 36,
-   "gap": 6,
-   "gap_y": 4,
-   "margin": 9,
-   "page_bar": 36,
-   "tile_pad": 8,
-   "top": 37
-  },
-  "tier": "lite",
-  "wide_slots": true,
-  "width": 320
- },
- "cyd9342": {
-  "alert": {
-   "line": 16,
-   "title_line": 21
-  },
-  "battery": false,
-  "board": "cyd9342",
-  "can_standby": true,
-  "catalog": {
-   "calibrate": true,
-   "choices": {},
-   "inch": 2.8,
-   "model": "ESP32-2432S028 ILI9342",
-   "name": "CYD",
-   "order": 1,
-   "settings": [],
-   "status": "experimental",
-   "touch": "XPT2046"
-  },
-  "chip": "ESP32",
-  "columns": 2,
-  "dimmable": true,
-  "dpi": 143,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 18,
-   "icon_home": 25,
-   "icon_mini": 18,
-   "label": 11,
-   "setpoint": 40,
-   "sublabel": 11,
-   "sublabel_big": 14,
-   "watch_icon": 12,
-   "watch_value": 22
-  },
-  "height": 240,
-  "hotspot": false,
-  "look": "compact",
-  "max_bar_items": 6,
-  "max_pages": 8,
-  "max_tiles": 64,
-  "modules": [],
-  "orientations": {
-   "landscape": {
-    "columns": 2,
-    "height": 240,
-    "max": [
-     3,
-     4
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 3,
-    "width": 320
-   },
-   "portrait": {
-    "columns": 1,
-    "height": 320,
-    "max": [
-     2,
-     6
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 180,
-    "rows": 4,
-    "width": 240
-   }
-  },
-  "rows": 3,
-  "spacing": {
-   "circle": 36,
-   "gap": 6,
-   "gap_y": 4,
-   "margin": 9,
-   "page_bar": 36,
-   "tile_pad": 8,
-   "top": 37
-  },
-  "tier": "lite",
-  "wide_slots": true,
-  "width": 320
- },
- "guition": {
-  "alert": {
-   "line": 25,
-   "title_line": 32
-  },
-  "battery": false,
-  "board": "guition",
-  "camera": {
-   "full": [
-    480,
-    480
-   ],
-   "thumb": [
-    392,
-    220
-   ]
-  },
-  "can_standby": true,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 4.0,
-   "model": "ESP32-S3-4848S040",
-   "name": "Guition",
-   "order": 2,
-   "settings": [],
-   "status": "stable",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-S3",
-  "columns": 2,
-  "dimmable": true,
-  "dpi": 170,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 27,
-   "icon_home": 34,
-   "icon_mini": 26,
-   "label": 18,
-   "setpoint": 64,
-   "sublabel": 16,
-   "sublabel_big": 21,
-   "watch_icon": 18,
-   "watch_value": 38
-  },
-  "height": 480,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      480,
-      480
-     ],
-     "thumb": [
-      392,
-      220
-     ]
-    },
-    "columns": 2,
-    "height": 480,
-    "max": [
-     3,
-     5
-    ],
-    "min": [
-     1,
-     1
-    ],
     "rotation": 0,
-    "rows": 3,
-    "width": 480
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      480,
-      480
-     ],
-     "thumb": [
-      392,
-      220
-     ]
-    },
-    "columns": 2,
-    "height": 480,
-    "max": [
-     3,
-     5
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 3,
-    "width": 480
+    "rows": 8,
+    "width": 720
    }
   },
-  "rows": 3,
+  "rows": 4,
   "spacing": {
-   "circle": 54,
+   "circle": 67,
    "gap": 12,
    "gap_y": 12,
    "margin": 16,
-   "page_bar": 47,
-   "tile_pad": 12,
-   "top": 56
+   "page_bar": 58,
+   "radius": 27,
+   "tile_pad": 15,
+   "top": 62
   },
   "tier": "full",
   "wide_slots": false,
-  "width": 480
+  "width": 1280
  },
- "hosyond40": {
-  "alert": {
-   "line": 16,
-   "title_line": 21
-  },
-  "battery": false,
-  "board": "hosyond40",
-  "can_standby": true,
-  "catalog": {
-   "calibrate": true,
-   "choices": {},
-   "inch": 4.0,
-   "model": "ESP32-32E E32R40T",
-   "name": "Hosyond",
-   "order": 11,
-   "settings": [],
-   "status": "experimental",
-   "touch": "XPT2046"
-  },
-  "chip": "ESP32",
-  "columns": 2,
-  "dimmable": true,
-  "dpi": 146,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 18,
-   "icon_home": 26,
-   "icon_mini": 18,
-   "label": 11,
-   "setpoint": 41,
-   "sublabel": 11,
-   "sublabel_big": 14,
-   "watch_icon": 12,
-   "watch_value": 22
-  },
-  "height": 320,
-  "hotspot": false,
-  "look": "compact",
-  "max_bar_items": 6,
-  "max_pages": 8,
-  "max_tiles": 64,
-  "modules": [],
-  "orientations": {
-   "landscape": {
-    "columns": 2,
-    "height": 320,
-    "max": [
-     5,
-     6
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 3,
-    "width": 480
-   },
-   "portrait": {
-    "columns": 1,
-    "height": 480,
-    "max": [
-     3,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 180,
-    "rows": 4,
-    "width": 320
-   }
-  },
-  "rows": 3,
-  "spacing": {
-   "circle": 37,
-   "gap": 6,
-   "gap_y": 4,
-   "margin": 9,
-   "page_bar": 37,
-   "tile_pad": 8,
-   "top": 38
-  },
-  "tier": "lite",
-  "wide_slots": true,
-  "width": 480
- },
- "jc1060p470": {
+ "checkout/wavesharep47b.yaml": {
   "alert": {
    "line": 25,
    "title_line": 32
   },
   "battery": false,
-  "board": "jc1060p470",
+  "board": "wavesharep47b",
   "camera": {
    "full": [
     1024,
@@ -3322,10 +3692,16 @@
    "calibrate": false,
    "choices": {},
    "inch": 7.0,
-   "model": "JC1060P470",
-   "name": "Guition",
-   "order": 9,
-   "settings": [],
+   "model": "ESP32-P4-WIFI6-Touch-LCD-7B",
+   "name": "Waveshare",
+   "order": 27,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -3334,11 +3710,15 @@
   "dimmable": true,
   "dpi": 170,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -3358,7 +3738,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -3419,6 +3802,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -3426,139 +3810,13 @@
   "wide_slots": false,
   "width": 1024
  },
- "jc1060p470v2": {
-  "alert": {
-   "line": 25,
-   "title_line": 32
-  },
-  "battery": false,
-  "board": "jc1060p470v2",
-  "camera": {
-   "full": [
-    1024,
-    600
-   ],
-   "thumb": [
-    392,
-    220
-   ]
-  },
-  "can_standby": true,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 7.0,
-   "model": "JC1060P470 V2",
-   "name": "Guition",
-   "order": 10,
-   "settings": [],
-   "status": "experimental",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-P4",
-  "columns": 4,
-  "dimmable": true,
-  "dpi": 170,
-  "features": [
-   "bluetooth"
-  ],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 27,
-   "icon_home": 34,
-   "icon_mini": 26,
-   "label": 18,
-   "setpoint": 64,
-   "sublabel": 16,
-   "sublabel_big": 21,
-   "watch_icon": 18,
-   "watch_value": 38
-  },
-  "height": 600,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 16,
-  "max_tiles": 256,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      1024,
-      600
-     ],
-     "thumb": [
-      392,
-      220
-     ]
-    },
-    "columns": 4,
-    "height": 600,
-    "max": [
-     6,
-     7
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 4,
-    "width": 1024
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      600,
-      1024
-     ],
-     "thumb": [
-      392,
-      220
-     ]
-    },
-    "columns": 2,
-    "height": 1024,
-    "max": [
-     3,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 7,
-    "width": 600
-   }
-  },
-  "rows": 4,
-  "spacing": {
-   "circle": 54,
-   "gap": 12,
-   "gap_y": 12,
-   "margin": 16,
-   "page_bar": 47,
-   "tile_pad": 12,
-   "top": 56
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 1024
- },
- "jc3248w535": {
+ "checkout/wt32sc01plus.yaml": {
   "alert": {
    "line": 23,
    "title_line": 30
   },
   "battery": false,
-  "board": "jc3248w535",
+  "board": "wt32sc01plus",
   "camera": {
    "full": [
     480,
@@ -3574,21 +3832,22 @@
    "calibrate": false,
    "choices": {},
    "inch": 3.5,
-   "model": "JC3248W535",
-   "name": "Guition",
-   "order": 12,
+   "model": "WT32-SC01 Plus",
+   "name": "WT32",
+   "order": 26,
    "settings": [],
-   "status": "new",
-   "touch": "AXS15231"
+   "status": "experimental",
+   "touch": "FT63X6"
   },
   "chip": "ESP32-S3",
   "columns": 2,
   "dimmable": true,
   "dpi": 165,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 26,
+   "icon": 41,
    "icon_home": 33,
    "icon_mini": 25,
    "label": 17,
@@ -3608,7 +3867,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -3669,6 +3931,1059 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 45,
+   "radius": 21,
+   "tile_pad": 12,
+   "top": 55
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "crowpanel101": {
+  "alert": {
+   "line": 18,
+   "title_line": 22
+  },
+  "battery": false,
+  "board": "crowpanel101",
+  "camera": {
+   "full": [
+    1024,
+    600
+   ],
+   "thumb": [
+    269,
+    151
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 10.1,
+   "model": "Advanced 10.1 ESP32-P4",
+   "name": "CrowPanel",
+   "order": 22,
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 5,
+  "dimmable": true,
+  "dpi": 118,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 19,
+   "icon": 29,
+   "icon_home": 24,
+   "icon_mini": 18,
+   "label": 12,
+   "setpoint": 44,
+   "sublabel": 11,
+   "sublabel_big": 15,
+   "watch_icon": 12,
+   "watch_value": 26
+  },
+  "height": 600,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1024,
+      600
+     ],
+     "thumb": [
+      269,
+      151
+     ]
+    },
+    "columns": 5,
+    "height": 600,
+    "max": [
+     8,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 5,
+    "width": 1024
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      600,
+      1024
+     ],
+     "thumb": [
+      269,
+      151
+     ]
+    },
+    "columns": 4,
+    "height": 1024,
+    "max": [
+     5,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 6,
+    "width": 600
+   }
+  },
+  "rows": 5,
+  "spacing": {
+   "circle": 37,
+   "gap": 8,
+   "gap_y": 8,
+   "margin": 11,
+   "page_bar": 32,
+   "radius": 15,
+   "tile_pad": 8,
+   "top": 39
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1024
+ },
+ "cyd": {
+  "alert": {
+   "line": 16,
+   "title_line": 21
+  },
+  "battery": false,
+  "board": "cyd",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": true,
+   "choices": {
+    "DISPLAY_MODEL": [
+     "ILI9341",
+     "ST7789V"
+    ]
+   },
+   "inch": 2.8,
+   "model": "ESP32-2432S028",
+   "name": "CYD",
+   "order": 0,
+   "settings": [],
+   "status": "stable",
+   "touch": "XPT2046"
+  },
+  "chip": "ESP32",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 143,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 18,
+   "icon": 28,
+   "icon_home": 25,
+   "icon_mini": 18,
+   "label": 11,
+   "setpoint": 40,
+   "sublabel": 11,
+   "sublabel_big": 14,
+   "watch_icon": 12,
+   "watch_value": 22
+  },
+  "height": 240,
+  "hotspot": false,
+  "look": "compact",
+  "max_bar_items": 6,
+  "max_pages": 8,
+  "max_tiles": 64,
+  "modules": [],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 240,
+    "max": [
+     3,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 3,
+    "width": 320
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 320,
+    "max": [
+     2,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 4,
+    "width": 240
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 36,
+   "gap": 6,
+   "gap_y": 4,
+   "margin": 9,
+   "page_bar": 36,
+   "radius": 18,
+   "tile_pad": 8,
+   "top": 37
+  },
+  "tier": "lite",
+  "wide_slots": true,
+  "width": 320
+ },
+ "cyd9342": {
+  "alert": {
+   "line": 16,
+   "title_line": 21
+  },
+  "battery": false,
+  "board": "cyd9342",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": true,
+   "choices": {},
+   "inch": 2.8,
+   "model": "ESP32-2432S028 ILI9342",
+   "name": "CYD",
+   "order": 1,
+   "settings": [],
+   "status": "experimental",
+   "touch": "XPT2046"
+  },
+  "chip": "ESP32",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 143,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 18,
+   "icon": 28,
+   "icon_home": 25,
+   "icon_mini": 18,
+   "label": 11,
+   "setpoint": 40,
+   "sublabel": 11,
+   "sublabel_big": 14,
+   "watch_icon": 12,
+   "watch_value": 22
+  },
+  "height": 240,
+  "hotspot": false,
+  "look": "compact",
+  "max_bar_items": 6,
+  "max_pages": 8,
+  "max_tiles": 64,
+  "modules": [],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 240,
+    "max": [
+     3,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 3,
+    "width": 320
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 320,
+    "max": [
+     2,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 4,
+    "width": 240
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 36,
+   "gap": 6,
+   "gap_y": 4,
+   "margin": 9,
+   "page_bar": 36,
+   "radius": 18,
+   "tile_pad": 8,
+   "top": 37
+  },
+  "tier": "lite",
+  "wide_slots": true,
+  "width": 320
+ },
+ "freenovefnk0104s": {
+  "alert": {
+   "line": 21,
+   "title_line": 27
+  },
+  "battery": false,
+  "board": "freenovefnk0104s",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "FNK0104S",
+   "name": "Freenove",
+   "order": 25,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT63X6"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 144,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 23,
+   "icon": 36,
+   "icon_home": 29,
+   "icon_mini": 22,
+   "label": 15,
+   "setpoint": 54,
+   "sublabel": 14,
+   "sublabel_big": 18,
+   "watch_icon": 15,
+   "watch_value": 32
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 4,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 46,
+   "gap": 10,
+   "gap_y": 10,
+   "margin": 14,
+   "page_bar": 40,
+   "radius": 19,
+   "tile_pad": 10,
+   "top": 48
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "guition": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "guition",
+  "camera": {
+   "full": [
+    480,
+    480
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "ESP32-S3-4848S040",
+   "name": "Guition",
+   "order": 2,
+   "settings": [],
+   "status": "stable",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "hosyond40": {
+  "alert": {
+   "line": 16,
+   "title_line": 21
+  },
+  "battery": false,
+  "board": "hosyond40",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": true,
+   "choices": {},
+   "inch": 4.0,
+   "model": "ESP32-32E E32R40T",
+   "name": "Hosyond",
+   "order": 11,
+   "settings": [],
+   "status": "experimental",
+   "touch": "XPT2046"
+  },
+  "chip": "ESP32",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 146,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 18,
+   "icon": 29,
+   "icon_home": 26,
+   "icon_mini": 18,
+   "label": 11,
+   "setpoint": 41,
+   "sublabel": 11,
+   "sublabel_big": 14,
+   "watch_icon": 12,
+   "watch_value": 22
+  },
+  "height": 320,
+  "hotspot": false,
+  "look": "compact",
+  "max_bar_items": 6,
+  "max_pages": 8,
+  "max_tiles": 64,
+  "modules": [],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 320,
+    "max": [
+     5,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 480,
+    "max": [
+     3,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 4,
+    "width": 320
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 37,
+   "gap": 6,
+   "gap_y": 4,
+   "margin": 9,
+   "page_bar": 37,
+   "radius": 18,
+   "tile_pad": 8,
+   "top": 38
+  },
+  "tier": "lite",
+  "wide_slots": true,
+  "width": 480
+ },
+ "jc1060p470": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "jc1060p470",
+  "camera": {
+   "full": [
+    1024,
+    600
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {
+    "BOARD_VARIANT": [
+     "black",
+     "yellow"
+    ]
+   },
+   "inch": 7.0,
+   "model": "JC1060P470",
+   "name": "Guition",
+   "order": 9,
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 4,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 600,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1024,
+      600
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 4,
+    "height": 600,
+    "max": [
+     6,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 4,
+    "width": 1024
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      600,
+      1024
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 1024,
+    "max": [
+     3,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 7,
+    "width": 600
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1024
+ },
+ "jc1060p470v2": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "jc1060p470v2",
+  "camera": {
+   "full": [
+    1024,
+    600
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 7.0,
+   "model": "JC1060P470 V2",
+   "name": "Guition",
+   "order": 10,
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 4,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 600,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1024,
+      600
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 4,
+    "height": 600,
+    "max": [
+     6,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 4,
+    "width": 1024
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      600,
+      1024
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 1024,
+    "max": [
+     3,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 7,
+    "width": 600
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1024
+ },
+ "jc3248w535": {
+  "alert": {
+   "line": 23,
+   "title_line": 30
+  },
+  "battery": false,
+  "board": "jc3248w535",
+  "camera": {
+   "full": [
+    480,
+    320
+   ],
+   "thumb": [
+    187,
+    105
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 3.5,
+   "model": "JC3248W535",
+   "name": "Guition",
+   "order": 12,
+   "settings": [],
+   "status": "new",
+   "touch": "AXS15231"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 165,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 26,
+   "icon": 41,
+   "icon_home": 33,
+   "icon_mini": 25,
+   "label": 17,
+   "setpoint": 62,
+   "sublabel": 16,
+   "sublabel_big": 20,
+   "watch_icon": 17,
+   "watch_value": 37
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      320
+     ],
+     "thumb": [
+      187,
+      105
+     ]
+    },
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     3
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      320,
+      480
+     ],
+     "thumb": [
+      249,
+      140
+     ]
+    },
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 3,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 52,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 45,
+   "radius": 21,
    "tile_pad": 12,
    "top": 55
   },
@@ -3701,7 +5016,10 @@
    "model": "JC4880P443",
    "name": "Guition",
    "order": 21,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -3710,11 +5028,16 @@
   "dimmable": true,
   "dpi": 217,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 34,
+   "icon": 54,
    "icon_home": 43,
    "icon_mini": 33,
    "label": 23,
@@ -3734,7 +5057,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -3795,6 +5121,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 60,
+   "radius": 28,
    "tile_pad": 15,
    "top": 64
   },
@@ -3827,7 +5154,10 @@
    "model": "JC8012P4A1",
    "name": "Guition",
    "order": 4,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "new",
    "touch": "GSL3670"
   },
@@ -3836,11 +5166,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -3860,7 +5195,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -3921,6 +5259,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -3953,7 +5292,10 @@
    "model": "JC8012P4A1 V2",
    "name": "Guition",
    "order": 15,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GSL3680"
   },
@@ -3962,11 +5304,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -3986,7 +5333,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -4047,6 +5397,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -4079,7 +5430,10 @@
    "model": "JC8012P4A1 V3",
    "name": "Guition",
    "order": 5,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GSL3680"
   },
@@ -4088,11 +5442,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -4112,7 +5471,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -4173,6 +5535,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -4214,9 +5577,10 @@
   "dimmable": true,
   "dpi": 187,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 46,
    "icon_home": 37,
    "icon_mini": 29,
    "label": 20,
@@ -4236,7 +5600,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -4297,6 +5664,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 51,
+   "radius": 24,
    "tile_pad": 13,
    "top": 58
   },
@@ -4346,9 +5714,10 @@
    "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 19,
+   "icon": 29,
    "icon_home": 24,
    "icon_mini": 18,
    "label": 12,
@@ -4368,7 +5737,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -4429,6 +5801,7 @@
    "gap_y": 8,
    "margin": 11,
    "page_bar": 32,
+   "radius": 15,
    "tile_pad": 8,
    "top": 39
   },
@@ -4465,9 +5838,10 @@
   "dimmable": true,
   "dpi": 143,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 18,
+   "icon": 28,
    "icon_home": 25,
    "icon_mini": 18,
    "label": 11,
@@ -4523,6 +5897,7 @@
    "gap_y": 4,
    "margin": 9,
    "page_bar": 36,
+   "radius": 18,
    "tile_pad": 8,
    "top": 37
   },
@@ -4554,9 +5929,10 @@
   "dimmable": true,
   "dpi": 143,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 18,
+   "icon": 28,
    "icon_home": 25,
    "icon_mini": 18,
    "label": 11,
@@ -4612,12 +5988,112 @@
    "gap_y": 4,
    "margin": 9,
    "page_bar": 36,
+   "radius": 18,
    "tile_pad": 8,
    "top": 37
   },
   "tier": "lite",
   "wide_slots": true,
   "width": 320
+ },
+ "packages/freenovefnk0104s.yaml": {
+  "alert": {
+   "line": 21,
+   "title_line": 27
+  },
+  "battery": false,
+  "board": "freenovefnk0104s",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "FNK0104S",
+   "name": "Freenove",
+   "order": 25,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT63X6"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 144,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 23,
+   "icon": 36,
+   "icon_home": 29,
+   "icon_mini": 22,
+   "label": 15,
+   "setpoint": 54,
+   "sublabel": 14,
+   "sublabel_big": 18,
+   "watch_icon": 15,
+   "watch_value": 32
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 4,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 46,
+   "gap": 10,
+   "gap_y": 10,
+   "margin": 14,
+   "page_bar": 40,
+   "radius": 19,
+   "tile_pad": 10,
+   "top": 48
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
  },
  "packages/guition.yaml": {
   "alert": {
@@ -4653,9 +6129,10 @@
   "dimmable": true,
   "dpi": 170,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -4675,7 +6152,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -4736,6 +6216,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -4767,9 +6248,10 @@
   "dimmable": true,
   "dpi": 146,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 18,
+   "icon": 29,
    "icon_home": 26,
    "icon_mini": 18,
    "label": 11,
@@ -4825,6 +6307,7 @@
    "gap_y": 4,
    "margin": 9,
    "page_bar": 37,
+   "radius": 18,
    "tile_pad": 8,
    "top": 38
   },
@@ -4852,12 +6335,20 @@
   "can_standby": true,
   "catalog": {
    "calibrate": false,
-   "choices": {},
+   "choices": {
+    "BOARD_VARIANT": [
+     "black",
+     "yellow"
+    ]
+   },
    "inch": 7.0,
    "model": "JC1060P470",
    "name": "Guition",
    "order": 9,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -4866,11 +6357,15 @@
   "dimmable": true,
   "dpi": 170,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -4890,7 +6385,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -4951,6 +6449,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -4983,7 +6482,10 @@
    "model": "JC1060P470 V2",
    "name": "Guition",
    "order": 10,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -4992,11 +6494,16 @@
   "dimmable": true,
   "dpi": 170,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -5016,7 +6523,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5077,6 +6587,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -5118,9 +6629,10 @@
   "dimmable": true,
   "dpi": 165,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 26,
+   "icon": 41,
    "icon_home": 33,
    "icon_mini": 25,
    "label": 17,
@@ -5140,7 +6652,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5201,6 +6716,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 45,
+   "radius": 21,
    "tile_pad": 12,
    "top": 55
   },
@@ -5233,7 +6749,10 @@
    "model": "JC4880P443",
    "name": "Guition",
    "order": 21,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
@@ -5242,11 +6761,16 @@
   "dimmable": true,
   "dpi": 217,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 34,
+   "icon": 54,
    "icon_home": 43,
    "icon_mini": 33,
    "label": 23,
@@ -5266,7 +6790,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5327,6 +6854,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 60,
+   "radius": 28,
    "tile_pad": 15,
    "top": 64
   },
@@ -5359,7 +6887,10 @@
    "model": "JC8012P4A1",
    "name": "Guition",
    "order": 4,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "new",
    "touch": "GSL3670"
   },
@@ -5368,11 +6899,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -5392,7 +6928,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5453,6 +6992,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -5485,7 +7025,10 @@
    "model": "JC8012P4A1 V2",
    "name": "Guition",
    "order": 15,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GSL3680"
   },
@@ -5494,11 +7037,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -5518,7 +7066,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5579,6 +7130,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -5611,7 +7163,10 @@
    "model": "JC8012P4A1 V3",
    "name": "Guition",
    "order": 5,
-   "settings": [],
+   "settings": [
+    "media_player",
+    "microphone"
+   ],
    "status": "experimental",
    "touch": "GSL3680"
   },
@@ -5620,11 +7175,16 @@
   "dimmable": true,
   "dpi": 149,
   "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 24,
+   "icon": 37,
    "icon_home": 30,
    "icon_mini": 23,
    "label": 16,
@@ -5644,7 +7204,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5705,6 +7268,7 @@
    "gap_y": 11,
    "margin": 14,
    "page_bar": 41,
+   "radius": 19,
    "tile_pad": 11,
    "top": 50
   },
@@ -5746,9 +7310,10 @@
   "dimmable": true,
   "dpi": 187,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 46,
    "icon_home": 37,
    "icon_mini": 29,
    "label": 20,
@@ -5768,7 +7333,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5829,6 +7397,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 51,
+   "radius": 24,
    "tile_pad": 13,
    "top": 58
   },
@@ -5880,9 +7449,10 @@
    "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 47,
    "icon_home": 38,
    "icon_mini": 29,
    "label": 20,
@@ -5902,7 +7472,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -5963,12 +7536,112 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 52,
+   "radius": 24,
    "tile_pad": 13,
    "top": 59
   },
   "tier": "full",
   "wide_slots": false,
   "width": 1280
+ },
+ "packages/sensecapd1.yaml": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "sensecapd1",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "Indicator D1, D1S, D1L, D1Pro (GX)",
+   "name": "SenseCAP",
+   "order": 24,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT6336U"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 172,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 65,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 55,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
  },
  "packages/sunton8048s070.yaml": {
   "alert": {
@@ -6004,9 +7677,10 @@
   "dimmable": true,
   "dpi": 133,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 21,
+   "icon": 33,
    "icon_home": 26,
    "icon_mini": 20,
    "label": 14,
@@ -6026,7 +7700,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6087,6 +7764,7 @@
    "gap_y": 9,
    "margin": 13,
    "page_bar": 37,
+   "radius": 17,
    "tile_pad": 9,
    "top": 43
   },
@@ -6114,9 +7792,14 @@
   "can_standby": true,
   "catalog": {
    "calibrate": false,
-   "choices": {},
+   "choices": {
+    "DISPLAY_MODEL": [
+     "ST7121",
+     "ST7123"
+    ]
+   },
    "inch": 5.0,
-   "model": "Tab5 ST7121",
+   "model": "Tab5",
    "name": "M5Stack Tab5",
    "order": 16,
    "settings": [
@@ -6125,7 +7808,7 @@
     "echo_cancellation"
    ],
    "status": "new",
-   "touch": "ST7121"
+   "touch": "ST7121/ST7123"
   },
   "chip": "ESP32-P4",
   "columns": 3,
@@ -6138,9 +7821,10 @@
    "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 47,
+   "icon": 73,
    "icon_home": 59,
    "icon_mini": 45,
    "label": 31,
@@ -6160,7 +7844,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6221,8 +7908,149 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 81,
+   "radius": 38,
    "tile_pad": 21,
    "top": 81
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1280
+ },
+ "packages/waveshare101.yaml": {
+  "alert": {
+   "line": 21,
+   "title_line": 28
+  },
+  "battery": false,
+  "board": "waveshare101",
+  "camera": {
+   "full": [
+    1280,
+    800
+   ],
+   "thumb": [
+    343,
+    193
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 10.1,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-10.1",
+   "name": "Waveshare",
+   "order": 29,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 5,
+  "dimmable": true,
+  "dpi": 149,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 24,
+   "icon": 37,
+   "icon_home": 30,
+   "icon_mini": 23,
+   "label": 16,
+   "setpoint": 56,
+   "sublabel": 14,
+   "sublabel_big": 18,
+   "watch_icon": 16,
+   "watch_value": 33
+  },
+  "height": 800,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1280,
+      800
+     ],
+     "thumb": [
+      343,
+      193
+     ]
+    },
+    "columns": 5,
+    "height": 800,
+    "max": [
+     8,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 270,
+    "rows": 5,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      800,
+      1280
+     ],
+     "thumb": [
+      343,
+      193
+     ]
+    },
+    "columns": 5,
+    "height": 1280,
+    "max": [
+     6,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 5,
+    "width": 800
+   }
+  },
+  "rows": 5,
+  "spacing": {
+   "circle": 47,
+   "gap": 11,
+   "gap_y": 11,
+   "margin": 14,
+   "page_bar": 41,
+   "radius": 19,
+   "tile_pad": 11,
+   "top": 50
   },
   "tier": "full",
   "wide_slots": false,
@@ -6252,9 +8080,10 @@
   "dimmable": true,
   "dpi": 165,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 26,
+   "icon": 41,
    "icon_home": 33,
    "icon_mini": 25,
    "label": 17,
@@ -6274,7 +8103,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6315,6 +8147,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 45,
+   "radius": 21,
    "tile_pad": 12,
    "top": 55
   },
@@ -6342,7 +8175,12 @@
   "can_standby": false,
   "catalog": {
    "calibrate": false,
-   "choices": {},
+   "choices": {
+    "FLASH_SIZE": [
+     "16MB",
+     "8MB"
+    ]
+   },
    "inch": 4.3,
    "model": "ESP32-S3-Touch-LCD-4.3",
    "name": "Waveshare",
@@ -6356,9 +8194,10 @@
   "dimmable": false,
   "dpi": 217,
   "features": [],
-  "firmware": "0.57.1",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 34,
+   "icon": 54,
    "icon_home": 43,
    "icon_mini": 33,
    "label": 23,
@@ -6378,7 +8217,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6439,6 +8281,136 @@
    "gap_y": 13,
    "margin": 16,
    "page_bar": 60,
+   "radius": 28,
+   "tile_pad": 15,
+   "top": 64
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "packages/waveshare43c.yaml": {
+  "alert": {
+   "line": 32,
+   "title_line": 40
+  },
+  "battery": false,
+  "board": "waveshare43c",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    349,
+    196
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.3,
+   "model": "ESP32-S3-Touch-LCD-4.3C",
+   "name": "Waveshare",
+   "order": 30,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 3,
+  "dimmable": true,
+  "dpi": 217,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 34,
+   "icon": 54,
+   "icon_home": 43,
+   "icon_mini": 33,
+   "label": 23,
+   "setpoint": 82,
+   "sublabel": 20,
+   "sublabel_big": 27,
+   "watch_icon": 23,
+   "watch_value": 48
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      349,
+      196
+     ]
+    },
+    "columns": 3,
+    "height": 480,
+    "max": [
+     4,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      386,
+      217
+     ]
+    },
+    "columns": 1,
+    "height": 800,
+    "max": [
+     2,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 4,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 69,
+   "gap": 12,
+   "gap_y": 13,
+   "margin": 16,
+   "page_bar": 60,
+   "radius": 28,
    "tile_pad": 15,
    "top": 64
   },
@@ -6480,9 +8452,10 @@
   "dimmable": true,
   "dpi": 170,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
@@ -6502,7 +8475,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6563,6 +8539,136 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "packages/waveshare4v4.yaml": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "waveshare4v4",
+  "camera": {
+   "full": [
+    480,
+    480
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "ESP32-S3-Touch-LCD-4 V4.0",
+   "name": "Waveshare",
+   "order": 23,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 56
   },
@@ -6604,9 +8710,10 @@
   "dimmable": false,
   "dpi": 187,
   "features": [],
-  "firmware": "0.57.1",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 30,
+   "icon": 46,
    "icon_home": 37,
    "icon_mini": 29,
    "label": 20,
@@ -6626,7 +8733,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6687,6 +8797,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 51,
+   "radius": 24,
    "tile_pad": 13,
    "top": 58
   },
@@ -6728,9 +8839,10 @@
   "dimmable": false,
   "dpi": 133,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 21,
+   "icon": 33,
    "icon_home": 26,
    "icon_mini": 20,
    "label": 14,
@@ -6750,7 +8862,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6811,6 +8926,7 @@
    "gap_y": 9,
    "margin": 13,
    "page_bar": 37,
+   "radius": 17,
    "tile_pad": 9,
    "top": 43
   },
@@ -6852,9 +8968,10 @@
   "dimmable": true,
   "dpi": 170,
   "features": [],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
+   "icon": 42,
    "icon_home": 26,
    "icon_mini": 26,
    "label": 18,
@@ -6874,7 +8991,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -6935,6 +9055,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 53
   },
@@ -6987,9 +9108,10 @@
    "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 40,
+   "icon": 63,
    "icon_home": 51,
    "icon_mini": 39,
    "label": 27,
@@ -7009,7 +9131,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -7070,6 +9195,7 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 70,
+   "radius": 33,
    "tile_pad": 18,
    "top": 72
   },
@@ -7077,155 +9203,21 @@
   "wide_slots": false,
   "width": 720
  },
- "reterminald1001": {
+ "packages/wavesharep47.yaml": {
   "alert": {
-   "line": 27,
-   "title_line": 35
+   "line": 30,
+   "title_line": 39
   },
-  "battery": true,
-  "board": "reterminald1001",
+  "battery": false,
+  "board": "wavesharep47",
   "camera": {
    "full": [
     1280,
-    800
+    720
    ],
    "thumb": [
-    434,
-    244
-   ]
-  },
-  "can_standby": true,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 8.0,
-   "model": "reTerminal D1001",
-   "name": "reTerminal D1001",
-   "order": 20,
-   "settings": [
-    "media_player",
-    "microphone",
-    "wake_when_moved"
-   ],
-   "status": "experimental",
-   "touch": "GSL3670"
-  },
-  "chip": "ESP32-P4",
-  "columns": 5,
-  "dimmable": true,
-  "dpi": 189,
-  "features": [
-   "speaker",
-   "microphone",
-   "media_player",
-   "camera_sensor",
-   "bluetooth"
-  ],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 30,
-   "icon_home": 38,
-   "icon_mini": 29,
-   "label": 20,
-   "setpoint": 71,
-   "sublabel": 18,
-   "sublabel_big": 23,
-   "watch_icon": 20,
-   "watch_value": 42
-  },
-  "height": 800,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 16,
-  "max_tiles": 256,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      1280,
-      800
-     ],
-     "thumb": [
-      434,
-      244
-     ]
-    },
-    "columns": 5,
-    "height": 800,
-    "max": [
-     7,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 270,
-    "rows": 5,
-    "width": 1280
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      800,
-      1280
-     ],
-     "thumb": [
-      432,
-      243
-     ]
-    },
-    "columns": 3,
-    "height": 1280,
-    "max": [
-     4,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 8,
-    "width": 800
-   }
-  },
-  "rows": 5,
-  "spacing": {
-   "circle": 60,
-   "gap": 12,
-   "gap_y": 12,
-   "margin": 16,
-   "page_bar": 52,
-   "tile_pad": 13,
-   "top": 59
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 1280
- },
- "sunton8048s070": {
-  "alert": {
-   "line": 19,
-   "title_line": 25
-  },
-  "battery": false,
-  "board": "sunton8048s070",
-  "camera": {
-   "full": [
-    800,
-    480
-   ],
-   "thumb": [
-    304,
-    171
+    484,
+    272
    ]
   },
   "can_standby": true,
@@ -7233,163 +9225,41 @@
    "calibrate": false,
    "choices": {},
    "inch": 7.0,
-   "model": "ESP32-8048S070",
-   "name": "Sunton",
-   "order": 14,
-   "settings": [],
-   "status": "experimental",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-S3",
-  "columns": 4,
-  "dimmable": true,
-  "dpi": 133,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 21,
-   "icon_home": 26,
-   "icon_mini": 20,
-   "label": 14,
-   "setpoint": 50,
-   "sublabel": 13,
-   "sublabel_big": 16,
-   "watch_icon": 14,
-   "watch_value": 30
-  },
-  "height": 480,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      800,
-      480
-     ],
-     "thumb": [
-      304,
-      171
-     ]
-    },
-    "columns": 4,
-    "height": 480,
-    "max": [
-     6,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 4,
-    "width": 800
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      480,
-      800
-     ],
-     "thumb": [
-      304,
-      171
-     ]
-    },
-    "columns": 2,
-    "height": 800,
-    "max": [
-     4,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 7,
-    "width": 480
-   }
-  },
-  "rows": 4,
-  "spacing": {
-   "circle": 42,
-   "gap": 9,
-   "gap_y": 9,
-   "margin": 13,
-   "page_bar": 37,
-   "tile_pad": 9,
-   "top": 43
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 800
- },
- "tab5": {
-  "alert": {
-   "line": 42,
-   "title_line": 55
-  },
-  "battery": true,
-  "board": "tab5",
-  "camera": {
-   "full": [
-    1280,
-    720
-   ],
-   "thumb": [
-    659,
-    370
-   ]
-  },
-  "can_standby": true,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 5.0,
-   "model": "Tab5 ST7121",
-   "name": "M5Stack Tab5",
-   "order": 16,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-7",
+   "name": "Waveshare",
+   "order": 28,
    "settings": [
     "media_player",
     "microphone",
+    "microphone_gain",
+    "automatic_gain",
     "echo_cancellation"
    ],
-   "status": "new",
-   "touch": "ST7121"
+   "status": "experimental",
+   "touch": "GT911"
   },
   "chip": "ESP32-P4",
-  "columns": 3,
+  "columns": 4,
   "dimmable": true,
-  "dpi": 294,
+  "dpi": 210,
   "features": [
    "speaker",
    "microphone",
    "media_player",
-   "camera_sensor",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
-   "headline": 47,
-   "icon_home": 59,
-   "icon_mini": 45,
-   "label": 31,
-   "setpoint": 111,
-   "sublabel": 28,
-   "sublabel_big": 36,
-   "watch_icon": 31,
-   "watch_value": 66
+   "headline": 33,
+   "icon": 52,
+   "icon_home": 42,
+   "icon_mini": 32,
+   "label": 22,
+   "setpoint": 79,
+   "sublabel": 20,
+   "sublabel_big": 26,
+   "watch_icon": 22,
+   "watch_value": 47
   },
   "height": 720,
   "hotspot": true,
@@ -7401,7 +9271,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -7411,22 +9284,22 @@
       720
      ],
      "thumb": [
-      659,
-      370
+      484,
+      272
      ]
     },
-    "columns": 3,
+    "columns": 4,
     "height": 720,
     "max": [
-     5,
-     5
+     7,
+     7
     ],
     "min": [
      1,
      1
     ],
-    "rotation": 90,
-    "rows": 3,
+    "rotation": 270,
+    "rows": 4,
     "width": 1280
    },
    "portrait": {
@@ -7436,636 +9309,47 @@
       1280
      ],
      "thumb": [
-      595,
-      334
+      484,
+      272
      ]
     },
-    "columns": 1,
+    "columns": 2,
     "height": 1280,
     "max": [
-     2,
+     3,
      8
     ],
     "min": [
      1,
      1
     ],
-    "rotation": 180,
-    "rows": 5,
+    "rotation": 0,
+    "rows": 8,
     "width": 720
    }
   },
-  "rows": 3,
+  "rows": 4,
   "spacing": {
-   "circle": 93,
+   "circle": 67,
    "gap": 12,
    "gap_y": 12,
    "margin": 16,
-   "page_bar": 81,
-   "tile_pad": 21,
-   "top": 81
+   "page_bar": 58,
+   "radius": 27,
+   "tile_pad": 15,
+   "top": 62
   },
   "tier": "full",
   "wide_slots": false,
   "width": 1280
  },
- "waveshare35": {
-  "alert": {
-   "line": 23,
-   "title_line": 30
-  },
-  "battery": false,
-  "board": "waveshare35",
-  "can_standby": true,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 3.5,
-   "model": "ESP32-S3-Touch-LCD-3.5",
-   "name": "Waveshare",
-   "order": 8,
-   "settings": [],
-   "status": "new",
-   "touch": "FT63X6"
-  },
-  "chip": "ESP32-S3",
-  "columns": 2,
-  "dimmable": true,
-  "dpi": 165,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 26,
-   "icon_home": 33,
-   "icon_mini": 25,
-   "label": 17,
-   "setpoint": 62,
-   "sublabel": 16,
-   "sublabel_big": 20,
-   "watch_icon": 17,
-   "watch_value": 37
-  },
-  "height": 320,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "columns": 2,
-    "height": 320,
-    "max": [
-     3,
-     3
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 2,
-    "width": 480
-   },
-   "portrait": {
-    "columns": 1,
-    "height": 480,
-    "max": [
-     2,
-     6
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 180,
-    "rows": 3,
-    "width": 320
-   }
-  },
-  "rows": 2,
-  "spacing": {
-   "circle": 52,
-   "gap": 12,
-   "gap_y": 12,
-   "margin": 16,
-   "page_bar": 45,
-   "tile_pad": 12,
-   "top": 55
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 480
- },
- "waveshare43": {
-  "alert": {
-   "line": 32,
-   "title_line": 40
-  },
-  "battery": false,
-  "board": "waveshare43",
-  "camera": {
-   "full": [
-    800,
-    480
-   ],
-   "thumb": [
-    349,
-    196
-   ]
-  },
-  "can_standby": false,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 4.3,
-   "model": "ESP32-S3-Touch-LCD-4.3",
-   "name": "Waveshare",
-   "order": 3,
-   "settings": [],
-   "status": "stable",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-S3",
-  "columns": 3,
-  "dimmable": false,
-  "dpi": 217,
-  "features": [],
-  "firmware": "0.57.1",
-  "fonts": {
-   "headline": 34,
-   "icon_home": 43,
-   "icon_mini": 33,
-   "label": 23,
-   "setpoint": 82,
-   "sublabel": 20,
-   "sublabel_big": 27,
-   "watch_icon": 23,
-   "watch_value": 49
-  },
-  "height": 480,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      800,
-      480
-     ],
-     "thumb": [
-      349,
-      196
-     ]
-    },
-    "columns": 3,
-    "height": 480,
-    "max": [
-     4,
-     4
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 3,
-    "width": 800
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      480,
-      800
-     ],
-     "thumb": [
-      386,
-      217
-     ]
-    },
-    "columns": 1,
-    "height": 800,
-    "max": [
-     2,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 4,
-    "width": 480
-   }
-  },
-  "rows": 3,
-  "spacing": {
-   "circle": 69,
-   "gap": 12,
-   "gap_y": 13,
-   "margin": 16,
-   "page_bar": 60,
-   "tile_pad": 15,
-   "top": 64
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 800
- },
- "waveshare4b": {
+ "packages/wavesharep47b.yaml": {
   "alert": {
    "line": 25,
    "title_line": 32
   },
   "battery": false,
-  "board": "waveshare4b",
-  "camera": {
-   "full": [
-    480,
-    480
-   ],
-   "thumb": [
-    392,
-    220
-   ]
-  },
-  "can_standby": true,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 4.0,
-   "model": "ESP32-S3-Touch-LCD-4B",
-   "name": "Waveshare",
-   "order": 7,
-   "settings": [],
-   "status": "experimental",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-S3",
-  "columns": 2,
-  "dimmable": true,
-  "dpi": 170,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 27,
-   "icon_home": 34,
-   "icon_mini": 26,
-   "label": 18,
-   "setpoint": 64,
-   "sublabel": 16,
-   "sublabel_big": 21,
-   "watch_icon": 18,
-   "watch_value": 38
-  },
-  "height": 480,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      480,
-      480
-     ],
-     "thumb": [
-      392,
-      220
-     ]
-    },
-    "columns": 2,
-    "height": 480,
-    "max": [
-     3,
-     5
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 3,
-    "width": 480
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      480,
-      480
-     ],
-     "thumb": [
-      392,
-      220
-     ]
-    },
-    "columns": 2,
-    "height": 480,
-    "max": [
-     3,
-     5
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 3,
-    "width": 480
-   }
-  },
-  "rows": 3,
-  "spacing": {
-   "circle": 54,
-   "gap": 12,
-   "gap_y": 12,
-   "margin": 16,
-   "page_bar": 47,
-   "tile_pad": 12,
-   "top": 56
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 480
- },
- "waveshare5": {
-  "alert": {
-   "line": 27,
-   "title_line": 35
-  },
-  "battery": false,
-  "board": "waveshare5",
-  "camera": {
-   "full": [
-    800,
-    480
-   ],
-   "thumb": [
-    420,
-    236
-   ]
-  },
-  "can_standby": false,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 5.0,
-   "model": "ESP32-S3-Touch-LCD-5",
-   "name": "Waveshare",
-   "order": 17,
-   "settings": [],
-   "status": "new",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-S3",
-  "columns": 3,
-  "dimmable": false,
-  "dpi": 187,
-  "features": [],
-  "firmware": "0.57.1",
-  "fonts": {
-   "headline": 30,
-   "icon_home": 37,
-   "icon_mini": 29,
-   "label": 20,
-   "setpoint": 70,
-   "sublabel": 18,
-   "sublabel_big": 23,
-   "watch_icon": 20,
-   "watch_value": 42
-  },
-  "height": 480,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      800,
-      480
-     ],
-     "thumb": [
-      420,
-      236
-     ]
-    },
-    "columns": 3,
-    "height": 480,
-    "max": [
-     4,
-     5
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 3,
-    "width": 800
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      480,
-      800
-     ],
-     "thumb": [
-      400,
-      225
-     ]
-    },
-    "columns": 1,
-    "height": 800,
-    "max": [
-     2,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 5,
-    "width": 480
-   }
-  },
-  "rows": 3,
-  "spacing": {
-   "circle": 59,
-   "gap": 12,
-   "gap_y": 12,
-   "margin": 16,
-   "page_bar": 51,
-   "tile_pad": 13,
-   "top": 58
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 800
- },
- "waveshare7": {
-  "alert": {
-   "line": 19,
-   "title_line": 25
-  },
-  "battery": false,
-  "board": "waveshare7",
-  "camera": {
-   "full": [
-    800,
-    480
-   ],
-   "thumb": [
-    304,
-    171
-   ]
-  },
-  "can_standby": false,
-  "catalog": {
-   "calibrate": false,
-   "choices": {},
-   "inch": 7.0,
-   "model": "ESP32-S3-Touch-LCD-7",
-   "name": "Waveshare",
-   "order": 6,
-   "settings": [],
-   "status": "experimental",
-   "touch": "GT911"
-  },
-  "chip": "ESP32-S3",
-  "columns": 4,
-  "dimmable": false,
-  "dpi": 133,
-  "features": [],
-  "firmware": "0.57.0",
-  "fonts": {
-   "headline": 21,
-   "icon_home": 26,
-   "icon_mini": 20,
-   "label": 14,
-   "setpoint": 50,
-   "sublabel": 13,
-   "sublabel_big": 16,
-   "watch_icon": 14,
-   "watch_value": 30
-  },
-  "height": 480,
-  "hotspot": true,
-  "look": "standard",
-  "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
-  "modules": [
-   "dock",
-   "vacuum_card",
-   "cover_groups",
-   "clock_faces"
-  ],
-  "orientations": {
-   "landscape": {
-    "camera": {
-     "full": [
-      800,
-      480
-     ],
-     "thumb": [
-      304,
-      171
-     ]
-    },
-    "columns": 4,
-    "height": 480,
-    "max": [
-     6,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 0,
-    "rows": 4,
-    "width": 800
-   },
-   "portrait": {
-    "camera": {
-     "full": [
-      480,
-      800
-     ],
-     "thumb": [
-      304,
-      171
-     ]
-    },
-    "columns": 2,
-    "height": 800,
-    "max": [
-     4,
-     8
-    ],
-    "min": [
-     1,
-     1
-    ],
-    "rotation": 90,
-    "rows": 7,
-    "width": 480
-   }
-  },
-  "rows": 4,
-  "spacing": {
-   "circle": 42,
-   "gap": 9,
-   "gap_y": 9,
-   "margin": 13,
-   "page_bar": 37,
-   "tile_pad": 9,
-   "top": 43
-  },
-  "tier": "full",
-  "wide_slots": false,
-  "width": 800
- },
- "waveshare7b": {
-  "alert": {
-   "line": 25,
-   "title_line": 32
-  },
-  "battery": false,
-  "board": "waveshare7b",
+  "board": "wavesharep47b",
   "camera": {
    "full": [
     1024,
@@ -8081,22 +9365,34 @@
    "calibrate": false,
    "choices": {},
    "inch": 7.0,
-   "model": "ESP32-S3-Touch-LCD-7B",
+   "model": "ESP32-P4-WIFI6-Touch-LCD-7B",
    "name": "Waveshare",
-   "order": 13,
-   "settings": [],
+   "order": 27,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
    "status": "experimental",
    "touch": "GT911"
   },
-  "chip": "ESP32-S3",
+  "chip": "ESP32-P4",
   "columns": 4,
   "dimmable": true,
   "dpi": 170,
-  "features": [],
-  "firmware": "0.57.0",
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 27,
-   "icon_home": 26,
+   "icon": 42,
+   "icon_home": 34,
    "icon_mini": 26,
    "label": 18,
    "setpoint": 64,
@@ -8109,13 +9405,16 @@
   "hotspot": true,
   "look": "standard",
   "max_bar_items": 12,
-  "max_pages": 24,
-  "max_tiles": 128,
+  "max_pages": 16,
+  "max_tiles": 256,
   "modules": [
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -8176,6 +9475,1794 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1024
+ },
+ "packages/wt32sc01plus.yaml": {
+  "alert": {
+   "line": 23,
+   "title_line": 30
+  },
+  "battery": false,
+  "board": "wt32sc01plus",
+  "camera": {
+   "full": [
+    480,
+    320
+   ],
+   "thumb": [
+    187,
+    105
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 3.5,
+   "model": "WT32-SC01 Plus",
+   "name": "WT32",
+   "order": 26,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT63X6"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 165,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 26,
+   "icon": 41,
+   "icon_home": 33,
+   "icon_mini": 25,
+   "label": 17,
+   "setpoint": 62,
+   "sublabel": 16,
+   "sublabel_big": 20,
+   "watch_icon": 17,
+   "watch_value": 37
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      320
+     ],
+     "thumb": [
+      187,
+      105
+     ]
+    },
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     3
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      320,
+      480
+     ],
+     "thumb": [
+      249,
+      140
+     ]
+    },
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 3,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 52,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 45,
+   "radius": 21,
+   "tile_pad": 12,
+   "top": 55
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "reterminald1001": {
+  "alert": {
+   "line": 27,
+   "title_line": 35
+  },
+  "battery": true,
+  "board": "reterminald1001",
+  "camera": {
+   "full": [
+    1280,
+    800
+   ],
+   "thumb": [
+    434,
+    244
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 8.0,
+   "model": "reTerminal D1001",
+   "name": "reTerminal D1001",
+   "order": 20,
+   "settings": [
+    "media_player",
+    "microphone",
+    "wake_when_moved"
+   ],
+   "status": "experimental",
+   "touch": "GSL3670"
+  },
+  "chip": "ESP32-P4",
+  "columns": 5,
+  "dimmable": true,
+  "dpi": 189,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 30,
+   "icon": 47,
+   "icon_home": 38,
+   "icon_mini": 29,
+   "label": 20,
+   "setpoint": 71,
+   "sublabel": 18,
+   "sublabel_big": 23,
+   "watch_icon": 20,
+   "watch_value": 42
+  },
+  "height": 800,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1280,
+      800
+     ],
+     "thumb": [
+      434,
+      244
+     ]
+    },
+    "columns": 5,
+    "height": 800,
+    "max": [
+     7,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 270,
+    "rows": 5,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      800,
+      1280
+     ],
+     "thumb": [
+      432,
+      243
+     ]
+    },
+    "columns": 3,
+    "height": 1280,
+    "max": [
+     4,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 8,
+    "width": 800
+   }
+  },
+  "rows": 5,
+  "spacing": {
+   "circle": 60,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 52,
+   "radius": 24,
+   "tile_pad": 13,
+   "top": 59
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1280
+ },
+ "sensecapd1": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "sensecapd1",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "Indicator D1, D1S, D1L, D1Pro (GX)",
+   "name": "SenseCAP",
+   "order": 24,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT6336U"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 172,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 65,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 55,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "sunton8048s070": {
+  "alert": {
+   "line": 19,
+   "title_line": 25
+  },
+  "battery": false,
+  "board": "sunton8048s070",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    304,
+    171
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 7.0,
+   "model": "ESP32-8048S070",
+   "name": "Sunton",
+   "order": 14,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 4,
+  "dimmable": true,
+  "dpi": 133,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 21,
+   "icon": 33,
+   "icon_home": 26,
+   "icon_mini": 20,
+   "label": 14,
+   "setpoint": 50,
+   "sublabel": 13,
+   "sublabel_big": 16,
+   "watch_icon": 14,
+   "watch_value": 30
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      304,
+      171
+     ]
+    },
+    "columns": 4,
+    "height": 480,
+    "max": [
+     6,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 4,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      304,
+      171
+     ]
+    },
+    "columns": 2,
+    "height": 800,
+    "max": [
+     4,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 7,
+    "width": 480
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 42,
+   "gap": 9,
+   "gap_y": 9,
+   "margin": 13,
+   "page_bar": 37,
+   "radius": 17,
+   "tile_pad": 9,
+   "top": 43
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "tab5": {
+  "alert": {
+   "line": 42,
+   "title_line": 55
+  },
+  "battery": true,
+  "board": "tab5",
+  "camera": {
+   "full": [
+    1280,
+    720
+   ],
+   "thumb": [
+    659,
+    370
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {
+    "DISPLAY_MODEL": [
+     "ST7121",
+     "ST7123"
+    ]
+   },
+   "inch": 5.0,
+   "model": "Tab5",
+   "name": "M5Stack Tab5",
+   "order": 16,
+   "settings": [
+    "media_player",
+    "microphone",
+    "echo_cancellation"
+   ],
+   "status": "new",
+   "touch": "ST7121/ST7123"
+  },
+  "chip": "ESP32-P4",
+  "columns": 3,
+  "dimmable": true,
+  "dpi": 294,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "camera_sensor",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 47,
+   "icon": 73,
+   "icon_home": 59,
+   "icon_mini": 45,
+   "label": 31,
+   "setpoint": 111,
+   "sublabel": 28,
+   "sublabel_big": 36,
+   "watch_icon": 31,
+   "watch_value": 66
+  },
+  "height": 720,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1280,
+      720
+     ],
+     "thumb": [
+      659,
+      370
+     ]
+    },
+    "columns": 3,
+    "height": 720,
+    "max": [
+     5,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 3,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      720,
+      1280
+     ],
+     "thumb": [
+      595,
+      334
+     ]
+    },
+    "columns": 1,
+    "height": 1280,
+    "max": [
+     2,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 5,
+    "width": 720
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 93,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 81,
+   "radius": 38,
+   "tile_pad": 21,
+   "top": 81
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1280
+ },
+ "waveshare101": {
+  "alert": {
+   "line": 21,
+   "title_line": 28
+  },
+  "battery": false,
+  "board": "waveshare101",
+  "camera": {
+   "full": [
+    1280,
+    800
+   ],
+   "thumb": [
+    343,
+    193
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 10.1,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-10.1",
+   "name": "Waveshare",
+   "order": 29,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 5,
+  "dimmable": true,
+  "dpi": 149,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 24,
+   "icon": 37,
+   "icon_home": 30,
+   "icon_mini": 23,
+   "label": 16,
+   "setpoint": 56,
+   "sublabel": 14,
+   "sublabel_big": 18,
+   "watch_icon": 16,
+   "watch_value": 33
+  },
+  "height": 800,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1280,
+      800
+     ],
+     "thumb": [
+      343,
+      193
+     ]
+    },
+    "columns": 5,
+    "height": 800,
+    "max": [
+     8,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 270,
+    "rows": 5,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      800,
+      1280
+     ],
+     "thumb": [
+      343,
+      193
+     ]
+    },
+    "columns": 5,
+    "height": 1280,
+    "max": [
+     6,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 5,
+    "width": 800
+   }
+  },
+  "rows": 5,
+  "spacing": {
+   "circle": 47,
+   "gap": 11,
+   "gap_y": 11,
+   "margin": 14,
+   "page_bar": 41,
+   "radius": 19,
+   "tile_pad": 11,
+   "top": 50
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1280
+ },
+ "waveshare35": {
+  "alert": {
+   "line": 23,
+   "title_line": 30
+  },
+  "battery": false,
+  "board": "waveshare35",
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 3.5,
+   "model": "ESP32-S3-Touch-LCD-3.5",
+   "name": "Waveshare",
+   "order": 8,
+   "settings": [],
+   "status": "new",
+   "touch": "FT63X6"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 165,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 26,
+   "icon": 41,
+   "icon_home": 33,
+   "icon_mini": 25,
+   "label": 17,
+   "setpoint": 62,
+   "sublabel": 16,
+   "sublabel_big": 20,
+   "watch_icon": 17,
+   "watch_value": 37
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     3
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 3,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 52,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 45,
+   "radius": 21,
+   "tile_pad": 12,
+   "top": 55
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "waveshare43": {
+  "alert": {
+   "line": 32,
+   "title_line": 40
+  },
+  "battery": false,
+  "board": "waveshare43",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    349,
+    196
+   ]
+  },
+  "can_standby": false,
+  "catalog": {
+   "calibrate": false,
+   "choices": {
+    "FLASH_SIZE": [
+     "16MB",
+     "8MB"
+    ]
+   },
+   "inch": 4.3,
+   "model": "ESP32-S3-Touch-LCD-4.3",
+   "name": "Waveshare",
+   "order": 3,
+   "settings": [],
+   "status": "stable",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 3,
+  "dimmable": false,
+  "dpi": 217,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 34,
+   "icon": 54,
+   "icon_home": 43,
+   "icon_mini": 33,
+   "label": 23,
+   "setpoint": 82,
+   "sublabel": 20,
+   "sublabel_big": 27,
+   "watch_icon": 23,
+   "watch_value": 49
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      349,
+      196
+     ]
+    },
+    "columns": 3,
+    "height": 480,
+    "max": [
+     4,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      386,
+      217
+     ]
+    },
+    "columns": 1,
+    "height": 800,
+    "max": [
+     2,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 4,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 69,
+   "gap": 12,
+   "gap_y": 13,
+   "margin": 16,
+   "page_bar": 60,
+   "radius": 28,
+   "tile_pad": 15,
+   "top": 64
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "waveshare43c": {
+  "alert": {
+   "line": 32,
+   "title_line": 40
+  },
+  "battery": false,
+  "board": "waveshare43c",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    349,
+    196
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.3,
+   "model": "ESP32-S3-Touch-LCD-4.3C",
+   "name": "Waveshare",
+   "order": 30,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 3,
+  "dimmable": true,
+  "dpi": 217,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 34,
+   "icon": 54,
+   "icon_home": 43,
+   "icon_mini": 33,
+   "label": 23,
+   "setpoint": 82,
+   "sublabel": 20,
+   "sublabel_big": 27,
+   "watch_icon": 23,
+   "watch_value": 48
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      349,
+      196
+     ]
+    },
+    "columns": 3,
+    "height": 480,
+    "max": [
+     4,
+     4
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      386,
+      217
+     ]
+    },
+    "columns": 1,
+    "height": 800,
+    "max": [
+     2,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 4,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 69,
+   "gap": 12,
+   "gap_y": 13,
+   "margin": 16,
+   "page_bar": 60,
+   "radius": 28,
+   "tile_pad": 15,
+   "top": 64
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "waveshare4b": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "waveshare4b",
+  "camera": {
+   "full": [
+    480,
+    480
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "ESP32-S3-Touch-LCD-4B",
+   "name": "Waveshare",
+   "order": 7,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "waveshare4v4": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "waveshare4v4",
+  "camera": {
+   "full": [
+    480,
+    480
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 4.0,
+   "model": "ESP32-S3-Touch-LCD-4 V4.0",
+   "name": "Waveshare",
+   "order": 23,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      480
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 480,
+    "max": [
+     3,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
+ },
+ "waveshare5": {
+  "alert": {
+   "line": 27,
+   "title_line": 35
+  },
+  "battery": false,
+  "board": "waveshare5",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    420,
+    236
+   ]
+  },
+  "can_standby": false,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 5.0,
+   "model": "ESP32-S3-Touch-LCD-5",
+   "name": "Waveshare",
+   "order": 17,
+   "settings": [],
+   "status": "new",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 3,
+  "dimmable": false,
+  "dpi": 187,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 30,
+   "icon": 46,
+   "icon_home": 37,
+   "icon_mini": 29,
+   "label": 20,
+   "setpoint": 70,
+   "sublabel": 18,
+   "sublabel_big": 23,
+   "watch_icon": 20,
+   "watch_value": 42
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      420,
+      236
+     ]
+    },
+    "columns": 3,
+    "height": 480,
+    "max": [
+     4,
+     5
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 3,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      400,
+      225
+     ]
+    },
+    "columns": 1,
+    "height": 800,
+    "max": [
+     2,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 5,
+    "width": 480
+   }
+  },
+  "rows": 3,
+  "spacing": {
+   "circle": 59,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 51,
+   "radius": 24,
+   "tile_pad": 13,
+   "top": 58
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "waveshare7": {
+  "alert": {
+   "line": 19,
+   "title_line": 25
+  },
+  "battery": false,
+  "board": "waveshare7",
+  "camera": {
+   "full": [
+    800,
+    480
+   ],
+   "thumb": [
+    304,
+    171
+   ]
+  },
+  "can_standby": false,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 7.0,
+   "model": "ESP32-S3-Touch-LCD-7",
+   "name": "Waveshare",
+   "order": 6,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 4,
+  "dimmable": false,
+  "dpi": 133,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 21,
+   "icon": 33,
+   "icon_home": 26,
+   "icon_mini": 20,
+   "label": 14,
+   "setpoint": 50,
+   "sublabel": 13,
+   "sublabel_big": 16,
+   "watch_icon": 14,
+   "watch_value": 30
+  },
+  "height": 480,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      800,
+      480
+     ],
+     "thumb": [
+      304,
+      171
+     ]
+    },
+    "columns": 4,
+    "height": 480,
+    "max": [
+     6,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 4,
+    "width": 800
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      480,
+      800
+     ],
+     "thumb": [
+      304,
+      171
+     ]
+    },
+    "columns": 2,
+    "height": 800,
+    "max": [
+     4,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 7,
+    "width": 480
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 42,
+   "gap": 9,
+   "gap_y": 9,
+   "margin": 13,
+   "page_bar": 37,
+   "radius": 17,
+   "tile_pad": 9,
+   "top": 43
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 800
+ },
+ "waveshare7b": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "waveshare7b",
+  "camera": {
+   "full": [
+    1024,
+    600
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 7.0,
+   "model": "ESP32-S3-Touch-LCD-7B",
+   "name": "Waveshare",
+   "order": 13,
+   "settings": [],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-S3",
+  "columns": 4,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 26,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 600,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1024,
+      600
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 4,
+    "height": 600,
+    "max": [
+     6,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 4,
+    "width": 1024
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      600,
+      1024
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 1024,
+    "max": [
+     3,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 7,
+    "width": 600
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
    "tile_pad": 12,
    "top": 53
   },
@@ -8228,9 +11315,10 @@
    "media_player",
    "bluetooth"
   ],
-  "firmware": "0.57.0",
+  "firmware": "0.59.0",
   "fonts": {
    "headline": 40,
+   "icon": 63,
    "icon_home": 51,
    "icon_mini": 39,
    "label": 27,
@@ -8250,7 +11338,10 @@
    "dock",
    "vacuum_card",
    "cover_groups",
-   "clock_faces"
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
   ],
   "orientations": {
    "landscape": {
@@ -8311,11 +11402,421 @@
    "gap_y": 12,
    "margin": 16,
    "page_bar": 70,
+   "radius": 33,
    "tile_pad": 18,
    "top": 72
   },
   "tier": "full",
   "wide_slots": false,
   "width": 720
+ },
+ "wavesharep47": {
+  "alert": {
+   "line": 30,
+   "title_line": 39
+  },
+  "battery": false,
+  "board": "wavesharep47",
+  "camera": {
+   "full": [
+    1280,
+    720
+   ],
+   "thumb": [
+    484,
+    272
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 7.0,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-7",
+   "name": "Waveshare",
+   "order": 28,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 4,
+  "dimmable": true,
+  "dpi": 210,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 33,
+   "icon": 52,
+   "icon_home": 42,
+   "icon_mini": 32,
+   "label": 22,
+   "setpoint": 79,
+   "sublabel": 20,
+   "sublabel_big": 26,
+   "watch_icon": 22,
+   "watch_value": 47
+  },
+  "height": 720,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1280,
+      720
+     ],
+     "thumb": [
+      484,
+      272
+     ]
+    },
+    "columns": 4,
+    "height": 720,
+    "max": [
+     7,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 270,
+    "rows": 4,
+    "width": 1280
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      720,
+      1280
+     ],
+     "thumb": [
+      484,
+      272
+     ]
+    },
+    "columns": 2,
+    "height": 1280,
+    "max": [
+     3,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 8,
+    "width": 720
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 67,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 58,
+   "radius": 27,
+   "tile_pad": 15,
+   "top": 62
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1280
+ },
+ "wavesharep47b": {
+  "alert": {
+   "line": 25,
+   "title_line": 32
+  },
+  "battery": false,
+  "board": "wavesharep47b",
+  "camera": {
+   "full": [
+    1024,
+    600
+   ],
+   "thumb": [
+    392,
+    220
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 7.0,
+   "model": "ESP32-P4-WIFI6-Touch-LCD-7B",
+   "name": "Waveshare",
+   "order": 27,
+   "settings": [
+    "media_player",
+    "microphone",
+    "microphone_gain",
+    "automatic_gain",
+    "echo_cancellation"
+   ],
+   "status": "experimental",
+   "touch": "GT911"
+  },
+  "chip": "ESP32-P4",
+  "columns": 4,
+  "dimmable": true,
+  "dpi": 170,
+  "features": [
+   "speaker",
+   "microphone",
+   "media_player",
+   "bluetooth"
+  ],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 27,
+   "icon": 42,
+   "icon_home": 34,
+   "icon_mini": 26,
+   "label": 18,
+   "setpoint": 64,
+   "sublabel": 16,
+   "sublabel_big": 21,
+   "watch_icon": 18,
+   "watch_value": 38
+  },
+  "height": 600,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 16,
+  "max_tiles": 256,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      1024,
+      600
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 4,
+    "height": 600,
+    "max": [
+     6,
+     7
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 0,
+    "rows": 4,
+    "width": 1024
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      600,
+      1024
+     ],
+     "thumb": [
+      392,
+      220
+     ]
+    },
+    "columns": 2,
+    "height": 1024,
+    "max": [
+     3,
+     8
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 7,
+    "width": 600
+   }
+  },
+  "rows": 4,
+  "spacing": {
+   "circle": 54,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 47,
+   "radius": 22,
+   "tile_pad": 12,
+   "top": 56
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 1024
+ },
+ "wt32sc01plus": {
+  "alert": {
+   "line": 23,
+   "title_line": 30
+  },
+  "battery": false,
+  "board": "wt32sc01plus",
+  "camera": {
+   "full": [
+    480,
+    320
+   ],
+   "thumb": [
+    187,
+    105
+   ]
+  },
+  "can_standby": true,
+  "catalog": {
+   "calibrate": false,
+   "choices": {},
+   "inch": 3.5,
+   "model": "WT32-SC01 Plus",
+   "name": "WT32",
+   "order": 26,
+   "settings": [],
+   "status": "experimental",
+   "touch": "FT63X6"
+  },
+  "chip": "ESP32-S3",
+  "columns": 2,
+  "dimmable": true,
+  "dpi": 165,
+  "features": [],
+  "firmware": "0.59.0",
+  "fonts": {
+   "headline": 26,
+   "icon": 41,
+   "icon_home": 33,
+   "icon_mini": 25,
+   "label": 17,
+   "setpoint": 62,
+   "sublabel": 16,
+   "sublabel_big": 20,
+   "watch_icon": 17,
+   "watch_value": 37
+  },
+  "height": 320,
+  "hotspot": true,
+  "look": "standard",
+  "max_bar_items": 12,
+  "max_pages": 24,
+  "max_tiles": 128,
+  "modules": [
+   "dock",
+   "vacuum_card",
+   "cover_groups",
+   "clock_faces",
+   "doorbell",
+   "text_card",
+   "light_presets"
+  ],
+  "orientations": {
+   "landscape": {
+    "camera": {
+     "full": [
+      480,
+      320
+     ],
+     "thumb": [
+      187,
+      105
+     ]
+    },
+    "columns": 2,
+    "height": 320,
+    "max": [
+     3,
+     3
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 90,
+    "rows": 2,
+    "width": 480
+   },
+   "portrait": {
+    "camera": {
+     "full": [
+      320,
+      480
+     ],
+     "thumb": [
+      249,
+      140
+     ]
+    },
+    "columns": 1,
+    "height": 480,
+    "max": [
+     2,
+     6
+    ],
+    "min": [
+     1,
+     1
+    ],
+    "rotation": 180,
+    "rows": 3,
+    "width": 320
+   }
+  },
+  "rows": 2,
+  "spacing": {
+   "circle": 52,
+   "gap": 12,
+   "gap_y": 12,
+   "margin": 16,
+   "page_bar": 45,
+   "radius": 21,
+   "tile_pad": 12,
+   "top": 55
+  },
+  "tier": "full",
+  "wide_slots": false,
+  "width": 480
  }
 }

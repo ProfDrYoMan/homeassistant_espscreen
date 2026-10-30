@@ -6,10 +6,15 @@ import { isWideSize } from './sizes';
 import { TILE, ofType, taps as catalogueTaps } from './catalogue';
 import { PLUGIN_LIST_MAX, PLUGIN_OPTIONS_BYTES, PLUGIN_TILE } from './plugins';
 import rules from './page-rules.json';
+import { cleanPreset, MAX as PRESETS_MAX } from './light-presets';
 import type { PageLayout, PageTile } from '../types';
 
 const bytes = (s: string) => new TextEncoder().encode(s).length;
 const matches = (pattern: RegExp, value: string) => value.match(pattern)?.[0] === value;
+// A value as JSON with every object's keys in one order: two objects with the same keys and values are the same,
+// whichever order they were written in (the add-on writes a preset's keys in an order of its own).
+const canon = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : item);
 function fail(key = 'fields'): never { throw new Error(t(`addon.errors.pages.${key}`)); }
 export function fields(value: any, allowed: string[], required = allowed) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !allowed.includes(k)) ||
@@ -97,9 +102,9 @@ export function validatePageShape(layout: PageLayout, plugins = false) {
       fields(tile, ['id', 'content', 'placement', 'appearance', 'interaction', 'children'], ['id', 'content', 'placement', 'appearance', 'interaction']);
       fields(tile.placement, ['row', 'column', 'columns', 'rows']);
       fields(tile.appearance, ['label', 'presentation', 'display', 'icon', 'background', 'historyHours', 'refresh', 'subtitle', 'fit', 'overlay',
-        'mapEntities', 'mapFraming', 'mapDistance', 'mapFollow', 'mapMarkers', 'mapNames', 'mapZones', 'mapStreets', 'mapLook', 'energyFlow',
+        'mapEntities', 'mapFraming', 'mapDistance', 'mapFollow', 'mapMarkers', 'mapNames', 'mapZones', 'mapStreets', 'mapLook', 'energyFlow', 'textTemplate',
         ...CALENDAR_FIELDS, ...CALENDAR_MORE, ...METER_FIELDS], ['label']);
-      fields(tile.interaction, ['tap', 'inline', 'controls', 'action', 'guard', 'play', 'speaker', 'shuffle', 'repeat', 'tilt_open'], []);
+      fields(tile.interaction, ['tap', 'inline', 'controls', 'action', 'guard', 'play', 'speaker', 'shuffle', 'repeat', 'tilt_open', 'presets', 'preset_levels'], []);
       const content = tile.content;
       fields(content, ['kind', 'entityId', 'name', 'target', 'plugin', 'tile', 'options'], ['kind']);
       if (content.kind === 'entity') {
@@ -154,6 +159,10 @@ export function validateCardOptions(tile: PageTile, entityId: string, size: stri
     if (value !== undefined && !choices.includes(value)) fail();
   // Where a cover's slats stand open (core.validate_layout): Home Assistant's 100, the default, is never stored.
   if (i.tilt_open !== undefined && i.tilt_open === ofType(domain)?.tilt_open?.[0]) fail('normalization');
+  // A light's presets (light_presets.validate): at most four on a light, none stored empty; their brightness shown only when true.
+  if (i.presets !== undefined && (domain !== 'light' || !Array.isArray(i.presets) || !i.presets.length || i.presets.length > PRESETS_MAX
+    || i.presets.some((p) => canon(cleanPreset(p)) !== canon(p)))) fail('normalization');
+  if (i.preset_levels !== undefined && (domain !== 'light' || i.preset_levels !== true)) fail('normalization');
   if (a.icon !== undefined && !icon(a.icon)) fail();
   if (rules.wideOnly.includes(a.display || '') && !isWideSize(size)) fail('normalization');
   if (tile.content.kind === 'navigation' && (size === 'full' || a.display !== undefined || i.inline !== undefined ||
@@ -172,6 +181,8 @@ export function validateCardOptions(tile: PageTile, entityId: string, size: stri
     if (value !== undefined && (a.display !== 'map' || !choices.includes(value) || value === choices[0])) fail('normalization');
   // How the energy card shows power along a line: the energy card's own, the default (dots) never stored.
   if (a.energyFlow !== undefined && (entityId !== 'screen.energy' || !rules.energyFlow.includes(a.energyFlow) || a.energyFlow === rules.energyFlow[0])) fail('normalization');
+  // The template tile's template (text_tile.validate): text, not empty, at most 4000 characters, on that tile only.
+  if (a.textTemplate !== undefined && (entityId !== 'screen.text' || typeof a.textTemplate !== 'string' || !a.textTemplate.trim() || a.textTemplate.length > 4000)) fail('normalization');
   // A calendar card (firmware 0.56.0), as calendar_feed.validate checks it: its own choices, a default never stored.
   if (CALENDAR_FIELDS.some((key) => a[key] !== undefined)) {
     if (domain !== 'calendar') fail('normalization');

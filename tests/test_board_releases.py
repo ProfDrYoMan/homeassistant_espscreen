@@ -45,15 +45,16 @@ class WhatAChangeReaches(unittest.TestCase):
             self.assertEqual(reach(name)[name], EVERY, name)
 
     def test_a_component_some_boards_load_reaches_those_boards(self):
-        """The CYD's xpt2046 and the JC8012P4A1 V3's mipi_dsi_v3 are platforms of those boards alone: a fix in one is
-        firmware for them, not for every screen."""
+        """The CYD's xpt2046 and the mipi_dsi_v3 of the rev3 ESP32-P4 boards (the JC8012P4A1 V3 and the Waveshare
+        ESP32-P4-WIFI6-Touch-LCD-7B) are platforms of those boards alone: a fix in one is firmware for them, not for every
+        screen."""
         for name, board in (('components/xpt2046/touchscreen/xpt2046.cpp', 'cyd'),
                             ('components/mipi_dsi_v3/mipi_dsi.cpp', 'jc8012p4a1v3')):
             boards = reach(name)[name]
             self.assertIn(board, boards, name)
             self.assertNotEqual(boards, EVERY, name)
         self.assertEqual(reach('components/mipi_dsi_v3/display.py')['components/mipi_dsi_v3/display.py'],
-                         {'jc8012p4a1v3'})
+                         {'jc8012p4a1v3', 'wavesharep47b'})
 
     def test_a_package_reaches_the_boards_that_include_it(self):
         """A feature, look, hardware or cells file reaches exactly the boards whose chain names it."""
@@ -227,26 +228,27 @@ class TheOlderESPHome(unittest.TestCase):
     """On the packages' min_version ESPHome a change that reaches every board builds MIN_VERSION_SAMPLE (app 0.4.41),
     plus one board for each changed file those don't build."""
 
-    def test_the_shared_core_builds_the_cyd_alone(self):
-        self.assertEqual(profiles.MIN_VERSION_SAMPLE, ('cyd',))
+    def test_the_shared_core_builds_the_guition_alone(self):
+        # The CYD said it until 0.4.91; it asks the add-on's ESPHome now (its flash), so the Guition 4848S040 says it.
+        self.assertEqual(profiles.MIN_VERSION_SAMPLE, ('guition',))
         self.assertEqual(affected_boards.older_sample(reach('packages/core.yaml', 'components/smart_display/theme.h')),
-                         ['cyd'])
+                         ['guition'])
 
-    def test_a_package_the_cyd_lacks_adds_a_board_that_has_it(self):
-        changed = reach('packages/core.yaml', 'packages/features/capacitive-touch.yaml')
+    def test_a_package_the_sample_lacks_adds_a_board_that_has_it(self):
+        changed = reach('packages/core.yaml', 'packages/features/resistive-touch.yaml')
         picked = affected_boards.older_sample(changed)
-        self.assertEqual(picked[0], 'cyd')
+        self.assertEqual(picked[0], 'guition')
         self.assertEqual(len(picked), 2, picked)
-        self.assertIn(picked[1], changed['packages/features/capacitive-touch.yaml'])
-        # The first of the sample that has it: the Guition.
-        self.assertEqual(picked[1], 'guition')
+        self.assertIn(picked[1], changed['packages/features/resistive-touch.yaml'])
+        # The first of the sample that has it: the CYD.
+        self.assertEqual(picked[1], 'cyd')
 
     def test_another_boards_own_file_adds_that_board(self):
         board_file = 'packages/boards/' + profiles.CATALOG['hosyond40']['file']
-        self.assertEqual(affected_boards.older_sample(reach('packages/core.yaml', board_file)), ['cyd', 'hosyond40'])
+        self.assertEqual(affected_boards.older_sample(reach('packages/core.yaml', board_file)), ['guition', 'hosyond40'])
 
     def test_no_firmware_adds_nothing(self):
-        self.assertEqual(affected_boards.older_sample(reach('packages/core.yaml', 'docs/TESTING.md')), ['cyd'])
+        self.assertEqual(affected_boards.older_sample(reach('packages/core.yaml', 'docs/TESTING.md')), ['guition'])
 
     def test_check_sh_builds_it_on_an_older_esphome(self):
         script = (ROOT / 'tools/check.sh').read_text()

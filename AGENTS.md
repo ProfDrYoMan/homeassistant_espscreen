@@ -1,8 +1,8 @@
 # Fork workflow, takes precedence over the upstream instructions below
 
 - Fetch and integrate only `upstream/main`. Never fetch, merge, pull or recreate `dev`.
-- Start work on a branch from `upstream/main`; the current work branch is `my_changes`.
-- Keep this fork's `main` on upstream main plus the fork's own changes. Publish changes to `origin/main` and the work branch.
+- Work only on `main`; ignore all other branches.
+- Keep this fork's `main` on upstream main plus the fork's own changes. Publish changes only to `origin/main`.
 - Do not use the upstream dev, bench-first publication or release-only main workflow in this fork. Do not create a release unless explicitly requested.
 
 # Working instructions for LLMs and developers
@@ -22,8 +22,15 @@ Home Assistant entity belongs in a board file. docs/README.md lists every doc an
 
 ## Where to start for a change
 
+Read in this order, and stop as soon as you know enough: docs/ARCHITECTURE.md (the one map of the firmware's layers,
+the hard rules between them and the measurement behind each), then the document of the thing you change (the table
+below), then the head of the file (every file in `components/smart_display/` opens with what it is, what it knows and
+what it does not, and which test proves it), then that test. A change in the code gets its line in the document of its
+subject in the same commit, and a measurement goes with it; the map is updated when a layer, a seam or a rule changes.
+
 | You want to | Read first | The source of truth |
 |---|---|---|
+| understand how the firmware's layers fit, or find where a rule is written | docs/ARCHITECTURE.md | `engine_build.py`, `glass.h`, `picture_engine.h`, `live_view.h`, `hw.h`, `pressure.h`, `audio_owner.h` |
 | support a new entity type, or a new control on a tile | docs/CATALOGUE.md | `catalogue/<type>.yaml`, `catalogue/_ha.json` |
 | add a screen setting | docs/SETTINGS.md | `settings_screen.h`, `SETTING_RULES` in `screen_manager/app/core.py` |
 | give a board a setting of its own (Extras: on the screen, in the app, in Home Assistant) | docs/SETTINGS.md, "A board's own settings" | `boards.yaml` `settings`, the board's `BOOT_BOARD_SETTINGS`, `entity_settings.py` |
@@ -31,11 +38,13 @@ Home Assistant entity belongs in a board file. docs/README.md lists every doc an
 | add a part of the UI that only the larger boards get | docs/MODULES.md | `components/smart_display/modules.py`, `module_<name>.h` |
 | change sizes, fonts or the grid | docs/RESPONSIVE.md | `ui_scale.h`, `packages/looks/`, `runtime_model.h` (`Grid`) |
 | give a board a battery in the top bar | docs/BATTERY.md | the board's `battery` sensors, `battery_status.h` |
-| change how a picture reaches the screen | docs/CAMERA.md | `picture_loader.h`, `picture_fetch.h`, `camera_view.h`, `screen_manager/app/camera_feed.py` |
+| change how a picture reaches the screen | docs/PICTURES.md, then docs/CAMERA.md | `picture_question.h`, `picture_loader.h`, `picture_fetch.h`, `screen_manager/app/picture_service.py` |
+| change the picture engine, the glass or a live stream's spot, or add a chip or panel kind | docs/PICTURE_ARCHITECTURE.md | `picture_engine.h`, `glass.h`, `live_spots.h`, `p4_build.py`, `live_view.cpp` |
 | change how a screen joins Home Assistant | docs/EASY_SETUP.md, chapter 3 | `screen_manager/app/ha_pairing.py`, Home Assistant's esphome config flow |
 | change a colour | docs/THEME.md | `components/smart_display/theme.h` |
 | change how pages are kept or prepared | docs/KEPT_PAGES.md, docs/PAGES.md | `kept_pages.h`, `page_protocol.h` |
 | make a control click or buzz as a finger presses or drags it | docs/PLUGINS.md, "Touch feedback" | `touch_feedback.h`, `touch_feedback_lvgl.h` |
+| change what a troubleshooting report holds, or how a crash is read | docs/REPORTS.md | `reports.py`, `redaction.py`, `ReportPanel.vue`, the website's `AddonReportController` |
 | make a control show its change before Home Assistant confirms it | docs/OPTIMISTIC.md | `optimistic.h`, `wish()` in `runtime_tiles.h` |
 | make a card follow a change without being built again | docs/CARD_PARTS.md | `card_bind()`, `card_shaped()` in `runtime_tiles.h` |
 | change what a plugin can do, or how plugins reach a screen | docs/PLUGINS.md, then the tessera-plugins repository's docs | `plugin_api.h`, `plugin_host.cpp`, `screen_manager/app/plugins.py`, `plugin_manifest.py` |
@@ -123,14 +132,19 @@ Most of these are guarded by a test; the test names the doc to read when it fail
 How much is checked follows the branch (next section): work on dev moves fast and is proven on real screens, a
 release is checked fully, once a week. docs/TESTING.md says what each layer proves.
 
-- **On dev the proof is the bench**: the three real boards on the owner's bench Home Assistant and its local app
-  (`.esphome/bench/README.md` on the owner's machine). Put the app on it, flash the change to the boards it concerns,
-  and have the owner look and tap. Run a single test when that is the quickest way to see a piece of logic work. No
-  `tools/check.sh`, no builds of other boards and no renders on dev, and a push to dev starts no CI. After a change
+- **On dev the proof is the bench**: the owner's home Home Assistant is the test Home Assistant (since 2026-10-29),
+  with the owner's real screens and the bench boards on the Mac mini's USB as screens of it. The bench HA VM and
+  `.esphome/bench/bench.py` are gone: never start, reset or deploy to that VM. Put dev on the house with the
+  deploy-home skill (`deploy_home.py dev`, after a push to `origin dev`), whose builds run on the Mac mini as the app's
+  build server, flash the change to the boards it concerns, and have the owner look and tap. Run a single test when
+  that is the quickest way to see a piece of logic work. No
+  `tools/check.sh`, no builds of other boards and no renders on dev, and a push to dev starts no CI but the Docker
+  image `:dev` when `screen_manager/` changed (docs/DOCKER.md, "Testing dev"). After a change
   under `web/src`, `cd web && npm run build` (the app serves that build) and commit `screen_manager/app/static` with it.
 - **At a release** (and a hotfix) everything runs, on the commit that goes out: `tools/check.sh`, CI on that commit
   (`tools/release.py ci`: every board on both ESPHome versions), the renders when the release changes what screens
-  draw, and the upgrade test on the bench (docs/TESTING.md, "6. The upgrade"). What fails there is fixed in the release.
+  draw, and the upgrade test on the home Home Assistant (docs/TESTING.md, "6. The upgrade"; the deploy-home skill's
+  `release-test`). What fails there is fixed in the release.
 - `tools/check.sh`: Python and C++ tests, package and generator checks, translations, the editor's tests, lint, types
   and build, the WASM preview tests and the layout audit of every card on every board shape.
 - Its firmware builds: `tools/check.sh --firmware --affected` builds the boards a change reaches; a change that reaches
@@ -160,7 +174,7 @@ Two branches, and the difference between them is the most important rule in this
   whether it is a release or work to test on the bench, before anything goes near main.
 - **The release**, about once a week: `tools/release.py` with docs/RELEASING.md, "The release", step by step. It counts
   everything since the last release as one: one app version, one CHANGELOG section, one firmware number, tested as an
-  upgrade from main on the bench, and then main moves to that exact commit with its tag and GitHub release. The
+  upgrade from main on the home Home Assistant, and then main moves to that exact commit with its tag and GitHub release. The
   plugins repository goes along in the same `publish`: its dev to its main, its index checked against the release.
 - **A hotfix** is for something broken for users now: a screen that doesn't start, an add-on that doesn't start, data
   that is lost. Branch from main (`hotfix-<what>`), fix it, release it alone with the same steps, then merge main into

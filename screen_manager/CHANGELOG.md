@@ -1,5 +1,8 @@
 ## Unreleased
 
+- **Remote packages use this fork's firmware fixes.** Generated board entries now fetch components and fonts
+  from this fork rather than upstream, so the ESPHome 2026.10 watchdog linker fix reaches remote-package builds.
+
 - **Firmware links with ESPHome 2026.10 again.** The watchdog recorder now captures the main loop's task handle
   during component setup instead of referencing ESPHome's removed private `loop_task_handle` variable.
   Watchdog diagnostics and the 7B backlight behavior are preserved.

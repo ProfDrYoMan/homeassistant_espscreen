@@ -27,6 +27,12 @@ Both entries of every board are written from `boards.yaml` by `tools/generate_en
 fails when one is out of date), so neither is edited by hand. The old profiles in the root of the repository are gone
 (app 0.2.129); a build from a checkout names `checkout/<board>.yaml`.
 
+In this fork the generated remote entries fetch their external components and fonts from
+`ProfDrYoMan/homeassistant_espscreen`, on the entry's `GITHUB_REF` (main by default). The screen's own
+`packages:` URL must also point to that fork. Fetching a board package from the fork does not redirect an
+`external_components:` URL inside it: leaving that URL on upstream bypasses fixes published only in the fork,
+even after cleaning the build. Change the generator and regenerate entries when changing their source repository.
+
 When a board selects a transport through an include such as `audio/${TRANSPORT}.yaml`,
 entry generation also discovers the sibling YAML variants' local components. This
 lets an override pick the other transport without editing generated entries. The

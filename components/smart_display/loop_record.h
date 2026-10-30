@@ -37,7 +37,8 @@ inline int scan(const uint32_t *from, const uint32_t *end, uint32_t *out, int mo
   return n;
 }
 
-// At boot: takes over the record the last task watchdog left, and forgets it where the reset left it.
+// From component setup on the main loop task: captures its handle, takes over the record the last task watchdog
+// left, and forgets it where the reset left it. No dependency on ESPHome's private task-handle symbols.
 void take();
 // With the config dump: logs the record taken at boot, if there was one.
 void report();

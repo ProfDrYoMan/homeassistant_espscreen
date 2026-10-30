@@ -1,5 +1,9 @@
 ## Unreleased
 
+- **Firmware links with ESPHome 2026.10 again.** The watchdog recorder now captures the main loop's task handle
+  during component setup instead of referencing ESPHome's removed private `loop_task_handle` variable.
+  Watchdog diagnostics and the 7B backlight behavior are preserved.
+
 - **Waveshare ESP32-S3-Touch-LCD-7B: fully dark backlight at 0%.** ESPHome's native output power supply switches
   EXIO2 off after brightness stays at zero for 5 s, and enables it with a 50 ms startup wait above zero.
   Brightness uses the expander's PWM directly, without fading or a template output. Other boards are unchanged.

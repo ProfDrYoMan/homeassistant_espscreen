@@ -41,6 +41,12 @@ with every text file readable inline and the zip to download. Five reports a day
 
 ## Crashes
 
+The watchdog recorder captures the current FreeRTOS task handle during component setup, which ESPHome runs on the
+main loop task. Its interrupt hook uses that saved handle rather than ESPHome's private `loop_task_handle` symbol,
+removed in ESPHome 2026.10. This preserves the loop and timer stack records on both older and newer ESPHome builds.
+`tests/test_loop_record_build.py` compiles and links the actual hook without that symbol and checks record recovery
+for single-core and dual-core configurations using FreeRTOS stubs; it does not test interrupt behavior on hardware.
+
 ESPHome keeps a record of a crash in RAM that survives the reboot (`esp32/crash_handler.cpp`): the reason, the PC, up to
 16 backtrace addresses. It is logged, and cleared, for the first client that subscribes to the log after the boot.
 Home Assistant subscribes only when the entry's "Subscribe to logs" option is on, so the record waits for the app.

@@ -12,10 +12,6 @@
 #include <freertos/task.h>
 #include <esp_private/freertos_debug.h>
 
-namespace esphome {
-extern TaskHandle_t loop_task_handle;  // the main loop's task, esphome/components/esp32/core.cpp
-}
-
 namespace loop_record {
 
 namespace {
@@ -43,9 +39,12 @@ bool is_code(uint32_t word) { return esp_ptr_executable(reinterpret_cast<const v
 
 Record taken{};
 bool had = false;
+TaskHandle_t loop_task = nullptr;  // captured during component setup, which runs on the main loop task
 TaskHandle_t timer_task = nullptr;  // looked up at boot: the watchdog's interrupt cannot search the tasks by name
 
 void take() {
+  // ESPHome 2026.10 removed its private loop_task_handle. Keep our own handle before any watchdog interrupt.
+  loop_task = xTaskGetCurrentTaskHandle();
   timer_task = xTaskGetHandle("esp_timer");
   if (record.magic != MAGIC) return;
   taken = record;
@@ -88,7 +87,7 @@ void report() {
 // ESP-IDF calls this in the task watchdog's interrupt, before it prints and aborts (task_wdt.c). The main loop is the
 // one task the watchdog watches on these screens, so its stack is what to keep: no logging here, an interrupt.
 extern "C" void esp_task_wdt_isr_user_handler(void) {
-  TaskHandle_t loop = esphome::loop_task_handle;
+  TaskHandle_t loop = loop_record::loop_task;
   if (loop == nullptr) return;
   TaskSnapshot_t snapshot;
   if (vTaskGetSnapshot(loop, &snapshot) != pdTRUE) return;

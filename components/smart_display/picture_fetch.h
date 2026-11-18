@@ -88,6 +88,8 @@ struct Head {
   // screen's clock, what is left over the least of it is how long the picture waited on its way (live_view.cpp).
   bool has_made = false;
   uint32_t made = 0;
+  // X-Sound: talk, a part of sound from someone in a conversation: the screen plays it with a far smaller run-up.
+  bool talk = false;
   // X-Turn: the app turned a live picture as a turned glass is (90, 180 or 270 degrees, the hello's picture_turn), so
   // the screen copies it onto the glass straight (live_view.cpp, show); 0: upright.
   int turn = 0;
@@ -152,6 +154,8 @@ inline Head parse_head(const char *data, size_t size) {
           h.audio = ve - v >= 6 && same_ignoring_case(line + v, "audio/", 6);
         } else if (colon == 9 && same_ignoring_case(line, "x-picture", 9)) {
           h.still = ve - v == 5 && same_ignoring_case(line + v, "still", 5);
+        } else if (colon == 7 && same_ignoring_case(line, "x-sound", 7)) {
+          h.talk = ve - v == 4 && same_ignoring_case(line + v, "talk", 4);
         } else if (colon == 6 && same_ignoring_case(line, "x-made", 6)) {
           uint32_t n = 0;
           bool digits = v < ve;
@@ -400,6 +404,10 @@ void bind(Slot &slot, Done done);
 // Starts the download of `url` (a new link forgets the ETag of the last). While one runs, this one waits for its end:
 // a load that was released (cancelled) ends at its next chunk.
 void load(Slot &slot, const std::string &url);
+// The same with the ETag of a picture its owner already has (another link of the same picture comes back 304), "" for none.
+void load(Slot &slot, const std::string &url, const std::string &etag);
+// The ETag of the slot's last picture, "" without one.
+std::string etag(const Slot &slot);
 // Frees the picture; a download on its way is cancelled and reports nothing.
 void release(Slot &slot);
 // The store took the picture over (picture_store::adopt): the slot forgets its pixels without freeing them, and

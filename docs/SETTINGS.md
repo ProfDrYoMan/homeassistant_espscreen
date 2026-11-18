@@ -29,6 +29,7 @@ changes them with the entity's own action, and leaves them out of the layout mes
 | Also on standby | `switch.<screen>_back_to_page_1_on_standby` | `home_on_standby` |
 | Swipe between pages | `switch.<screen>_swipe_between_pages` | `swipe_pages` |
 | Page buttons (0.2.69+) | `switch.<screen>_page_buttons` | `page_buttons` |
+| Loop pages | `switch.<screen>_loop_pages` | `loop_pages` (on by default: past the last page comes the first, by swipe and by the bar) |
 | Show home button (0.2.100+) | `switch.<screen>_show_home_button` | `home_button` |
 | Rotation | `select.<screen>_rotation` | `rotation` (0.2.80+ on every board: a half turn on any glass, the quarter turns as well on a square one; standing up or lying down on other glass is the editor's Grid button, firmware 0.53.0+, because it changes the grid) |
 | Debug mode (This screen) | `switch.<screen>_debug_mode`, a diagnostic entity | none: the screen and Home Assistant only, and the troubleshooting report, which turns it on for its own read of the log |
@@ -88,7 +89,7 @@ The page is a menu of groups, each of which opens a page of its own:
 |---|---|
 | Brightness | Brightness (dimmable backlight), Dark mode, Auto standby, Standby after, Standby brightness or Screen on in standby (boards that can go dark) |
 | Night (boards that can go dark) | Night mode, Starts, Ends, Night brightness or Screen on at night |
-| Screen | Back to Home, After, Also on standby (boards that can go dark), Swipe between pages, Page buttons, Show home button, Rotation |
+| Screen | Back to Home, After, Also on standby (boards that can go dark), Swipe between pages, Page buttons, Loop pages, Show home button, Rotation |
 | This screen | Screen, Address, Wi-Fi (network and signal), Firmware, Home Assistant, Tessera, Debug mode, Calibrate touch (a resistive panel that has a wizard), Restart; the rows say their values again every two seconds while the page is open |
 
 Every change is stored on the screen, applied at once and published on its entity, so Home Assistant and
@@ -125,7 +126,7 @@ settings, so a new setting never travels in the layout message.
 - Anything new is a plain value in `settings_screen.h` next to `swipe_pages`, `rotation` and `auto_home`,
   with a preference record of its own: load it in `runtime_tiles::load_settings()` and write it in
   `persist_settings()`.
-- Every preference key in use stays what it is: `0x53435231` the frozen block, and one key each for swipe,
+- Every preference key in use stays what it is: `0x53435231` the frozen block, and one key each for swipe, loop pages (`0x4C4F5031`), Back to Home
   Back to Home (`HomeTimeout`, two uint32), dark mode, page buttons, the home button (`0x48425431`, firmware 0.60.0:
   before it the button was back after every restart, GitHub #319), number format, rotation and the alarm lock
   (`runtime_tiles.h`), and the CYD's calibration (`0x43594403`, `cyd_calibration.h`). Never reuse, renumber or
@@ -168,7 +169,7 @@ it presses the screen's own entity for it: `Calibrate touch` is a button on the 
 there is also how the app knows this screen has a wizard at all (`core.calibrate_entity`).
 
 Watch the count: a group of more than five rows gets a pager on a 320x240 board. Six is the maximum
-that still fits a 480x480 board in one go. The Screen group already has seven rows.
+that still fits a 480x480 board in one go. The Screen group already has eight rows.
 
 ### 3. The entity
 
@@ -221,9 +222,13 @@ by a board fact rather than written into one board file: `shown` on the row, and
 
 - `tests/test_settings_screen.cpp` (`clang++ -std=c++17 -Wall -Wextra -Werror -I.`) walks every page and
   every row, and checks `set()`: add the key to its table of clamps.
-- `tests/test_screen_owned_settings.py` checks the entities in both profiles, `SETTING_ENTITIES`, the editor
-  rows (labels, steps and the duration ladder against `settings_screen.h`) and the add-on's calls;
-  `tests/test_settings_view.py` and `tests/test_layout.py` cover the rest of the add-on side.
+- `tests/test_screen_owned_settings.py` checks the entities on every board, `SETTING_ENTITIES`, the editor
+  rows against the rows of `settings_screen.h` and the add-on's calls; `tests/test_settings_view.py` and
+  `tests/test_layout.py` cover the rest of the add-on side. The duration ladder and the -/+ steps are run on both
+  sides over the same edges (`web/tests/settings.spec.ts`, `tests/test_settings_screen.cpp`), and
+  `web/wasm/test_settings_tile.mjs` taps the settings card with the link down in the firmware preview.
+- `tools/render/run.py guition --only standby` runs Wake, Sleep, Auto standby, Back to page 1 and a setting the
+  screen changes itself on the real firmware (a host build), and reads its clocks, pages and entities back.
 - Look at it before believing it: `tools/render/run.py <board>` builds the real firmware of a board as a program
   for this computer (`tools/render/host.py`, SDL2) and drives it over its API (docs/TESTING.md). It renders the
   tile pages, the cards and the alerts, not the settings pages, so walk every settings page on a screen as well,
@@ -255,12 +260,12 @@ What the boards have today:
 
 | Board | Extras | Where it comes from |
 |---|---|---|
-| reTerminal D1001 | Volume, Microphone, Wake when moved | `features/audio.yaml`, and the board file for its motion sensor |
+| reTerminal D1001 | Volume, Microphone, Call ringtone, Do not disturb, Call voice switching, Wake when moved | `features/audio.yaml`, and the board file for its motion sensor |
 | Guition 4-inch (4848S040) | Backlight PWM, Dimmest level | the board file: its backlight's PWM (150 Hz dims every batch, some whine under 20 kHz, GitHub #327) and the floor it dims to (1 % is under some drivers' start, GitHub #337) |
-| Waveshare ESP32-P4 86 panel, ESP32-P4-WIFI6-Touch-LCD-7B, -7 and -10.1 | Volume, Microphone, Microphone gain, Automatic gain, Echo cancellation (AEC transport) | `hardware/wavesharep4-audio.yaml` (its parts in `hardware/parts/`) and the shared audio player |
-| M5Stack Tab5 | Volume, Microphone, Echo cancellation (AEC transport) | `hardware/parts/es7210.yaml` and `es8388.yaml` and the shared audio player |
-| CrowPanel Advanced 10.1 | Volume, Microphone | `features/audio.yaml` |
-| Guition JC8012P4A1 (and its V2 and V3), JC1060P470 (and its V2), JC4880P443 | Volume, Microphone | `hardware/guition-p4-audio.yaml` and `features/audio.yaml` |
+| Waveshare ESP32-P4 86 panel, ESP32-P4-WIFI6-Touch-LCD-7B, -7 and -10.1 | Volume, Microphone, Call ringtone, Do not disturb, Call voice switching, Microphone gain, Automatic gain, Echo cancellation (AEC transport) | `hardware/wavesharep4-audio.yaml` (its parts in `hardware/parts/`) and the shared audio player |
+| M5Stack Tab5 | Volume, Microphone, Call ringtone, Do not disturb, Call voice switching, Echo cancellation (AEC transport) | `hardware/parts/es7210.yaml` and `es8388.yaml` and the shared audio player |
+| CrowPanel Advanced 10.1 | Volume, Microphone, Call ringtone, Do not disturb, Call voice switching | `features/audio.yaml` |
+| Guition JC8012P4A1 (and its V2 and V3), JC1060P470 (and its V2), JC4880P443 | Volume, Microphone, Call ringtone, Do not disturb, Call voice switching | `hardware/guition-p4-audio.yaml` and `features/audio.yaml` |
 
 A plugin's settings work the same way, from its own ESPHome entities, on its own settings page and in its details on
 the screen's Plugins tab (docs/PLUGINS.md); the code that finds and changes them is one module for both.

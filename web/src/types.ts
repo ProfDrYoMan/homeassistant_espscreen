@@ -1,6 +1,6 @@
 /** The cards built into a screen, with no Home Assistant entity of their own (core.py BUILTIN, the page tiles aside). */
 export type BuiltinName = "clock" | "nightstand" | "settings" | "map" | "energy" | "text";
-export const BUILTIN_CARDS: string[] = ["screen.clock", "screen.nightstand", "screen.settings", "screen.map", "screen.energy", "screen.text"];
+export const BUILTIN_CARDS: string[] = ["screen.clock", "screen.nightstand", "screen.settings", "screen.map", "screen.energy", "screen.text", "screen.call"];
 // A plugin tile's option as it is kept (plugin API 0.12): a text, number or toggle; a pick of a list found by searching,
 // {value, label} with the words the person saw; or a list of texts or picks (the add-on's core.plugin_options).
 // A light's preset as the tile keeps it: a brightness, a white shade in kelvin or a colour (hue, saturation), an effect
@@ -28,6 +28,9 @@ export type TileOptions = {
   icon?: string;
   background?: string;
   history_hours?: number;
+  // The Call tile (docs/CALLS.md): a screen's node, none for the list; video where it can, or sound only.
+  call_to?: string;
+  call_kind?: string;
   action?: { action: string; data?: Record<string, unknown> };
   // The template tile's template (docs/TEXT_TILE.md, text_tile.py): Home Assistant renders it, the screen gets rows.
   template?: string;
@@ -44,6 +47,14 @@ export type TileOptions = {
   ahead?: number;
   soon?: number;
   start_view?: string;
+  // A to-do card's choices (todo_feed.validate): its order (Home Assistant's own), whether it shows what is done and
+  // due days, and whether the screen may add items, offers names while typing and may remove what is done.
+  todo_order?: string;
+  todo_completed?: boolean;
+  todo_due?: boolean;
+  todo_add?: boolean;
+  todo_suggest?: boolean;
+  todo_clear?: boolean;
   // ... and the week's first day, its hours, the month's week numbers, and where "Status and booking" books.
   week_start?: string;
   hours?: [number, number];
@@ -84,8 +95,9 @@ export type HeaderItem = { id?: string; type: string; entity?: string; content?:
 // said before it went offline.
 // `room` is null while the screen is still measuring it (firmware 0.51.0).
 // `bar_cards`: the screen takes cards from its top bar (firmware 0.56.0), so its tiles of the top bar count too (model/memory.ts).
+// `sections`: the screen draws sections, so a page's sections count too (any other screen is sent none).
 export type ScreenMemory = { room: number | null; used: number; psram: boolean; tile: number; extra: number; page?: number; short?: boolean; live?: boolean;
-  bar_cards?: boolean };
+  bar_cards?: boolean; sections?: boolean };
 // `barItems`: the items one page's top bar takes there (model/pages.ts barLimit). `plugins`: whether plugin tiles and
 // items are taken there (the add-on serves plugins, the plugins store's pluginsEnabled); never stored with a document.
 export type PageGrid = Readonly<{ columns: number; rows: number; pages?: number; barItems?: number; plugins?: boolean }>;
@@ -104,6 +116,8 @@ export type PageTile = {
   appearance: { label: string; presentation?: "single" | "wide" | "tall" | "square" | "full" | `${number}x${number}`; display?: string; icon?: string; background?: string; historyHours?: number; refresh?: number; subtitle?: string; fit?: string; overlay?: string;
     mapEntities?: string[]; mapFraming?: string; mapDistance?: string; mapFollow?: string; mapMarkers?: string; mapNames?: string;
     mapZones?: string; mapStreets?: string; mapLook?: string; energyFlow?: string;
+    // The Call tile: whom it calls and how (docs/CALLS.md).
+    callTo?: string; callKind?: string;
     // The template tile's template (docs/TEXT_TILE.md): TileOptions' template.
     textTemplate?: string;
     // A calendar card's choices (firmware 0.56.0): TileOptions' style, calendars, places, words, hide_words, all_day,
@@ -111,6 +125,8 @@ export type PageTile = {
     calendarStyle?: string; calendarEntities?: string[]; calendarPlaces?: string[]; calendarWords?: string[]; calendarHideWords?: string[];
     calendarAllDay?: boolean; calendarTentative?: boolean; calendarPrivate?: boolean; calendarAhead?: number; calendarSoon?: number; calendarStartView?: string;
     calendarWeekStart?: string; calendarHours?: [number, number]; calendarWeekNumbers?: boolean; calendarBookOn?: string; calendarBookPlace?: string; calendarBookTitle?: string;
+    // A to-do card's choices: TileOptions' todo_order, todo_completed, todo_due, todo_add, todo_suggest and todo_clear.
+    todoOrder?: string; todoCompleted?: boolean; todoDue?: boolean; todoAdd?: boolean; todoSuggest?: boolean; todoClear?: boolean;
     // A sensor's meter (firmware 0.56.0): TileOptions' meter, min, max, segments, colors and thresholds.
     meterStyle?: string; meterMin?: number; meterMax?: number; meterSegments?: number; meterColors?: string[]; meterThresholds?: number[] };
   interaction: { tap?: string; inline?: string; controls?: string; action?: TileOptions["action"]; guard?: string; play?: FavoritePlay; speaker?: string; shuffle?: string; repeat?: string; tilt_open?: string;
@@ -129,7 +145,24 @@ export type Page = {
   tiles: PageTile[];
   // The page's own icon by name (a pickable MDI icon), which the Dock shows instead of its picture; left out, the picture.
   icon?: string;
+  // Sections (docs/PAGES.md "Sections"): blocks of cells with a title, an icon and a panel. Left out on a page without
+  // any. Every tile of the page stands in `tiles`, as before sections; a tile belongs to the section whose block it lies
+  // in (model/page-tiles.ts sectionOf).
+  sections?: Section[];
 };
+// A section's block on its page's grid; it holds no tiles of its own. `summary`: an entity whose state the section's
+// band shows at its right end.
+export type Section = {
+  id: string; title: string; icon?: string; summary?: string;
+  // The panel in the page's opposite colour, so the section stands out (off unless chosen); with `contrastTiles` the
+  // whole section is a piece of the other look, its tiles' cards too.
+  contrast?: boolean; contrastTiles?: boolean;
+  placement: { row: number; column: number; columns: number; rows: number };
+};
+// A section as the editor's slot view sees it (projectLayout): its page and its block in the page's cells, and every
+// field a section has. Made from Section, so a field added there is here too (model/pages.ts blockOfSection and
+// sectionOfBlock are the one way from one to the other).
+export type SectionBlock = Omit<Section, "placement"> & Section["placement"] & { page: number };
 export type PageLayout = { title: string; homePageId: string; pages: Page[] };
 export type PageWorkspace = { revision: string; positions: Record<string, { x: number; y: number }> };
 export type PageDocument = {
@@ -146,6 +179,8 @@ export type Layout = {
   page_titles?: string[];
   header?: { items: HeaderItem[] };
   settings?: Record<string, any>;
+  // Every page's sections, with their page (projectLayout), so the mockup draws them where the tiles are.
+  sections?: SectionBlock[];
   [key: string]: unknown;
 };
 export type UpdateInfo = {
@@ -312,7 +347,12 @@ export type Screen = {
       watch_icon?: number; setpoint?: number; icon?: number };
     // The grid in glass pixels (boards.json); its heights (gap_y, top, page_bar) and a card's circle from app 0.4.74, a
     // card's corner and its icon's face (fonts.icon) from app 0.4.90.
-    spacing?: { margin: number; gap: number; tile_pad: number; gap_y?: number; top?: number; page_bar?: number; circle?: number; radius?: number } } | null;
+    spacing?: { margin: number; gap: number; tile_pad: number; gap_y?: number; top?: number; page_bar?: number; circle?: number; radius?: number };
+    // A section's band on this glass (boards.json, module_sections.h): its height and its title's top in it.
+    section?: { band: number; title_top: number; ink_top?: number; line?: number } } | null;
+  // Sections on a page (docs/PAGES.md "Sections"): its board has the module (the full tier), and its own hello says it
+  // draws them now (an older firmware does not, and gets the same tiles without them).
+  sections?: boolean; sections_drawn?: boolean;
   // Which way it was built to hang (app 0.2.107): a screen standing up has another canvas and another grid, and
   // while it is offline only the YAML of its own profile says so.
   orientation?: Orientation;
@@ -326,6 +366,14 @@ export type Screen = {
   dock?: boolean;
   // Whether its board draws the template tile (boards.json `modules` has text_card, docs/TEXT_TILE.md).
   text_tiles?: boolean;
+  /** The board has the module call: the Call tile is offered. */
+  call_tiles?: boolean;
+  // Whether its board has the to-do card (boards.json `modules` has todo, docs/TODO.md): 8 MB of flash or more. The
+  // library offers to-do lists there only.
+  todo_lists?: boolean;
+  // Whether its board edits a text with the keyboard (boards.json `modules` has text_edit, docs/TEXT_ENTITY.md): elsewhere
+  // a text's tile shows its value only, and the editor says so.
+  text_edit?: boolean;
   // Whether its board draws a light's presets (boards.json `modules` has light_presets, docs/LIGHT_PRESETS.md).
   light_presets?: boolean;
   /** Streams a camera live (a P4 whose hello says `live`, or such a board while it is offline): Live is a camera tile's
@@ -354,7 +402,7 @@ export type Languages = {
 // `boards`: the boards a firmware for some boards alone is for (app 0.3.21); empty or absent for the shared firmware.
 export type ChangelogSection = { app: string; firmware: string; boards?: string[]; lines: string[] };
 // `unavailable_since`: when an unavailable entity last changed in Home Assistant, in seconds; only on an unavailable one.
-export type Entity = { id: string; name: string; area?: string; device?: string; icon?: string; state?: string; tile?: boolean; screen_name?: string; unavailable_since?: number };
+export type Entity = { id: string; name: string; area?: string; device?: string; icon?: string; state?: string; tile?: boolean; screen_name?: string; unavailable_since?: number; words?: string };
 export type IconInfo = { name: string; cp: string; label: string };
 // What is being built for one screen right now, whoever asked (Manager.builds in the add-on): the firmware update, a
 // plugin build, or New screen and Firmware & USB. The editor's one source for "something is building". Every build waits
@@ -362,7 +410,7 @@ export type IconInfo = { name: string; cp: string; label: string };
 // build's own, which the line (LineBuild) names with its outcome once it ended. An update that a plugin build joined
 // names the plugins it brings too.
 export type Build = {
-  id?: number; by: "update" | "plugins" | "install"; state: "queued" | "running"; place?: number; file?: string | null;
+  id?: number; by: "update" | "plugins" | "icons" | "install"; state: "queued" | "running"; place?: number; file?: string | null;
   stage?: string | null; phase?: string | null; plugins?: string[];
 } & ServerSide;
 // Where a build's compile runs (the add-on's build_server.py): `server` with the build server's name and its step
@@ -427,11 +475,15 @@ export type Inventory = {
   // The CHANGELOG by release, newest first: only in the full inventory, not in the live payload (app 0.2.78).
   changelog?: ChangelogSection[];
   claude_skill?: { path: string; installed: boolean; current: boolean; restart?: boolean };
+  // Layoutbot (docs/LAYOUTBOT.md): the AI Tasks of Home Assistant that can make data; none, no bot.
+  layoutbot?: { id: string; name: string }[];
   // Video in Home Assistant (Settings, screen_video.py): the tessera_video integration in Home Assistant's folder, the
   // version Home Assistant runs (null until it restarted with it), and the screens with Screen camera's part Video.
   video?: VideoIntegration;
   icons?: {
     groups: { label: string; icons: IconInfo[] }[];
+    // What every screen carries beyond the groups (tile_icons.editor), for a screen with room for icons of its own.
+    more?: IconInfo[];
     builtin?: Record<string, string>; weather: Record<string, string>; sun: Record<string, string>; calendar?: Record<string, string>;
     defaults: Record<string, string>; fallback: string; controls?: Record<string, string>;
   };

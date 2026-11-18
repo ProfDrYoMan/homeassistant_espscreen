@@ -13,7 +13,8 @@
 // driver keeps none. Every other board, the host renders and the editor's preview have no direct glass: direct() is
 // false and the rest are inline stubs that cost no flash.
 //
-// Two writers reach the frame buffer, and the lock covers both. LVGL's refresh (on a turned glass through ESPHome's own
+// Two writers reach the frame buffer, and the lock covers both (a third, the veil over the glass, comes between LVGL's
+// refreshes on the main loop and waits for streams the same way). LVGL's refresh (on a turned glass through ESPHome's own
 // PPA turn of each strip into a buffer in PSRAM, then the panel's DMA copy) holds it from LV_EVENT_REFR_START to
 // REFR_READY; a stream's task holds it for each decode and each copy. Without it a stream's first picture could land
 // while LVGL was still drawing the still and the name it had decided on before the stream armed, and that drawing then
@@ -54,6 +55,28 @@ inline Rect on_panel(const Rect &r, int turn, int pw, int ph) {
   }
 }
 
+// ---- A veil, past LVGL ----
+// A layer of `scrim` at `opa` over a pixel of RGB565, to the bit as LVGL draws it (lv_color_16_16_mix, which mixes in
+// steps of 1/32: `mix` is that step), so a part LVGL draws later under the same dim meets the part laid on the glass
+// without a seam.
+constexpr uint8_t veil_mix(uint8_t opa) { return static_cast<uint8_t>((opa + 4U) >> 3); }
+inline uint16_t veiled(uint16_t pixel, uint16_t scrim, uint8_t mix) {
+  if (pixel == scrim) return pixel;
+  const uint32_t bg = (pixel | (static_cast<uint32_t>(pixel) << 16)) & 0x7E0F81FU;
+  const uint32_t fg = (scrim | (static_cast<uint32_t>(scrim) << 16)) & 0x7E0F81FU;
+  const uint32_t mixed = ((((fg - bg) * mix) >> 5) + bg) & 0x7E0F81FU;
+  return static_cast<uint16_t>((mixed >> 16) | mixed);
+}
+// The way back, each colour within a few steps of 31 or 63 of what it was: the mix has lost its last bits. LVGL draws the
+// whole glass again afterwards; this is what shows until it has.
+inline uint16_t unveiled(uint16_t dark, uint16_t scrim, uint8_t mix) {
+  const auto back = [&](int shift, int most) {
+    const int kept = 32 - mix, value = (32 * ((dark >> shift) & most) - mix * ((scrim >> shift) & most) + kept / 2) / kept;
+    return static_cast<uint16_t>((value < 0 ? 0 : value > most ? most : value) << shift);
+  };
+  return static_cast<uint16_t>(back(11, 31) | back(5, 63) | back(0, 31));
+}
+
 // ---- The panel's share of the memory bus ----
 // The DSI bridge reads the frame buffer from PSRAM without pause, a frame every 16 ms; when another DMA (the PPA, the
 // JPEG decoder, the DMA2D that copies what LVGL drew) holds the bus too long, the bridge runs dry and the panel shows
@@ -74,9 +97,23 @@ struct Panel {
 // A room LVGL keeps out of while a stream writes there; -1 for none.
 using Room = int;
 constexpr int MAX_ROOMS = 8;
+constexpr int MAX_WAITING = 32;  // the areas LVGL's list holds (LV_INV_BUF_SIZE; glass_core.cpp checks it)
 // The FreeRTOS priority a writer waits for the glass at: a stream's task runs at it, and a still's download waits at it
 // in turn with them (picture_engine::decode), as a mutex goes to its highest waiter.
 constexpr unsigned WRITER_PRIORITY = 5;
+// How a writer waits for the glass and lets go of it, pure (tests/test_live_view.cpp): raised to WRITER_PRIORITY before
+// it asks, never lowered (a task above it stays where it is), and back at its own priority `own` only once it let go.
+// A still's download that waited at its own priority 1 waited behind four live tiles for up to two minutes (a
+// reTerminal D1001, 2026-10-25, "11011 ms waiting for the glass, 2 ms holding it"). `set` sets the calling task's
+// priority (vTaskPrioritySet); `hold` asks for the glass (hold, hold_counted) and `release` gives it back.
+template<typename Set, typename Hold> auto wait_as_writer(unsigned own, Set set, Hold hold) -> decltype(hold()) {
+  if (own < WRITER_PRIORITY) set(WRITER_PRIORITY);
+  return hold();
+}
+template<typename Set, typename Release> void leave_as_writer(unsigned own, Set set, Release release) {
+  release();
+  if (own < WRITER_PRIORITY) set(own);
+}
 
 #if (defined(GLASS_DSI) || defined(GLASS_RGB)) && defined(SCREEN_PICTURES)
 // LVGL, which says how the glass is turned (smart_display/__init__.py binds it at boot), and whether it is bound yet (a
@@ -114,6 +151,36 @@ void give_back(Room room);
 // LVGL draws the whole glass again (a full view's stream gone for good, its room drawn again while its task may still
 // have been busy with its last picture).
 void redraw_all();
+// LVGL draws a room's area again, armed or not: a tile's stream gone for good, as redraw_all for a full view. A 10.1
+// inch kept a camera tile's last picture over the next page where nothing of that page drew (2026-11-15).
+void redraw(Room room);
+// Every pixel of the glass outside `keep` (a rectangle of the screen as LVGL lays it out, empty for none) goes under a
+// veil of `scrim` at `opa`, or comes out from under it, in the frame buffer itself, without LVGL: what a dim over the
+// whole glass would cost LVGL a whole redraw for. Row by row in four passes through the glass, so what the panel shows
+// meanwhile is a dim that deepens evenly and not one that wipes across it. On the main loop, between LVGL's refreshes.
+// False, and nothing done, without a frame buffer, with LVGL paused or while a stream writes the glass (an armed room:
+// its picture would go on bright through the veil).
+bool veil(const Rect &keep, uint16_t scrim, uint8_t opa, bool on);
+bool veilable();  // whether veil would do it now
+bool drawing();   // LVGL is bound and not paused: its timers run and a refresh draws
+// ---- A page's picture, past LVGL (page_pictures.h, docs/KEPT_PAGES.md "Page pictures") ----
+// A rectangle of the panel copied between the frame buffer and a buffer laid out as the frame buffer is (panel().w
+// pixels a row, the same place in both), by the processor: the PPA stays the streams'. The caller holds the glass.
+// taken: the glass as it is now, into `to`, past whatever the processor's cache still held of it (LVGL's strips reach the
+// frame buffer through the panel's DMA copy, not through the cache). laid: `from` onto the glass; it shows once shown()
+// has written the rows from `row` on back to the memory the panel reads. differs: how many pixels of the rectangle are
+// not the same in both, for a build that proves a picture (SWIPE_PROFILE).
+void taken(const Rect &on_panel, uint16_t *to);
+void laid(const Rect &on_panel, const uint16_t *from);
+void shown(int row, int rows);
+uint32_t differs(const Rect &on_panel, const uint16_t *with);
+// What LVGL has waiting to draw, or at LV_EVENT_RENDER_START is about to draw: up to `most` rectangles of the screen as
+// LVGL lays it out into `areas`, and how many there are (LVGL's own list, its joined areas left out). 0 means the glass
+// holds what LVGL drew, but for the streams' rooms.
+int waiting(Rect *areas, int most);
+// Where the streams that write the glass now have their pictures (armed rooms' spots, rectangles of the screen as LVGL
+// lays it out): up to `most` of them into `spots`, and how many there are.
+int streaming(Rect *spots, int most);
 // How often the panel ran dry since boot: the frames of blue (the panel watch below counts them), every 50 ms from the
 // streams' tick.
 void tick();
@@ -168,6 +235,16 @@ inline void disarm(Room, bool) {}
 inline void follow(Room) {}
 inline void give_back(Room) {}
 inline void redraw_all() {}
+inline void redraw(Room) {}
+inline void taken(const Rect &, uint16_t *) {}
+inline void laid(const Rect &, const uint16_t *) {}
+inline void shown(int, int) {}
+inline uint32_t differs(const Rect &, const uint16_t *) { return 0; }
+inline int waiting(Rect *, int) { return 0; }
+inline int streaming(Rect *, int) { return 0; }
+inline bool veil(const Rect &, uint16_t, uint8_t, bool) { return false; }
+inline bool veilable() { return false; }
+inline bool drawing() { return false; }
 inline void tick() {}
 inline uint32_t misses() { return 0; }
 inline std::string watch_said() { return {}; }
@@ -182,6 +259,18 @@ struct Held {
 inline Held held_since() { return {}; }
 inline uint32_t hold_counted() { return 0; }
 inline void engine_took(uint32_t) {}
+#endif
+
+// A long copy by the processor to or from the frame buffer leaves the panel in peace: a MIPI-DSI panel's DMA repeats its
+// frame by itself with no interrupt between two frames (glass_dsi_refresh.cpp), and 2 MB copied under the glass lock
+// cost no dry frame (docs/KEPT_PAGES.md, "Page pictures", measured 2026-11-16). An RGB panel is fed from an interrupt
+// and must never be held up, so it is not steady. Page pictures are built only for a steady glass: a build without one
+// has none of their code.
+#if defined(GLASS_DSI) && defined(SCREEN_PICTURES)
+#define GLASS_STEADY 1
+inline bool steady() { return direct(); }
+#else
+inline bool steady() { return false; }
 #endif
 
 }  // namespace glass

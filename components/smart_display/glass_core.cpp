@@ -4,7 +4,9 @@
 // Moved out of glass_dsi.cpp as it was: the lock's reach, the keep-out's rule and the invalidations are unchanged.
 #include "glass.h"
 #if (defined(GLASS_DSI) || defined(GLASS_RGB)) && defined(SCREEN_PICTURES)
+#include <algorithm>
 #include <atomic>
+#include <cstring>
 
 #include "esphome/components/lvgl/lvgl_esphome.h"
 #include "esphome/core/log.h"
@@ -16,6 +18,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#if defined(GLASS_DSI)
+#include <esp_cache.h>
+#include <sdkconfig.h>
+#endif
 
 namespace glass {
 
@@ -319,12 +325,188 @@ void give_back(Room room) {
   s->used = false;
   filter_when_rooms();
 }
+void redraw(Room room) {
+  RoomState *s = room_at(room);
+  if (s && !s->area.empty()) invalidate(lv_rect(s->area));
+}
 void redraw_all() {
   lv_display_t *display = lv_display_get_default();
   if (!display) return;
   const lv_area_t whole = {0, 0, lv_display_get_horizontal_resolution(display) - 1,
                            lv_display_get_vertical_resolution(display) - 1};
   invalidate(whole);
+}
+
+// ---- A veil, past LVGL (glass.h) ----
+// A P4's panel reads the frame buffer from PSRAM past the cache, so what the CPU wrote is written back. An S3's panel
+// reads it through the cache (glass_rgb.cpp).
+static void written(uint16_t *from, size_t bytes) {
+#if defined(GLASS_DSI)
+  esp_cache_msync(from, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+#else
+  (void) from;
+  (void) bytes;
+#endif
+}
+// ---- A page's picture, past LVGL (glass.h) ----
+// The rows of the frame buffer a rectangle lies on, read past the processor's cache: what the cache held of them is let
+// go, so the copy reads what the panel shows. Whole cache lines, outward: the frame buffer begins on one, and nothing
+// the processor wrote waits in them (the veil and laid() are written back at once).
+static void read_fresh(uint16_t *fb, const Panel &p, int row, int rows) {
+#if defined(GLASS_DSI)
+#if defined(CONFIG_CACHE_L2_CACHE_LINE_SIZE) && CONFIG_CACHE_L2_CACHE_LINE_SIZE > 64
+  const size_t line = CONFIG_CACHE_L2_CACHE_LINE_SIZE;  // the chip's largest cache line, as the build set it
+#else
+  const size_t line = 64;
+#endif
+  const size_t whole = static_cast<size_t>(p.w) * p.h * 2, row_bytes = static_cast<size_t>(p.w) * 2;
+  size_t from = static_cast<size_t>(row) * row_bytes / line * line;
+  size_t to = (static_cast<size_t>(row + rows) * row_bytes + line - 1) / line * line;
+  if (to > whole) to = (whole + line - 1) / line * line;
+  const esp_err_t said = esp_cache_msync(reinterpret_cast<uint8_t *>(fb) + from, to - from, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+  static bool told = false;
+  if (said != ESP_OK && !told) {
+    told = true;
+    ESP_LOGW(TAG, "the frame buffer cannot be read past the cache: %s", esp_err_to_name(said));
+  }
+#else
+  (void) fb; (void) p; (void) row; (void) rows;
+#endif
+}
+static bool on(const Panel &p, const Rect &r) { return r.x >= 0 && r.y >= 0 && r.w > 0 && r.h > 0 && r.x + r.w <= p.w && r.y + r.h <= p.h; }
+void taken(const Rect &r, uint16_t *to) {
+  const Panel p = panel();
+  auto *fb = static_cast<uint16_t *>(frame_buffer());
+  if (!fb || !to || !on(p, r)) return;
+  read_fresh(fb, p, r.y, r.h);
+  for (int y = r.y; y < r.y + r.h; ++y) {
+    const size_t at = static_cast<size_t>(y) * p.w + r.x;
+    memcpy(to + at, fb + at, static_cast<size_t>(r.w) * 2);
+  }
+}
+void laid(const Rect &r, const uint16_t *from) {
+  const Panel p = panel();
+  auto *fb = static_cast<uint16_t *>(frame_buffer());
+  if (!fb || !from || !on(p, r)) return;
+  for (int y = r.y; y < r.y + r.h; ++y) {
+    const size_t at = static_cast<size_t>(y) * p.w + r.x;
+    memcpy(fb + at, from + at, static_cast<size_t>(r.w) * 2);
+  }
+}
+void shown(int row, int rows) {
+  const Panel p = panel();
+  auto *fb = static_cast<uint16_t *>(frame_buffer());
+  if (!fb || row < 0 || rows <= 0 || row + rows > p.h) return;
+  written(fb + static_cast<size_t>(row) * p.w, static_cast<size_t>(rows) * p.w * 2);
+}
+uint32_t differs(const Rect &r, const uint16_t *with) {
+  const Panel p = panel();
+  auto *fb = static_cast<uint16_t *>(frame_buffer());
+  if (!fb || !with || !on(p, r)) return 0;
+  read_fresh(fb, p, r.y, r.h);
+  uint32_t n = 0;
+  for (int y = r.y; y < r.y + r.h; ++y) {
+    const size_t at = static_cast<size_t>(y) * p.w + r.x;
+    if (!memcmp(fb + at, with + at, static_cast<size_t>(r.w) * 2)) continue;
+    for (int x = 0; x < r.w; ++x) n += fb[at + x] != with[at + x];
+  }
+  return n;
+}
+static_assert(MAX_WAITING >= LV_INV_BUF_SIZE, "glass::waiting hands out every area LVGL's list holds");
+int waiting(Rect *areas, int most) {
+  lv_display_t *display = lv_display_get_default();
+  int n = 0;
+  for (uint32_t i = 0; display && i < display->inv_p; ++i) {
+    if (display->inv_area_joined[i]) continue;
+    const lv_area_t &a = display->inv_areas[i];
+    if (areas && n < most) areas[n] = Rect{a.x1, a.y1, a.x2 - a.x1 + 1, a.y2 - a.y1 + 1};
+    ++n;
+  }
+  return n;
+}
+int streaming(Rect *spots, int most) {
+  int n = 0;
+  for (auto &s : rooms) {
+    if (!s.used || !s.armed) continue;
+    if (spots && n < most) {
+      const Rect spot = spot_of(s);
+      spots[n] = spot.empty() ? s.area : spot;
+    }
+    ++n;
+  }
+  return n;
+}
+bool drawing() { return lvgl && !lvgl->is_paused(); }
+bool veilable() {
+  if (!direct() || !frame_buffer() || lvgl->is_paused()) return false;
+  for (auto &s : rooms)
+    if (s.used && s.armed) return false;
+  return true;
+}
+bool veil(const Rect &keep, uint16_t scrim, uint8_t opa, bool on) {
+  const Panel p = panel();
+  auto *fb = static_cast<uint16_t *>(frame_buffer());
+  if (!veilable()) return false;
+  hold();
+  if (!veilable()) {  // a stream armed its room while this waited for the glass
+    release();
+    return false;
+  }
+  const int64_t started = esp_timer_get_time();
+  const Rect k = keep.empty() ? Rect{} : on_panel(keep, turn(), p.w, p.h);
+  const int left = std::min(std::max(k.x, 0), p.w), right = std::min(std::max(k.x + k.w, 0), p.w);
+  const uint8_t mix = veil_mix(opa);
+  // The way back has a division in it: per colour once here, instead of per pixel.
+  uint16_t reds[32] = {}, greens[64] = {}, blues[32] = {};
+  if (!on) {
+    for (int v = 0; v < 32; ++v) {
+      reds[v] = unveiled(static_cast<uint16_t>(v << 11), scrim, mix) & 0xF800;
+      blues[v] = unveiled(static_cast<uint16_t>(v), scrim, mix) & 0x001F;
+    }
+    for (int v = 0; v < 64; ++v) greens[v] = unveiled(static_cast<uint16_t>(v << 5), scrim, mix) & 0x07E0;
+  }
+  const auto one = [&](uint16_t pixel) -> uint16_t {
+    const uint16_t native = p.swapped ? static_cast<uint16_t>(pixel << 8 | pixel >> 8) : pixel;
+    const uint16_t out = on ? veiled(native, scrim, mix) : static_cast<uint16_t>(reds[native >> 11] | greens[(native >> 5) & 63] | blues[native & 31]);
+    return p.swapped ? static_cast<uint16_t>(out << 8 | out >> 8) : out;
+  };
+  // Two pixels at a time: a page is mostly long runs of one colour, so the last sum is asked for again far more often
+  // than not, and the loop is what is left to save beside the memory.
+  uint32_t last_in = ~static_cast<uint32_t>(0), last_out = 0;
+  const auto pass = [&](uint16_t *row, int n) {
+    if (n > 0 && (reinterpret_cast<uintptr_t>(row) & 2)) {
+      *row = one(*row);
+      ++row;
+      --n;
+    }
+    auto *word = reinterpret_cast<uint32_t *>(row);
+    for (int i = 0; i < n / 2; ++i) {
+      const uint32_t pair = word[i];
+      if (pair != last_in) {
+        last_in = pair;
+        last_out = one(static_cast<uint16_t>(pair)) | static_cast<uint32_t>(one(static_cast<uint16_t>(pair >> 16))) << 16;
+      }
+      word[i] = last_out;
+    }
+    if (n & 1) row[n - 1] = one(row[n - 1]);
+  };
+  // The time goes to the memory (36 ms for a frame of 800 x 1280 on a P4, on one core or on two, 2026-11-10), and a
+  // frame lasts 17: spread over the glass the pixels that changed so far read as a dim on its way, and not as an edge.
+  for (int first : {0, 2, 1, 3}) {
+    for (int row = first; row < p.h; row += 4) {
+      uint16_t *line = fb + static_cast<size_t>(row) * p.w;
+      if (!k.empty() && row >= k.y && row < k.y + k.h) {
+        pass(line, left);
+        pass(line + right, p.w - right);
+      } else {
+        pass(line, p.w);
+      }
+    }
+    written(fb, static_cast<size_t>(p.w) * p.h * 2);
+  }
+  release();
+  ESP_LOGD(TAG, "veil %s in %d ms", on ? "on" : "off", static_cast<int>((esp_timer_get_time() - started) / 1000));
+  return true;
 }
 
 }  // namespace glass

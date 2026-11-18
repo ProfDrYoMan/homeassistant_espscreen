@@ -20,9 +20,13 @@ export function cardLook(shape: Shape) {
 }
 export type CardLook = ReturnType<typeof cardLook>;
 
+// The ink of icons a screen took on top of the fixed set (stores/screenIcons.ts), which icon-ink.json does not hold.
+const ownInk: Record<string, number[]> = {};
+export function knowInk(code: string, bounds: number[]) { ownInk[code.toUpperCase()] = bounds; }
+
 /** A glyph's ink at `size` pixels, as the glass rasterises it (freetype's box around the outline). */
 export function inkBox(code: string, size: number) {
-  const bounds = (ink as Record<string, number[] | number>)[code.toUpperCase()];
+  const bounds = ownInk[code.toUpperCase()] || (ink as Record<string, number[] | number>)[code.toUpperCase()];
   if (!Array.isArray(bounds)) return null;
   const [x0, y0, x1, y1] = bounds, k = size / ink.upm;
   return { w: Math.ceil(x1 * k) - Math.floor(x0 * k), h: Math.ceil(y1 * k) - Math.floor(y0 * k) };
@@ -42,11 +46,14 @@ export function cardPadY(shape: Shape, down: number) {
 
 /** Where a card stands on its page and the room inside it, in glass pixels: `columns` x `rows` of the page's `across` x
  * `down` cells from (`column`, `row`), with the page bar under the grid when the layout has one. */
-export type CardPlace = { across: number; down: number; column: number; row: number; columns: number; rows: number; paged: boolean };
+// In a section (docs/PAGES.md "Sections"): `inner` what the card's height gains (less than nothing: the room the
+// section's header and padding take from it), `margin` the panel's padding at the card's sides together.
+export type CardPlace = { across: number; down: number; column: number; row: number; columns: number; rows: number; paged: boolean;
+  inner?: number; margin?: number };
 export function cardRoom(shape: Shape, p: CardPlace) {
   const padY = cardPadY(shape, p.down), pad = frameOf(shape).tile_pad;
-  const height = cardHeight(shape, p.down, p.rows, p.row, p.paged);
-  return { pad, padY, width: cardContent(shape, p.across, p.columns, p.column), height: Math.max(0, height - 2 - 2 * padY), outer: height };
+  const height = cardHeight(shape, p.down, p.rows, p.row, p.paged) + (p.inner ?? 0);
+  return { pad, padY, width: cardContent(shape, p.across, p.columns, p.column) - (p.margin ?? 0), height: Math.max(0, height - 2 - 2 * padY), outer: height };
 }
 
 export type TextBox = { x: number; y: number; width: number; size: number; line: number; weight: number; center?: boolean };

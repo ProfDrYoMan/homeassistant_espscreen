@@ -197,7 +197,11 @@
       "plugins": "Plugins",
       "microphone_gain": "Microphone gain",
       "automatic_gain": "Automatic gain",
-      "echo_cancellation": "Echo cancellation"
+      "call_ringtone": "Call ringtone",
+      "do_not_disturb": "Do not disturb",
+      "call_voice_switching": "Call voice switching",
+      "echo_cancellation": "Echo cancellation",
+      "loop_pages": "Loop pages"
     },
     "doorbell": {
       "sound_on": "Sound on",
@@ -206,7 +210,12 @@
       "door_confirm": "Tap again to open",
       "door_sent": "Sent",
       "talk": "Talk",
-      "coming_soon": "Coming soon"
+      "tap_talk": "Tap to talk",
+      "talking": "Talking",
+      "tap_stop": "Tap to stop",
+      "connecting": "Connecting",
+      "talk_busy": "Someone else is talking",
+      "talk_failed": "No connection"
     },
     "tile": {
       "tap_to_open": "Tap to open",
@@ -649,6 +658,42 @@
       "calendars": "Calendars",
       "also": "+{x} now",
       "booked": "Booked on the screen"
+    },
+    "todo": {
+      "open": "{x} open",
+      "all_done": "All done",
+      "more": "+{x} more",
+      "completed": "Completed",
+      "add": "Add item",
+      "added": "{x} added",
+      "rename": "Rename",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "clear": "Remove {x} completed?",
+      "waiting": "Loading",
+      "empty": "Nothing on the list",
+      "yesterday": "Yesterday"
+    },
+    "call": {
+      "title": "Call",
+      "calling": "Calling",
+      "calling_video": "Calling with video",
+      "video": "Video call",
+      "audio": "Call",
+      "decline": "Decline",
+      "answer": "Answer",
+      "ended": "Call ended",
+      "declined": "Declined",
+      "busy": "In another call",
+      "no_answer": "No answer",
+      "quiet": "Do not disturb",
+      "gone": "Not reachable",
+      "available": "Available",
+      "sound_only": "Available with sound only",
+      "in_call": "In a call",
+      "offline": "Offline",
+      "missed_at": "Missed call",
+      "no_screens": "No other screen can be called"
     }
   },
   "addon": {
@@ -886,7 +931,11 @@
         "destination_exists": "Destination screen already has a saved layout",
         "update_tall": "Update the screen to use these tile sizes",
         "memory": "The screen does not have enough free memory for this layout. Reduce the number of tiles.",
-        "grid_range": "This screen does not take a grid of that size. Choose another grid beside the mockup."
+        "grid_range": "This screen does not take a grid of that size. Choose another grid beside the mockup.",
+        "section_title": "A section needs a name of at most 48 bytes.",
+        "section_tiles": "A section's tiles must stand inside it, and a tile over the whole page never stands in a section.",
+        "section_overlap": "Sections and loose tiles may not stand on the same cells.",
+        "sections_full": "A page holds at most 16 sections."
       },
       "feedback": {
         "invalid": "This answer can't be shared. Choose yes or not quite, and only the listed problems.",
@@ -983,6 +1032,10 @@
         "refused": "Home Assistant refused the automation: {reason}",
         "not_ours": "That automation was not made by Tessera, so the app leaves it alone.",
         "invalid": "This automation cannot be saved ({part})."
+      },
+      "icons": {
+        "request": "That is not a list of icons.",
+        "too_many": "A screen takes at most {most} icons of its own."
       }
     },
     "status": {
@@ -1198,6 +1251,18 @@
         "automatic_gain": {
           "label": "Automatic gain",
           "hint": "Let the microphone codec adjust the recording level. Independent of echo cancellation."
+        },
+        "call_ringtone": {
+          "label": "Call ringtone",
+          "hint": "Off, a call lights the screen up and shows who is calling, without a sound."
+        },
+        "do_not_disturb": {
+          "label": "Do not disturb",
+          "hint": "On, a call to this screen is refused at once and the caller reads why. The doorbell still rings."
+        },
+        "call_voice_switching": {
+          "label": "Call voice switching",
+          "hint": "On, the microphone of the side that listens goes quiet, so a voice does not come back as an echo. Off, both sides can speak at once. A small key in a call changes it for that call."
         },
         "echo_cancellation": {
           "label": "Echo cancellation",
@@ -1445,7 +1510,8 @@
         "alert_outline": "Warning",
         "cog": "Settings",
         "broom": "Cleaning",
-        "diabetes": "Diabetes"
+        "diabetes": "Diabetes",
+        "phone": "Phone"
       }
     },
     "screen": {
@@ -1455,7 +1521,8 @@
         "page": "Go to page {page}",
         "map": "Map",
         "energy": "Energy",
-        "text": "Template"
+        "text": "Template",
+        "call": "Call"
       },
       "identify": {
         "title": "This is {name}",
@@ -1576,6 +1643,13 @@
         "missed": "Nobody touched it before its timeout",
         "seen": "A missed ring was opened again from the top bar"
       }
+    },
+    "layoutbot": {
+      "none": "Layoutbot needs an AI Task in Home Assistant that can generate data (Settings > Devices & services, an AI integration).",
+      "notes": {
+        "unknown": "Left out {entity}: it is not an entity of this Home Assistant.",
+        "no_page": "There is no page {page}."
+      }
     }
   },
   "editor": {
@@ -1593,6 +1667,8 @@
       "read_current_data": "Read current data",
       "results": "1 result. Keep typing to narrow it down. | {n} results. Keep typing to narrow it down.",
       "close": "Close",
+      "expand": "Show more",
+      "collapse": "Show less",
       "remove": "Remove",
       "loading": "Loading…",
       "back": "← Back",
@@ -1898,7 +1974,7 @@
     "library": {
       "title": "Library",
       "entities": "{n} entity | {n} entities",
-      "search": "Search by name, device, or room…",
+      "search": "Search by name, room, device or type…",
       "search_label": "Add an entity",
       "filters": {
         "all": "All",
@@ -1916,6 +1992,7 @@
         "vacuum": "Vacuum",
         "sensor": "Sensors",
         "media_player": "Media",
+        "camera": "Cameras",
         "weather": "Weather",
         "number": "Values",
         "select": "Selects",
@@ -1925,7 +2002,9 @@
         "alarm_control_panel": "Alarm",
         "lock": "Locks",
         "humidifier": "Humidifiers",
-        "calendar": "Calendars"
+        "calendar": "Calendars",
+        "todo": "To-do lists",
+        "text": "Texts"
       },
       "room": "Room",
       "hide_placed": "Hide placed",
@@ -1933,6 +2012,8 @@
       "again": "Already on this screen; add it again for another tile",
       "all_placed": "Everything here is already on this screen.",
       "none_found": "No entities found. Try a different name, room or filter.",
+      "found_elsewhere": "Nothing in this selection, but 1 entity matches in the whole library. | Nothing in this selection, but {n} entities match in the whole library.",
+      "search_everything": "Show all matches",
       "full": "This screen holds 1 tile. | This screen holds {n} tiles.",
       "full_update": "This screen holds 1 tile; update its firmware for 48. | This screen holds {n} tiles; update its firmware for 48.",
       "hint": "Drag onto a page, or tap + to add to the first free slot. ⌘K searches everything.",
@@ -1989,7 +2070,10 @@
       "alarm_control_panel": "Alarm panel",
       "lock": "Lock",
       "humidifier": "Humidifier",
-      "calendar": "Calendar"
+      "calendar": "Calendar",
+      "todo": "To-do list",
+      "text": "Text",
+      "input_text": "Text"
     },
     "displays": {
       "standard": "standard",
@@ -2485,6 +2569,46 @@
           "unknown": "{id} is not in Home Assistant",
           "replace": "Replace with {id}"
         }
+      },
+      "todo": {
+        "title": "To-do list",
+        "plain": "This board cannot show a to-do list: it needs a board with 8 MB of flash or more. Remove this tile.",
+        "needs_firmware": "The to-do list needs firmware 0.61.0 or newer: press Update on the screen after saving.",
+        "order": {
+          "label": "Order",
+          "hint": "As Home Assistant's own to-do list card orders them",
+          "none": "As in Home Assistant",
+          "alpha_asc": "Name, A to Z",
+          "alpha_desc": "Name, Z to A",
+          "duedate_asc": "Due date, first due first",
+          "duedate_desc": "Due date, last due first"
+        },
+        "completed": "Completed items",
+        "completed_hint": "Shown under the open items, struck through, where there is room",
+        "due": "Due dates",
+        "due_hint": "The day beside an item; late is red",
+        "screen": "On the screen",
+        "add": "Add items",
+        "add_hint": "A plus key on the tile and a field in the list open the screen's keyboard",
+        "suggest": "Suggest names",
+        "suggest_hint": "While typing, the keyboard offers what was ticked off before; a tap puts it back on the list",
+        "clear": "Remove completed",
+        "clear_hint": "A key in the list removes everything that is ticked off, after asking"
+      },
+      "call": {
+        "section": "Call",
+        "who": "Calls",
+        "who_hint_all": "A tap opens the list of screens.",
+        "who_hint_one": "A tap calls this screen at once.",
+        "everyone": "Choose from the list",
+        "kind": "Kind of call",
+        "kind_hint": "Video needs the Screen camera plugin with its part Video on both screens, otherwise it is a call with sound.",
+        "video": "Video where possible",
+        "sound": "Sound only"
+      },
+      "text_entity": {
+        "edit": "A tap opens the value in a field with the screen's keyboard. A password shows as dots.",
+        "view_only": "This board shows the value only: changing it on the screen needs a board with 8 MB of flash or more."
       }
     },
     "precision": {
@@ -2521,7 +2645,9 @@
       "search_label": "Search for an icon",
       "none_text_only": "No icon, text only",
       "aria": "Icon: {name}",
-      "none_found": "No icon found."
+      "none_found": "No icon found.",
+      "own": "Icons of this screen",
+      "more": "More icons"
     },
     "inspect": {
       "title": "Current data",
@@ -2639,7 +2765,8 @@
         "swipe_pages": "Swipe between pages",
         "page_buttons": "Page buttons",
         "home_button": "Show home button",
-        "rotation": "Rotation"
+        "rotation": "Rotation",
+        "loop_pages": "Loop pages"
       },
       "actions": {
         "calibrate": {
@@ -3424,7 +3551,10 @@
     "mockup": {
       "home": "Home",
       "unknown": "Unknown",
-      "calendar_free": "Free"
+      "calendar_free": "Free",
+      "todo_open": "{x} open",
+      "todo_all_done": "All done",
+      "todo_more": "+{x} more"
     },
     "pages": {
       "repaired": "Page {page}, tile “{tile}”: took out what did not fit ({what}).",
@@ -3660,6 +3790,7 @@
       "packet_error": "Firmware rejected a preview packet: {message}",
       "stopped": "Firmware preview stopped: {message}",
       "action_error": "Home Assistant command failed: {message}",
+      "stale": "This preview is older than the firmware: it was built on {date} and the firmware has changed since, so a screen may draw something this does not show yet.",
       "remove": "The preview and its saved layout in this browser.",
       "save": "Save preview",
       "saved": "Saved in this browser",
@@ -3733,7 +3864,9 @@
         "layout_imported": "layout imported",
         "changed": "layout changed",
         "restored": "unsaved changes restored",
-        "taken_over": "changes from the other tab taken over"
+        "taken_over": "changes from the other tab taken over",
+        "auto_layout": "the layout made for you",
+        "layoutbot": "Layoutbot's change"
       }
     },
     "draft": {
@@ -3786,6 +3919,12 @@
       "later": "Maybe later",
       "donated": "I already donated",
       "thanks": "Thank you! This won't ask again."
+    },
+    "funding": {
+      "title": "Looking for funding",
+      "body": "I have a day job that pays the bills, and it comes first. Tessera keeps getting bigger, and I simply don't have the time it needs. To keep it alive, I need funding: so I can give it the time it deserves, or hire someone to help. If you can help, send me an email.",
+      "mail": "Email me",
+      "later": "Not now"
     },
     "plugins": {
       "title": "Plugins",
@@ -3871,6 +4010,8 @@
         "title": "What it adds",
         "tile": "Tile “{name}”",
         "tile_sizes": "From {min} to {max} on a page",
+        "tile_sizes_or_page": "From {min} to {max} on a page, or the whole page",
+        "tile_only_page": "The whole page",
         "tap": "Tap action “{name}”",
         "tap_on": "On tiles of {domains}",
         "card": "“{name}”, a screen of its own on the glass",
@@ -3884,7 +4025,10 @@
         "ha_none": "Runs no Home Assistant actions",
         "network": "Connects to {hosts}",
         "network_none": "Makes no connections outside Home Assistant",
-        "read": "Reads these entities from Home Assistant"
+        "read": "Reads these entities from Home Assistant",
+        "sends": "Sends to {host}: {what}",
+        "sends_option": "{attributes} of the entity you choose for {option}",
+        "sends_state": "state"
       },
       "warning": "A plugin runs on your screen with full access to it, including its Wi-Fi and the actions it may perform in Home Assistant, and its build runs in this app, where it can reach your Home Assistant configuration. Only add plugins from makers you trust, or read the code first.",
       "room": {
@@ -4193,7 +4337,8 @@
       },
       "forget": {
         "go": "Remove from the list",
-        "note": "No screen runs this plugin. Remove it from the list to forget the link."
+        "note": "No screen runs this plugin. Remove it from the list to forget the link.",
+        "note_folder": "No screen runs this plugin from its folder. Removing it moves the folder to config/tessera-plugins/.removed/{id}, where you can delete it for good."
       }
     },
     "plugin_tile": {
@@ -4206,6 +4351,9 @@
       "from_fetch": "The choices come from the plugin's own data source, through Tessera.",
       "on_screen": "On the screen",
       "sizes": "From {min} to {max}; drag an edge of the tile to change its size.",
+      "sizes_or_page": "From {min} to {max}, or the whole page; drag an edge of the tile to change its size.",
+      "sizes_only_page": "This tile always takes a whole page.",
+      "whole_page": "Whole page",
       "placeholder": "The editor shows a placeholder: what the plugin draws appears on the screen itself.",
       "now": "now",
       "minutes": "{n} min",
@@ -4220,7 +4368,14 @@
       "remove": "Remove {name}",
       "type": "Type and press Enter",
       "full": "The screen takes no more for this tile: its options are full.",
-      "count": "{n} of {max}"
+      "count": "{n} of {max}",
+      "show_all": "Show all entities",
+      "show_fitting": "Show only what fits",
+      "not_set": "Not set",
+      "fill_device": "Fill from a device",
+      "fill_device_hint": "Choose a device and its sensors are filled in below. You can still change each one.",
+      "fill_device_none": "No device has two or more of these sensors",
+      "fill_device_count": "1 sensor | {n} sensors"
     },
     "build": {
       "plugins": "Building with its plugins",
@@ -4253,7 +4408,8 @@
           "fetch": "the firmware did not come back",
           "bundle": "the YAML could not be packed"
         }
-      }
+      },
+      "icons": "Building with its icons"
     },
     "grid": {
       "title": "Grid",
@@ -4551,6 +4707,212 @@
     },
     "drawer": {
       "resize": "Resize the settings: drag, or use the arrow keys; double-click to reset"
+    },
+    "screen_icons": {
+      "eyebrow": "Icons",
+      "title": "Icons of {name}",
+      "intro": "Every screen carries a fixed set of icons. Here you add up to {room} more. Icons are part of the firmware, so a change only reaches the screen after it builds again.",
+      "count": "{n} of {room} added",
+      "on_screen": "On this screen",
+      "none_yet": "None yet. Pick from the icons below.",
+      "waiting": "1 icon waits for a build | {n} icons wait for a build",
+      "leaving": "1 icon leaves with the next build | {n} icons leave with the next build",
+      "changes": "Build to put these changes on the screen. It takes a few minutes and the screen restarts.",
+      "build": "Build {name}",
+      "building": "Building with these icons…",
+      "all_up_to_date": "Everything you picked is on the screen.",
+      "everywhere": "Put on every screen",
+      "everywhere_ask": "This replaces the added icons of {n} screen and builds it. | This replaces the added icons of {n} screens and builds them one after the other. A screen with 4 MB of flash stays as it is.",
+      "everywhere_yes": "Build {n} screen | Build {n} screens",
+      "everywhere_done": "Waiting to build: {names}",
+      "everywhere_off": "Off, so not built: {names}",
+      "from_ha": "Used in your Home Assistant",
+      "from_ha_hint": "Icons your entities have that this screen cannot draw yet.",
+      "add_all": "Add all",
+      "all": "All icons",
+      "search": "Search all icons",
+      "search_label": "Search all icons",
+      "nothing": "No icon has that name.",
+      "fixed": "Already on every screen",
+      "full": "This screen has no more room.",
+      "in_use": "{icon} is on {n} tile of this screen. It shows its automatic icon after the next build. | {icon} is on {n} tiles of this screen. They show their automatic icon after the next build.",
+      "remove": "Remove",
+      "own_yaml": "This screen is built from its own YAML. Save this as {file} next to it, add the line below under packages:, and build it there.",
+      "loading": "Loading the icons…",
+      "card_title": "Icons",
+      "card_hint": "Add up to {room} icons to the ones this screen carries.",
+      "card_button": "Choose icons",
+      "card_count": "{n} added",
+      "card_waiting": "{n} waiting for a build",
+      "card_no_room": "This board has 4 MB of flash, with no room for more icons."
+    },
+    "sections": {
+      "untitled": "Section",
+      "kind": "Section",
+      "choose_tiles": "Choose the tiles for the section first.",
+      "one_page": "A section's tiles stand on one page: choose tiles of one page.",
+      "already_in": "One of these tiles is already in a section. Take it out first, or choose loose tiles.",
+      "no_full": "A tile over the whole page cannot stand in a section.",
+      "too_tall": "These tiles need more rows than the page has. Choose fewer, or make the section wider.",
+      "no_room": "There is no room for that here: other tiles or sections are in the way.",
+      "no_room_page": "No room for the section on page {page}.",
+      "removed": "Section removed, its tiles stay where they are",
+      "removed_with_tiles": "Section removed with its tiles",
+      "resize_columns": "Make the section wider or narrower",
+      "resize_rows": "Make the section taller or lower",
+      "head_title": "Drag to move the section, click for its settings",
+      "aria": "Section {title}",
+      "rename": "Rename the section",
+      "title": "Name",
+      "make": "Make a section",
+      "add": "Add a section",
+      "add_here": "Add a section here",
+      "library_hint": "A titled group of tiles",
+      "make_now": "Make the section",
+      "name_placeholder": "Name, for example Lights",
+      "in_section": "In this section",
+      "update_screen": "This screen's firmware does not draw sections yet: it shows the same tiles without them. Update the screen to see them.",
+      "head": "Title",
+      "no_icon": "No icon",
+      "summary": "Summary",
+      "summary_none": "None",
+      "summary_search": "Search entities",
+      "summary_none_found": "No entity found",
+      "summary_clear": "No summary",
+      "summary_hint": "One entity's state at the right of the title, such as a temperature or how many lights are on.",
+      "size": "Size",
+      "columns": "Columns",
+      "rows": "Rows",
+      "narrower": "Narrower",
+      "wider": "Wider",
+      "lower": "Lower",
+      "taller": "Taller",
+      "size_hint": "A section grows only into empty cells. When it gets too narrow for its tiles, they move up in reading order.",
+      "loose_hint": "1 loose tile stands beside a section. Loose tiles read best as a row of their own above the sections. | {n} loose tiles stand beside a section. Loose tiles read best as a row of their own above the sections.",
+      "loose_row": "Make it a row",
+      "short_grid": "On a grid of {rows} rows a section's title takes a lot of room from its tiles: each is about {with} mm high instead of {without} mm. Tiles outside sections keep their height.",
+      "remove": "Remove section",
+      "remove_with_tiles": "Remove section and tiles",
+      "settings": "Section settings",
+      "contrast": "Contrast background",
+      "contrast_hint": "The panel in the page's opposite colour, dark by day and light in Dark mode, so this section stands out.",
+      "contrast_tiles": "Tiles in contrast too",
+      "contrast_tiles_hint": "The whole section in the other look, its tiles' cards too: dark cards on a dark panel by day, light ones in Dark mode."
+    },
+    "auto": {
+      "groups": {
+        "lights": "Lights",
+        "covers": "Blinds & windows",
+        "climate": "Climate",
+        "media": "Media",
+        "security": "Security",
+        "actions": "Scenes",
+        "others": "Devices",
+        "weather": "Weather",
+        "people": "Who is home",
+        "energy": "Energy",
+        "cameras": "Cameras",
+        "vacuum": "Vacuum",
+        "todo": "Lists",
+        "calendar": "Calendar"
+      },
+      "home": "Home",
+      "all_lights": "All lights",
+      "two_rooms": "{a} & {b}",
+      "room_list": "{list} & {last}",
+      "more_rooms": "{a} and {n} more",
+      "button": "Auto layout",
+      "button_title": "Make pages from your Home Assistant rooms and devices",
+      "title": "Make a layout for you",
+      "intro": "Tessera looks at your Home Assistant areas and devices and makes pages for this screen: a page or section per room, the house's weather, alarm, people and cameras together, larger tiles where this screen has room for them. You can undo it and change anything afterwards.",
+      "reading": "Reading your home…",
+      "failed": "Your home could not be read: {error}",
+      "nothing": "Tessera found nothing for this screen to show yet. Give your devices an area in Home Assistant, or add tiles from the library.",
+      "nothing_new": "Everything Tessera would put on this screen is on it already.",
+      "summary": "{pages} page · {tiles} tiles | {pages} pages · {tiles} tiles",
+      "summary_sections": "{n} section in it | {n} sections in it",
+      "from_rooms": "from one room | from {n} rooms",
+      "left_out": "One more entity found no room on this screen; the library has it. | {n} more entities found no room on this screen; the library has them.",
+      "replace": "Replace the pages",
+      "replace_hint": "The screen gets these pages instead of the ones it has now.",
+      "append": "Add after the current pages",
+      "append_hint": "The pages it has stay, the new ones come after them with what is not on the screen yet.",
+      "append_full": "This screen has no pages or tiles left for more. Replace the pages, or make room first.",
+      "make": "Make the layout",
+      "made": "A layout of {pages} page is ready. Undo takes it back. | A layout of {pages} pages is ready. Undo takes it back.",
+      "offer_title": "Shall I make a first layout for you?",
+      "offer_text": "Tessera can lay out this screen from your Home Assistant rooms and devices. You can change everything afterwards.",
+      "offer_make": "Make a first layout",
+      "offer_empty": "Start empty"
+    },
+    "layoutbot": {
+      "name": "Layoutbot",
+      "open": "Ask Layoutbot",
+      "close": "Close",
+      "hello": "Hi! Tell me what this screen should show and I'll arrange its pages. I only change the layout, never your devices.",
+      "privacy": "I use {agent} from Home Assistant. Your question, the pages of your screens and the ids, names and areas of your entities go to it.",
+      "placeholder": "Make a page with…",
+      "ask": "Ask",
+      "send": {
+        "ask": "Shall I send it to {which}?",
+        "yes": "Yes, send it",
+        "no": "Not now",
+        "sending": "Sending…",
+        "sent": "Sent. The screen shows it in a moment.",
+        "not_all": "Not everything was sent.",
+        "failed": "Could not send to {which}.",
+        "declined": "Not sent. Save & send does it whenever you like.",
+        "to": "Sending to {name}",
+        "not_opened": "that screen could not be opened",
+        "not_saved": "it was not saved",
+        "unsaved": "the open screen has unsaved changes",
+        "own": "Your own changes since the last save go along."
+      },
+      "busy": "Layoutbot is arranging your pages",
+      "seconds": "{n} s",
+      "stop": "Stop",
+      "stopped": "Stopped. Nothing changed.",
+      "nothing": "Nothing changed.",
+      "stale": "The pages changed while I was thinking, so I left them as they are. Ask me again.",
+      "show": "Show",
+      "undo": "Undo",
+      "undone": "Undone",
+      "suggest": {
+        "lights_sections": "Put all the lights on one page, in a section per room",
+        "lights": "Put all the lights on one page",
+        "covers_sections": "A page with all the blinds and curtains, in two sections",
+        "covers": "A page with all the blinds and curtains",
+        "media": "A music page with all the speakers",
+        "climate": "A climate page with the heating and the temperatures"
+      },
+      "what": {
+        "pages": "1 new page | {n} new pages",
+        "added": "1 tile added | {n} tiles added",
+        "removed": "1 tile taken off | {n} tiles taken off",
+        "changed": "page {pages} changed | pages {pages} changed"
+      },
+      "connect": {
+        "title": "Connect an AI in Home Assistant",
+        "short": "Not connected yet",
+        "body": "I arrange this screen's pages from a sentence, such as \"all the lights on one page, a section per room\". For that I use the AI you connect to Home Assistant: add one of these integrations and I do the rest.",
+        "cloud": "In the cloud, with your own key",
+        "local": "On your own computer",
+        "after": "Any AI integration with AI Tasks works. Once it is added, look again here.",
+        "again": "Look again"
+      },
+      "notes": {
+        "page_full": "Page {page} is full, so {count} tile was left out. | Page {page} is full, so {count} tiles were left out.",
+        "memory_full": "The screen's memory is full, so {count} tile was left out. | The screen's memory is full, so {count} tiles were left out.",
+        "left_out": "The screen had no room for {count} more tile. | The screen had no room for {count} more tiles.",
+        "no_page": "There is no page {page}.",
+        "not_drawn": "The screen draws no tile of {count} entity. | The screen draws no tile of {count} entities."
+      },
+      "update_app": "Update the Tessera app: this editor places Layoutbot's plans itself.",
+      "scope": {
+        "here": "This screen",
+        "all": "All screens"
+      },
+      "preview": "Look"
     }
   }
 }

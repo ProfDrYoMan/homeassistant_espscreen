@@ -36,6 +36,7 @@ ESPHome Device Builder is optional:
 | Guition, 10.1 inch (new) | JC8012P4A1, 1280×800, JD9365 MIPI-DSI and GSL3680, ESP32-P4 ([details](JC8012P4A1.md)) |
 | Guition, 10.1 inch V2 (experimental) | JC8012P4A1 V2, 1280×800, JD9365 MIPI-DSI and GSL3680, early ESP32-P4 with the newer LCD ([details](JC8012P4A1.md)) |
 | Waveshare P4, 10.1 inch (experimental) | ESP32-P4-WIFI6-Touch-LCD-10.1, 1280×800, JD9365 MIPI-DSI and GT911, pre-v3 ESP32-P4 ([details](WAVESHARE101.md)) |
+| Waveshare P4, 10.1 inch V3 (new) | ESP32-P4-WIFI6-Touch-LCD-10.1 with rev3 ESP32-P4 silicon ("chip revision: v3" in the USB log), 1280×800, JD9365 MIPI-DSI and GT911 ([details](WAVESHARE101.md)) |
 | Guition, 10.1 inch V3 (experimental) | JC8012P4A1 V3, 1280×800, JD9365 MIPI-DSI and GSL3680, rev3 ESP32-P4 ([details](JC8012P4A1.md)) |
 | Guition, 7 inch (experimental) | JC1060P470 or JC1060P470 V2, 1024×600, JD9165 MIPI-DSI and GT911, ESP32-P4 ([details](JC1060P470.md)) |
 | Waveshare P4, 4 inch (experimental) | ESP32-P4-86-Panel-ETH-2RO, 720×720, ST7703 MIPI-DSI and GT911, ESP32-P4 ([details](WAVESHAREP4.md)) |
@@ -535,6 +536,7 @@ device in Home Assistant ([SETTINGS.md](SETTINGS.md)).
 | Also on standby | Standby goes back to the Home page too (it always closes an open card) | Off |
 | Swipe between pages | Native horizontal swipe, firmware 0.2.7+ | On for a screen set up with New screen, off for one set up before |
 | Page buttons | Off: no buttons under the tiles, the tiles take their room, firmware 0.2.69+ | On |
+| Loop pages | On: past the last page comes the first, and before the first the last. Off: the pages stop at their ends | On |
 | Show home button | The Tessera logo at the far left of the top bar; tapping it goes back to the Home page, firmware 0.2.100+ (a house before firmware 0.10.0) | On |
 | Rotation | 0° or 180°, and also 90° and 270° on a square screen; every board from firmware 0.2.80 | 0° |
 

@@ -35,17 +35,23 @@ subject in the same commit, and a measurement goes with it; the map is updated w
 | add a screen setting | docs/SETTINGS.md | `settings_screen.h`, `SETTING_RULES` in `screen_manager/app/core.py` |
 | give a board a setting of its own (Extras: on the screen, in the app, in Home Assistant) | docs/SETTINGS.md, "A board's own settings" | `boards.yaml` `settings`, the board's `BOOT_BOARD_SETTINGS`, `entity_settings.py` |
 | add a board | docs/ADDING_A_BOARD.md, then docs/BOARD_RELEASES.md | `boards.yaml`, `packages/boards/<file>.yaml` |
+| change sections on a page (titled groups of tiles) | docs/PAGES.md, "Sections" | `section_layout.h`, `module_sections.h`, `page_layout.py` (`sections_of`), `web/src/model/sections.ts` |
+| change the first layout the editor makes from a home (Auto layout), or how groups of tiles are placed on pages | docs/AUTO_LAYOUT.md | `web/src/model/auto-layout.ts`, `web/src/model/placement.ts`, `screen_manager/app/home_facts.py` |
 | add a part of the UI that only the larger boards get | docs/MODULES.md | `components/smart_display/modules.py`, `module_<name>.h` |
 | change sizes, fonts or the grid | docs/RESPONSIVE.md | `ui_scale.h`, `packages/looks/`, `runtime_model.h` (`Grid`) |
 | give a board a battery in the top bar | docs/BATTERY.md | the board's `battery` sensors, `battery_status.h` |
 | change how a picture reaches the screen | docs/PICTURES.md, then docs/CAMERA.md | `picture_question.h`, `picture_loader.h`, `picture_fetch.h`, `screen_manager/app/picture_service.py` |
-| change the picture engine, the glass or a live stream's spot, or add a chip or panel kind | docs/PICTURE_ARCHITECTURE.md | `picture_engine.h`, `glass.h`, `live_spots.h`, `p4_build.py`, `live_view.cpp` |
+| change the picture engine, the glass or a live stream's spot, or add a chip or panel kind | docs/PICTURE_ARCHITECTURE.md | `picture_engine.h`, `glass.h`, `glass_dsi_refresh.cpp`, `live_spots.h`, `p4_build.py`, `live_view.cpp` |
 | change how a screen joins Home Assistant | docs/EASY_SETUP.md, chapter 3 | `screen_manager/app/ha_pairing.py`, Home Assistant's esphome config flow |
+| add an icon to the fixed set, or change how a screen gets icons of its own | docs/ICONS.md | `screen_manager/app/tile_icons.py`, `screen_manager/app/screen_icons.py` |
 | change a colour | docs/THEME.md | `components/smart_display/theme.h` |
-| change how pages are kept or prepared | docs/KEPT_PAGES.md, docs/PAGES.md | `kept_pages.h`, `page_protocol.h` |
+| change Layoutbot, the editor's chat that arranges pages | docs/LAYOUTBOT.md | `screen_manager/app/layoutbot.py`, `web/src/stores/layoutbot.ts` |
+| change how pages are kept or prepared, or how a page's picture is taken and put | docs/KEPT_PAGES.md, docs/PAGES.md | `kept_pages.h`, `page_pictures.h`, `page_protocol.h` |
+| give a part of the UI a keyboard, or add a keyboard layout | docs/KEYBOARD.md | `keyboard.h`, `keyboard_lvgl.h` |
 | make a control click or buzz as a finger presses or drags it | docs/PLUGINS.md, "Touch feedback" | `touch_feedback.h`, `touch_feedback_lvgl.h` |
 | change what a troubleshooting report holds, or how a crash is read | docs/REPORTS.md | `reports.py`, `redaction.py`, `ReportPanel.vue`, the website's `AddonReportController` |
-| make a control show its change before Home Assistant confirms it | docs/OPTIMISTIC.md | `optimistic.h`, `wish()` in `runtime_tiles.h` |
+| make a control show its change before Home Assistant confirms it | docs/OPTIMISTIC.md | `optimistic.h`, `wish()` in `optimistic_lvgl.h` |
+| make something move, dim the page behind an overlay, or change the whole glass at once | docs/MOTION.md | `screen_motion.h`, `glass::veil`, `sheet_motion.h`, `hw::Caps::motion` |
 | make a card follow a change without being built again | docs/CARD_PARTS.md | `card_bind()`, `card_shaped()` in `runtime_tiles.h` |
 | change what a plugin can do, or how plugins reach a screen | docs/PLUGINS.md, then the tessera-plugins repository's docs | `plugin_api.h`, `plugin_host.cpp`, `screen_manager/app/plugins.py`, `plugin_manifest.py` |
 | touch the flash of a board with 4 MB | docs/FLASH_LAYOUT.md | `components/flash_layout/`, `packages/hardware/flash-4mb.yaml` |
@@ -108,6 +114,9 @@ Most of these are guarded by a test; the test names the doc to read when it fail
   frontend. Never write a value into the model before an action, never add a hold or flag of a control's own, and
   never show a value the screen cannot know (a lock's end state, the next track). A card binds the parts that show a
   value and is painted in place, never built again for a change of value (docs/CARD_PARTS.md).
+- **Page pictures** (docs/KEPT_PAGES.md, "Page pictures"): a page's picture is put only where it is true. Whatever
+  changes a card off the glass takes a change number or says so (`page_pictures_untrue`), and nothing writes the
+  frame buffer past LVGL without the glass knowing (a room, the veil).
 - **Kept pages** (docs/KEPT_PAGES.md): a card is drawn only while it is on the glass, a card set is exchanged whole,
   and what a kept page lacks follows from change numbers (`kept_pages::Changes`), never from flags handed around.
 - **Memory.** Never walk the PSRAM heap (`heap_caps_get_largest_free_block`, `heap_caps_get_info`) while an RGB panel
@@ -126,6 +135,15 @@ Most of these are guarded by a test; the test names the doc to read when it fail
 - **The editor** is `web/src`; `screen_manager/app/static` is its build output: run `cd web && npm test && npm run
   build` and commit both. Keep every URL the page asks for relative (`api/...`) so it works behind ingress.
 - Production ingress needs no long-lived token or public port.
+
+## What is still open
+
+`docs/open-issues/` holds one file per thing we do not understand or have not solved: the symptom, what was measured
+(dates, commits, numbers), what was ruled out, the candidates left and the experiment that decides. Look there when a
+bench is free, between releases, when a user's report rhymes with one, or when you want work nobody is on: pick one,
+say so, and take the file along as you learn. Whatever stays open at the end of a day's work goes in as a new file
+or a dated section of an existing one, in the same commit as the work; a solved one gets its "Solved" section with
+the commit and stays a release long. The README there has the table and the rules.
 
 ## Checks
 

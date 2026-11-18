@@ -44,6 +44,9 @@ constexpr uint8_t STEPS[MOST + 1][WORKS] = {
     {0, 0, 0, 2, 2, 1, 1},
 };
 constexpr uint32_t SIGNAL_WINDOW_MS = 20000, REST_MS = 10000, ESCALATE_GAP_MS = 2000, LET_GO_MS = 1000;
+// How long after the screen's own held loop a report of a held-up loop is taken to be that one (Governor::own_work):
+// the report is a line of the log, read at the governor's next tick, a quarter of a second at most.
+constexpr uint32_t OWN_WORK_MS = 600;
 // The least step each sign brings, by Sign: the wake word's reset at once to the step that squeezes the live tiles.
 constexpr uint8_t FLOOR[SIGNS] = {0, 0, 2};
 
@@ -53,8 +56,17 @@ inline const char *sign_name(Sign s) {
 
 class Governor {
  public:
+  // The screen held its own main loop just now, for work it chose in an idle moment (a page drawn off the glass,
+  // page_pictures_lvgl.h): the held-up loop that is reported within OWN_WORK_MS of it is that work and no sign of a
+  // busy screen. Without this, six pages made ahead a second apart each raised a step, and the governor held the
+  // rest of them and every take back for its own doing (a Guition 10.1, 2026-11-17). One piece of work, one report.
+  void own_work(uint32_t now) { own_work_ = stamp(now); }
   // A sign of trouble at `now` (ms).
   void signal(Sign s, uint32_t now) {
+    if (s == SLOW_LOOP && own_work_ && now - own_work_ <= OWN_WORK_MS) {
+      own_work_ = 0;
+      return;
+    }
     signs_[s]++;
     if (step_ < FLOOR[s]) {
       step_ = FLOOR[s];
@@ -73,10 +85,11 @@ class Governor {
     last_sign_ = climbed_ = changed_ = stamp(now);
   }
   // Someone hears the screen's microphone (plugin API 0.23, capturing(SOUND): its camera watched with its sound, a
-  // call): a conversation, which goes before the live tiles on the sending side too. The tiles stay at a quarter while
+  // call): a conversation, which goes before the live tiles on the sending side too. The tiles stay at half at least while
   // it lasts, whatever the steps say; the camera, sensing and the background follow the steps as before. On a
   // reTerminal D1001 four live tiles beside its own video stalled its Wi-Fi uplink and the sound reached the viewer in
-  // bursts a second late, 2.4 s at most (2026-10-29, docs/PLATFORM_PLAN.md 5.1).
+  // bursts a second late, 2.4 s at most (2026-10-29, docs/PLATFORM_PLAN.md 5.1). Half since 2026-11-09: a quarter or none made
+  // no difference to the video on the same board (11 to 12 frames a second either way), and the tiles went from 1.5 to 3.
   void heard(bool on) { heard_ = on; }
   bool heard() const { return heard_; }
   // The finger: on the glass, and whether it drags (past the tap's limit) or a page moves.
@@ -113,7 +126,7 @@ class Governor {
     const uint8_t stepped = STEPS[step_][w];
     // The live tiles give way while someone hears the microphone only when there are two or more of them: one tile
     // crowds nothing, and Max saw it squeezed for no reason (a reTerminal D1001 with one live tile, 2026-10-29).
-    const uint8_t least = w == LIVE_TILES && heard_ && live_tiles.load(std::memory_order_relaxed) >= 2 ? MOST - 1 : 0;
+    const uint8_t least = w == LIVE_TILES && heard_ && live_tiles.load(std::memory_order_relaxed) >= 2 ? 1 : 0;
     const uint8_t level = stepped > touch ? stepped : touch;
     return level > least ? level : least;
   }
@@ -126,7 +139,7 @@ class Governor {
   static uint32_t stamp(uint32_t now) { return now ? now : 1; }
   uint8_t step_ = 0;
   Sign cause_ = GLASS_MISS;
-  uint32_t last_sign_ = 0, climbed_ = 0, changed_ = 0, let_go_ = 0;
+  uint32_t last_sign_ = 0, climbed_ = 0, changed_ = 0, let_go_ = 0, own_work_ = 0;
   bool down_ = false, dragging_ = false, heard_ = false;
   uint32_t signs_[SIGNS] = {};
 };

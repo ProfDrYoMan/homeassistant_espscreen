@@ -18,6 +18,11 @@ int main() {
   // ---- the duration ladder: seconds low down, quarters of an hour up top, and symmetric ----
   assert(ladder_step(60) == 30 && ladder_step(600) == 60 && ladder_step(1800) == 300);
   assert(ladder_step(3600) == 900 && ladder_step(36000) == 1800);
+  // The same edges web/tests/settings.spec.ts steps the editor's ladderStep over: the two ladders are one.
+  {
+    const int32_t edges[] = {299, 300, 899, 900, 3599, 3600, 7199, 7200}, steps[] = {30, 60, 60, 300, 300, 900, 900, 1800};
+    for (int i = 0; i < 8; i++) assert(ladder_step(edges[i]) == steps[i]);
+  }
   Row timeout = duration(screen_text::txt::settings_after, nullptr, nullptr, 30, 3600);
   assert(stepped(timeout, 120, 1) == 150 && stepped(timeout, 120, -1) == 90);
   assert(stepped(timeout, 300, 1) == 360 && stepped(timeout, 360, -1) == 300);
@@ -132,10 +137,21 @@ int main() {
     buttons.write(1);
     assert(page_buttons == 1);
   }
-  // The home key in the top bar (firmware 0.2.100+): on by default, the row right after Page buttons.
+  // Loop pages: on by default, the row right after Page buttons.
+  {
+    const Row &looping = row_named(screen, "Loop pages");
+    assert(looping.kind == Kind::toggle && &looping == &row_named(screen, "Page buttons") + 1);
+    assert(loop_pages == 1 && value_text(looping) == "On");
+    looping.write(0);
+    assert(loop_pages == 0 && value_text(looping) == "Off");
+    assert(set("loop_pages", 0) == SetResult::same);
+    looping.write(1);
+    assert(loop_pages == 1);
+  }
+  // The home key in the top bar (firmware 0.2.100+): on by default, the row after Loop pages.
   {
     const Row &key = row_named(screen, "Show home button");
-    assert(key.kind == Kind::toggle && &key == &row_named(screen, "Page buttons") + 1);
+    assert(key.kind == Kind::toggle && &key == &row_named(screen, "Loop pages") + 1);
     assert(home_button == 1 && value_text(key) == "On");
     key.write(0);
     assert(home_button == 0 && value_text(key) == "Off");

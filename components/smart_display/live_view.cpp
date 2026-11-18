@@ -22,6 +22,7 @@
 #include "picture_engine.h"
 #include "hw.h"
 #include "pressure.h"
+#include "call_serve.h"
 #if defined(USE_LIVE_VIEW) && defined(SCREEN_PICTURES)
 #include <algorithm>
 #include <atomic>
@@ -58,7 +59,6 @@ constexpr int64_t PACE_GAP_US = 2000000;
 constexpr uint32_t STALE_MS = 150;
 constexpr uint32_t PAUSE_STEP_MS = 20;
 constexpr uint32_t STACK_BYTES = 6144;  // a stream task's stack (psram_task.h), its high water logged as it ends
-constexpr unsigned STREAM_PRIORITY = 2;  // below the wake word's inference (3), above the main loop (1): take_glass
 constexpr uint32_t WAIT_MS = 500;  // a read waits this long, so a stop is seen within it
 // ---- The glass (glass.h): the panel, its frame buffer, the one-writer lock and the rooms LVGL keeps out of ----
 bool available() { return glass::direct(); }
@@ -177,25 +177,17 @@ struct Stream {
   StaticStreamBuffer_t *sound_control = nullptr;
   uint8_t *sound_storage = nullptr;
   uint8_t *sound_part = nullptr;
-  uint8_t *sound_piece = nullptr;  // what the speaker took part of, the rest of it next tick
-  size_t piece_left = 0, piece_at = 0;
-  // Whole samples only (s16le, two bytes each): parts of an odd length cut to even (the task) and writes the speaker
-  // took an odd number of bytes of (the main loop), counted for the stream's last line, which should say none.
+  uint8_t *sound_piece = nullptr;  // what the speaker took part of, the rest of it next tick (pump)
+  // Whole samples only (s16le, two bytes each): parts of an odd length cut to even (the task, sound_part), counted for
+  // the stream's last line, which should say none.
   std::atomic<uint32_t> odd_parts{0};
   std::atomic<uint32_t> full_parts{0};  // parts left out because the buffer had no room for all of it
-  uint32_t odd_taken = 0;
-  uint32_t caught_up = 0, caught_up_bytes = 0;  // the times the main loop left the oldest out (SOUND_HIGH), and how much
-  // The buffer ran dry while speaking: the speaker gets nothing until SOUND_LOW waits again, as at the start, instead of
-  // each part as it trickles in (which played as snippets out of joint, 2026-10-29). Counted for the stream's line.
-  bool dry = false;
-  uint32_t ran_dry = 0;
+  // The main loop's half, from the buffer to the speaker (live_view.h SoundPump), with what it counted.
+  SoundPump pump;
   std::atomic<bool> muted{false}, heard{false};
-  // The speaker is someone else's for now (audio_owner.h: a voice session or a doorbell took it): the sound is held back
-  // as when muted, and plays again once the owner gives the speaker back. Set on the main loop, read by the task.
-  std::atomic<bool> yielded{false};
-  audio_owner::Role sound_role = audio_owner::Role::CAMERA_SOUND;  // the role its sound claimed (open), released with it
-  audio_owner::Side claimed = audio_owner::Side::OUT;              // and the sides, while `claims`
-  bool claims = false;
+  // Its claim on the speaker (live_view.h SoundClaim): while the speaker is someone else's (a voice session or a doorbell
+  // took it), `owned.yielded` holds the sound back as when muted, until the owner gives the speaker back.
+  SoundClaim owned;
   // Until it is live (live_view.h): the picture on the glass is a still (the task turns a tile's loader over it), and a
   // live one was shown. `under` holds the loader's square of the card as composed, its last turn drawn at `turned_at`.
   std::atomic<bool> warming{false}, live{false};
@@ -203,7 +195,8 @@ struct Stream {
   uint32_t turned_at = 0;
   // The main loop's own: the report of the last REPORT_MS, the first picture, its first live one and sound told, the
   // speaker started.
-  bool told_first = false, told_live = false, told_sound = false, speaking = false;
+  bool told_first = false, told_live = false, told_sound = false;
+  std::atomic<bool> talking{false};  // the stream's sound is a conversation (X-Sound: talk): a far smaller run-up
   uint32_t reported_at = 0, reported_shown = 0, reported_bytes = 0, reported_decode = 0, reported_copy = 0,
            reported_wait = 0, reported_net = 0, reported_into = 0, reported_compose = 0, reported_onto = 0,
            reported_passed = 0, reported_pauses = 0, reported_paused = 0;
@@ -330,19 +323,11 @@ static bool lay_loader(Stream &s) {
 }
 // Its next turn, between the stills: the square as composed again, the loader over it, and that square alone onto the
 // glass, every LOADER_STEP_MS while the task waits for the stream's next bytes.
-// A stream's task runs below the voice assistant's wake word (STREAM_PRIORITY), and asks for and holds the glass at
-// glass::WRITER_PRIORITY, in turn with the other streams and a still's download (picture_engine::decode), then goes back:
-// composing a picture and reading the app run below the voice. At WRITER_PRIORITY throughout, four tiles' composing (30
-// ms of wall clock a picture on a reTerminal D1001) and the screen's own video (priority 4) left the wake word's
-// inference (ESPHome's micro_wake_word, priority 3) behind 644 times in an hour at rest (2026-10-28).
-static uint32_t take_glass() {
-  vTaskPrioritySet(nullptr, glass::WRITER_PRIORITY);
-  return glass::hold_counted();
-}
-static void give_glass() {
-  glass::release();
-  vTaskPrioritySet(nullptr, STREAM_PRIORITY);
-}
+// A stream's task runs at STREAM_PRIORITY, below the voice assistant's wake word, and waits for and holds the glass at
+// glass::WRITER_PRIORITY, then goes back (live_view.h says why, glass::wait_as_writer how).
+static void set_priority(unsigned priority) { vTaskPrioritySet(nullptr, priority); }
+static uint32_t take_glass() { return glass::wait_as_writer(STREAM_PRIORITY, set_priority, glass::hold_counted); }
+static void give_glass() { glass::leave_as_writer(STREAM_PRIORITY, set_priority, glass::release); }
 
 static void turn_loader(Stream &s) {
   const uint32_t now = esphome::millis();
@@ -665,6 +650,17 @@ static bool ask_each(Stream &s) {
 }
 
 // The screen's own camera on a tile of its own (live_view.h, own_frame).
+// Its pace is its own: the frame reaches it over no network and is not decoded, so the pace of the tiles that are
+// (tile_gap_us) does not apply, though it counts among them for their share of the budget (tiles_open), since it takes
+// more of the PPA than any of them. It follows the governor as the camera does, and as the live tiles do while someone
+// hears the microphone: the video is what must go whole then, and the tile on the glass shares the PPA with it.
+// In a call this tile is the picture of oneself in the corner: the large picture goes first, and it gives way with the rest.
+static constexpr int64_t OWN_PACE_MARGIN_US = 4000;  // a frame a little early still counts: the camera's own gap wobbles
+static int64_t own_gap_us() {
+  const uint8_t level = std::max(pressure::level_of(pressure::OWN_CAMERA), pressure::level_of(pressure::LIVE_TILES));
+  return (static_cast<int64_t>(1000000 / hw::OWN_TILE_PPS) << level) - OWN_PACE_MARGIN_US;
+}
+
 // The open tiles of it, which the camera's task reads under own_lock while it fills one's canvas; the main loop takes a
 // tile out under it before it frees the stream. The camera's task never waits for it: a frame it cannot take goes by.
 static Stream *own_tiles[MAX_STREAMS] = {};
@@ -674,7 +670,13 @@ static std::atomic<int> own_open{0};
 
 void own_offer() { offered.store(true, std::memory_order_release); }
 bool own_offered() { return offered.load(std::memory_order_acquire) && available(); }
-bool own_wanted() { return own_open.load(std::memory_order_relaxed) > 0; }
+bool own_wanted() {
+#ifdef CALL_SERVE
+  // A direct call sends this screen's camera to the other one (call_serve.h), whether or not a tile shows it here.
+  if (call_serve::wants_picture()) return true;
+#endif
+  return own_open.load(std::memory_order_relaxed) > 0;
+}
 
 static void own_add(Stream *s) {
   if (!own_lock) own_lock = xSemaphoreCreateMutex();
@@ -699,7 +701,11 @@ static void own_remove(Stream *s) {
 }
 
 void own_frame(const uint8_t *data, int width, int height, bool yuv420) {
-  if (!data || width <= 0 || height <= 0 || !own_wanted() || !own_lock) return;
+  if (!data || width <= 0 || height <= 0) return;
+#ifdef CALL_SERVE
+  call_serve::frame(data, width, height, yuv420);  // its own lock and pace, apart from the tiles'
+#endif
+  if (own_open.load(std::memory_order_relaxed) <= 0 || !own_lock) return;
   if (xSemaphoreTake(own_lock, 0) != pdTRUE) return;
   const int64_t now = esp_timer_get_time();
   for (Stream *s : own_tiles) {
@@ -728,8 +734,7 @@ void own_frame(const uint8_t *data, int width, int height, bool yuv420) {
       s->skipped++;
       continue;
     }
-    // Its next frame after its pace: its share of the budget, a busy screen's tile half or a quarter of that.
-    s->own_next = now + (tile_gap_us() << pressure::level_of(pressure::LIVE_TILES));
+    s->own_next = now + own_gap_us();
     s->own_full.store(true, std::memory_order_release);
     xTaskNotifyGive(s->task.handle);
   }
@@ -871,15 +876,13 @@ static bool read_stream(Stream &s) {
           // off plays seconds of full-scale noise (a ring on a reTerminal D1001, 2026-10-25), until another odd write
           // puts it right by chance. So a part goes in whole or not at all, never cut to the room left.
           s.heard = true;
+          if (reader.talk()) s.talking.store(true, std::memory_order_relaxed);
           if (reader.has_made()) s.sound_wait.add(reader.made());
           if (length & 1) s.odd_parts.fetch_add(1, std::memory_order_relaxed);
-          if (s.muted || s.yielded) return;
-          const size_t whole = length & ~static_cast<size_t>(1);
           // Only this task sends, so the room it saw is there when it sends (the main loop only takes out or empties).
-          if (xStreamBufferSpacesAvailable(s.sound) >= whole)
-            xStreamBufferSend(s.sound, s.sound_part, whole, 0);
-          else
-            s.full_parts.fetch_add(1, std::memory_order_relaxed);
+          const SoundPart part = sound_part(length, xStreamBufferSpacesAvailable(s.sound), s.muted || s.owned.yielded);
+          if (part.send > 0) xStreamBufferSend(s.sound, s.sound_part, part.send, 0);
+          if (part.full) s.full_parts.fetch_add(1, std::memory_order_relaxed);
         });
     if (!ok) {
       ESP_LOGW(TAG, "not a stream of pictures (answer %d)", reader.status());
@@ -910,11 +913,12 @@ static void task_main(void *arg) {
 
 bool full_view() { return available() && picture_engine::limits().picture_bytes > 0; }
 
-// The live tiles on the glass now, for the governor's heard rule (pressure::live_tiles): the tile streams, not a view.
+// The live tiles on the glass now, for the governor's heard rule (pressure::live_tiles): the tile streams, not a view
+// and not a tile of the screen's own camera, which takes nothing from the network.
 static void count_tiles() {
   uint8_t n = 0;
   for (auto *s : streams)
-    if (s && !s->stopping && s->look.tile) ++n;
+    if (s && !s->stopping && s->look.tile && s->source != &OWN_CAMERA) ++n;
   pressure::live_tiles.store(n, std::memory_order_relaxed);
 }
 
@@ -925,14 +929,9 @@ static_assert(picture_engine::limits().streams <= MAX_STREAMS, "the engine's str
 constexpr size_t STREAM_INTERNAL_BYTES = 11 * 1024;
 constexpr size_t INTERNAL_FLOOR_BYTES = 32 * 1024;
 
-static int held() {
-  int n = 0;
-  for (auto *s : streams)
-    if (s) ++n;
-  return n;
-}
-bool room_for_another() { return held() < picture_engine::limits().streams; }
-bool beside() { return picture_engine::limits().streams > 1; }
+// Every stream counts, of every kind, and one still ending too (live_view.h, Census).
+bool room_for_another() { return room_for(census(streams), picture_engine::limits().streams); }
+bool beside() { return beside(picture_engine::limits().streams); }
 
 Handle open(const std::string &url, const Rect &area, const Look &look, bool sound, audio_owner::Role role) {
   if (!available() || area.empty() || (!look.tile && !full_view())) return -1;
@@ -1046,31 +1045,11 @@ Handle open(const std::string &url, const Rect &area, const Look &look, bool sou
   count_tiles();
   if (own) own_add(s);
   if (look.tile) tiles_open.fetch_add(1, std::memory_order_relaxed);
-  if (s->sound || role == audio_owner::Role::DOORBELL) {
-    // The camera's sound claims the speaker (audio_owner.h) in the role its opener gave: as CAMERA_SOUND music pauses
-    // for it, and a voice session or a doorbell takes it and gives it back, since the camera stays open; as DOORBELL
-    // (the view a ring opened) nothing takes it, and the ring takes the microphone too, sound or not: the wake word
-    // rests while someone is at the door (and the talk, section 5 of PLATFORM_PLAN.md, will speak into it). Given back in
-    // tick when the stream ends: a ring whose stream ends while its view stays (stills after its third break) lets the
-    // wake word listen again under the open ring, until module_doorbell holds the claim for as long as the ring is up
-    // (PLATFORM_PLAN.md 3.4).
-    s->sound_role = role;
-    s->claimed = role == audio_owner::Role::DOORBELL ? audio_owner::Side::BOTH : audio_owner::Side::OUT;
-    s->claims = true;
-    audio_owner::Claim claim;
-    claim.role = role;
-    claim.id = static_cast<uint32_t>(slot);
-    claim.lost = [slot]() {
-      Stream *t = streams[slot];
-      if (!t || !t->sound) return;
-      t->yielded = true;
-      xStreamBufferReset(t->sound);  // as mute() does: what waited is stale by the time the speaker is back
-    };
-    claim.regained = [slot]() {
-      if (Stream *t = streams[slot]) t->yielded = false;
-    };
-    audio_owner::the().claim(s->claimed, claim);
-  }
+  // The camera's sound claims the speaker in the role its opener gave, a ring's view nothing (SoundClaim); taken, what
+  // waited goes as mute() empties it.
+  StreamBufferHandle_t sound_buffer = s->sound;
+  s->owned.claim(audio_owner::the(), sound_buffer != nullptr, role, static_cast<uint32_t>(slot),
+                 [sound_buffer]() { xStreamBufferReset(sound_buffer); });
   glass::watch();
   ESP_LOGI(TAG, "stream %d into %dx%d at %d,%d%s from %s, turned %d, PPA bursts of %d bytes", slot, area.w, area.h,
            area.x, area.y, look.tile ? (look.contain ? " (a tile, whole picture)" : " (a tile)") : "", s->source->what,
@@ -1089,59 +1068,22 @@ void mute(Handle handle, bool muted) {
 static void speak(Stream &s, bool on) {
 #ifdef USE_SPEAKER
   if (!speaker || !s.sound) return;
-  if (!on) {
-    if (s.speaking) speaker->stop();
-    s.speaking = false;
-    s.piece_left = 0;
-    return;
-  }
-  if (!s.speaking) {
-    if (xStreamBufferBytesAvailable(s.sound) < SOUND_LOW) return;
-    speaker->set_audio_stream_info(esphome::audio::AudioStreamInfo(16, 1, SOUND_RATE));
-    speaker->start();
-    s.speaking = true;
-    s.dry = false;
-  }
-  if (s.dry) {
-    if (xStreamBufferBytesAvailable(s.sound) < SOUND_LOW) return;  // a new run-up first, as at the start
-    s.dry = false;
-  }
-  // Behind the picture (a burst after a hiccup in the stream): the oldest goes, down to SOUND_LOW, the rest of the piece
-  // the speaker had not taken first. Every tick, whatever the speaker takes, so a speaker that is full does not hold it
-  // back until the buffer runs full. Whole samples: the buffer holds only those, both marks are even, and a piece goes
-  // only from a sample's first byte.
-  const size_t held = xStreamBufferBytesAvailable(s.sound);
-  if (held > SOUND_HIGH && (s.piece_at & 1) == 0) {
-    ++s.caught_up;
-    s.caught_up_bytes += s.piece_left;
-    s.piece_left = 0;
-    for (size_t drop = held - SOUND_LOW; drop > 0;) {
-      const size_t n = xStreamBufferReceive(s.sound, s.sound_piece, std::min(drop, SOUND_PART), 0);
-      if (n == 0) break;
-      s.caught_up_bytes += n;
-      drop -= n;
+  // SoundPump's rules (live_view.h) over the stream's buffer and the board's speaker, 16-bit mono at SOUND_RATE.
+  struct Buffer {
+    StreamBufferHandle_t sound;
+    size_t held() const { return xStreamBufferBytesAvailable(this->sound); }
+    size_t take(uint8_t *into, size_t most) { return xStreamBufferReceive(this->sound, into, most, 0); }
+  } buffer{s.sound};
+  struct Out {
+    esphome::speaker::Speaker *speaker;
+    void start() {
+      this->speaker->set_audio_stream_info(esphome::audio::AudioStreamInfo(16, 1, SOUND_RATE));
+      this->speaker->start();
     }
-  }
-  for (int rounds = 0; rounds < 8; ++rounds) {
-    if (s.piece_left == 0) {
-      s.piece_left = xStreamBufferReceive(s.sound, s.sound_piece, SOUND_PART, 0);
-      s.piece_at = 0;
-      if (s.piece_left == 0) {
-        if (rounds == 0) {  // nothing waited at all: the buffer ran dry
-          s.dry = true;
-          ++s.ran_dry;
-        }
-        return;
-      }
-    }
-    // Every piece is whole samples (the task writes only those); a write the speaker took an odd number of bytes of goes
-    // on from the very next byte, the other half of that sample first, so its count is even again.
-    const size_t taken = speaker->play(s.sound_piece + s.piece_at, s.piece_left, 0);
-    if (taken & 1) ++s.odd_taken;
-    s.piece_at += taken;
-    s.piece_left -= taken;
-    if (taken == 0) return;  // the speaker's own buffer is full: the rest next tick
-  }
+    void stop() { this->speaker->stop(); }
+    size_t play(const uint8_t *data, size_t length) { return this->speaker->play(data, length, 0); }
+  } out{speaker};
+  s.pump.tick(on, s.talking.load(std::memory_order_relaxed), esphome::millis(), s.sound_piece, buffer, out);
 #else
   (void) s;
   (void) on;
@@ -1165,11 +1107,7 @@ void close(Handle handle) {
   glass::disarm(s.room, true);
 }
 
-bool ending() {
-  for (Stream *s : streams)
-    if (s && s->stopping.load(std::memory_order_relaxed)) return true;
-  return false;
-}
+bool ending() { return census(streams).ending > 0; }
 
 static void report(int slot, Stream &s, uint32_t now, bool last) {
   const uint32_t span = now - s.reported_at;
@@ -1206,8 +1144,8 @@ static void report(int slot, Stream &s, uint32_t now, bool last) {
     ESP_LOGI(TAG, "%s %d: its sound waited %.0f ms on its way (at most %u) over the quickest, %u pieces; ran dry %u times, "
              "caught up %u times since the start", last ? "ended" : "stream",
              slot, static_cast<float>(sound_total - sw.reported_total) / static_cast<float>(sounds - sw.reported_count),
-             (unsigned) sw.most_ms.exchange(0), (unsigned) (sounds - sw.reported_count), (unsigned) s.ran_dry,
-             (unsigned) s.caught_up);
+             (unsigned) sw.most_ms.exchange(0), (unsigned) (sounds - sw.reported_count), (unsigned) s.pump.ran_dry,
+             (unsigned) s.pump.caught_up);
   s.reported_passed = passed;
   pw.reported_count = pictures;
   pw.reported_total = picture_total;
@@ -1271,9 +1209,9 @@ void tick(const std::function<void(Handle, Event)> &tell) {
       if (s->sound)
         ESP_LOGI(TAG, "ended %d: its sound caught up with the picture %u times (%u bytes of the oldest left out), had %u "
                  "parts left out for a full buffer, %u parts of an odd length and %u odd writes to the speaker", slot,
-                 (unsigned) s->caught_up, (unsigned) s->caught_up_bytes,
+                 (unsigned) s->pump.caught_up, (unsigned) s->pump.caught_up_bytes,
                  (unsigned) s->full_parts.load(std::memory_order_relaxed),
-                 (unsigned) s->odd_parts.load(std::memory_order_relaxed), (unsigned) s->odd_taken);
+                 (unsigned) s->odd_parts.load(std::memory_order_relaxed), (unsigned) s->pump.odd_taken);
       const bool turned = s->turn != turn, ended = s->stopping && !s->failed;
       glass::disarm(s->room, false);  // its task has ended: nothing of it copies, and LVGL draws the room again
       streams[slot] = nullptr;
@@ -1283,8 +1221,11 @@ void tick(const std::function<void(Handle, Event)> &tell) {
       // closed while the picture's room below it was drawn again, until something else drew there (2026-10-15, a P4
       // board). The redraw at closing comes while the task may still be busy with its last picture, and its first strip
       // is that bar; this one comes after. The whole glass, as the view covered all of it.
+      // A tile's stream the same, for its own room: a 10.1 inch kept a camera tile's last picture over the next page,
+      // where that page drew nothing of its own, after a swipe that ended the stream 3 s after it started (2026-11-15).
       if (!s->look.tile) glass::redraw_all();
-      if (s->claims) audio_owner::the().release(s->claimed, s->sound_role, static_cast<uint32_t>(slot));
+      else glass::redraw(s->room);
+      s->owned.release(audio_owner::the());
       free_stream(s);
       tell(slot, turned ? Event::TURNED : ended ? Event::ENDED : Event::FAILED);
       continue;
@@ -1293,7 +1234,7 @@ void tick(const std::function<void(Handle, Event)> &tell) {
     glass::follow(s->room);
     // The glass turned (a setting): this stream's place is gone; its owner asks again for its new shape.
     if (s->turn != turn && !s->stopping) close(slot);
-    speak(*s, !s->stopping && !s->muted && !s->yielded);
+    speak(*s, sound_on(s->stopping, s->muted, s->owned.yielded));
     if (!s->told_sound && s->heard) {
       s->told_sound = true;
       tell(slot, Event::SOUND);

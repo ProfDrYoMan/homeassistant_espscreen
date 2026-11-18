@@ -17,6 +17,7 @@ import math
 from urllib.parse import urlsplit
 import automations
 import calendar_feed
+import todo_feed
 import doorbell
 import durations
 import picture_legacy
@@ -28,7 +29,11 @@ import picture_service
 import picture_sources
 import camera_source
 import live_stream
+import talk_bridge
+import calls
+import screen_source
 import claude_skill
+import layoutbot
 import screen_video
 import screen_hang
 import screen_labels
@@ -55,6 +60,7 @@ import plugin_pictures
 import map_tiles
 import valetudo_map
 import tile_icons
+import home_facts
 import text_tile
 import template_service
 from updates import Updater
@@ -64,7 +70,7 @@ import plugins
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType, web
 from core import alarm_extras, lock_extras, ALERT_EVENT, board_of, BROADCAST_DISMISS, BROADCAST_EVENTS, BROADCAST_SHOW, BUILTIN, CAMERA_DOMAINS, entity_id, SETTINGS_BESIDE_BLOCK, TILE_EVENTS, TILE_RESULT_EVENT, layout_snapshot, match_screen, HEADER_MIN_FIRMWARE, NAME_TILE_SETTINGS, TRANSPORT_MIN_FIRMWARE, alert_action, alert_camera, alert_choice, alert_data, choice_service, ALERT_CHOICE_ACTION, ALERT_CHOICE_MIN_FIRMWARE, parse_firmware, alert_reference, alert_screen_choice, alert_screen_names, alert_service, alert_targets, backgrounds, builtin_name, controls_catalogue, device_prefixes, discover, discover_screens, encode, entity_slug, extras, media_cover, media_extras, forecast_kinds, header_items, inbox_prefix, message_action, min_firmware, name_clash, packets, revision, screen_items, state_message, validate_header, validate_layout, validate_settings
-from core import ENERGY_TILE, MAP_TILE_MIN_FIRMWARE, WEATHER_WEEK, calibrate_entity, can_standby, dimmable, SETTING_ENTITIES, SETTING_RULES, STANDBY_KEYS, setting_action, setting_entities, setting_from_state, state_word
+from core import SECTIONS_FEATURE, ENERGY_TILE, MAP_TILE_MIN_FIRMWARE, WEATHER_WEEK, calibrate_entity, can_standby, dimmable, SETTING_ENTITIES, SETTING_RULES, STANDBY_KEYS, setting_action, setting_entities, setting_from_state, state_word
 from core import BAR_CARDS_FEATURE, BOARD_KEYS, has_battery, has_module, is_key, drawn_controls, FAVORITE_KINDS, SCREENSAVER_MIN_FIRMWARE, short, plugin_tile
 from core import (FIRMWARE_MAX_BAR_ITEMS, FIRMWARE_MAX_PAGES, FIRMWARE_MAX_TILES, Grid, page_target, PAGE_TILE_REPEAT_MIN_FIRMWARE, ENTITY_REPEAT_MIN_FIRMWARE, ROTATION_MIN_FIRMWARE, SHAPES, firmware_features, grid_of, orientation_at,
                   packed_slots, run_tile_event, screen_firmware, shape_of, turns_of, update_in_tessera, version_text)
@@ -75,10 +81,12 @@ from i18n import REQUEST_LANGUAGE, TRANSLATIONS, Region, english, screen_t, show
 from zoneinfo import ZoneInfo
 from layout_store import LayoutStore, Conflict
 from page_layout import (FORMAT as PAGE_FORMAT, LayoutError, compile_tiles, grid_of_record, screen_grid_of_record,
-                         legacy_projection, legacy_edit, validate_document, bar_items, replace_tiles, CompiledLayouts, fingerprint)
+                         legacy_projection, legacy_edit, validate_document, bar_items, replace_tiles, CompiledLayouts, fingerprint,
+                         flattened)
 from layout_migrations import migrate_legacy
 import page_delivery
 import page_service
+import screen_icons
 import preview_images
 import preview_events
 from page_capabilities import CapabilityCache, identity as page_identity
@@ -137,6 +145,15 @@ ANSWER_RETRY_SECONDS = 30
 SERVICE_EVENTS = ('service_registered', 'service_removed')
 # A plugin on a screen asks the app something (docs/PLUGINS.md): the event its tessera::send() fires.
 PLUGIN_EVENT = 'esphome.screen_plugin'
+CALL_EVENT = 'esphome.screen_call'
+CALL_FEATURE = 'call'
+CALL_ICON = 'F03F2'  # phone
+
+
+def glyph_of(code):
+    """An MDI icon's code as the glyph a screen draws."""
+    return chr(int(code, 16))
+
 
 def samples(events, begin, span):
     """24 values, one per bucket: the last known value at the end of each bucket (None until the first)."""
@@ -247,6 +264,7 @@ class HomeAssistant:
         # (event type, data) of the doorbell's events (esp_screens_doorbell, esp_screens_dismiss_doorbell) and of a screen's
         # report of a ring (esphome.screen_doorbell, docs/DOORBELL.md), for Manager.doorbell_loop.
         self.doorbell_events = asyncio.Queue()
+        self.call_events = asyncio.Queue()  # esphome.screen_call, for Manager.call_loop
         # ESPHome actions that can answer (`esphome.<node>_screen_message` of firmware 0.2.49+), from Home
         # Assistant's own list; refreshed when a device registers its actions again.
         self.responses = set()
@@ -274,6 +292,8 @@ class HomeAssistant:
         # A tap on a compact calendar event (calendar_feed.EVENT): {inbox, entity, i, c, s, e, day}, for
         # Manager.calendar_loop.
         self.calendar_requests = asyncio.Queue()
+        # What a screen asks of a to-do list (todo_feed.EVENT): {inbox, entity, i, a, n, t}, for Manager.todo_loop.
+        self.todo_requests = asyncio.Queue()
         # A player's library (firmware 0.24.0+): a folder a screen opens and an item it plays, for Manager.media_loop.
         self.media_requests = asyncio.Queue()
         # A plugin's question to the app (docs/PLUGINS.md, tessera::send): answered by Plugins.answer.
@@ -282,7 +302,9 @@ class HomeAssistant:
         # editor offers for a player at rest (GitHub #88).
         self.widen = None
 
-    async def request(self, kind, **data):
+    async def request(self, kind, wait=15, **data):
+        """One websocket command and its result. `wait`: seconds before it counts as lost; an LLM's answer (layoutbot)
+        takes longer than any other command."""
         if self.ws is None or self.ws.closed:
             raise ConnectionError("Home Assistant isn't connected.")
         self.next_id += 1
@@ -291,7 +313,7 @@ class HomeAssistant:
         self.pending[key] = future
         try:
             await self.ws.send_json({'id': key, 'type': kind, **data})
-            return await asyncio.wait_for(future, 15)
+            return await asyncio.wait_for(future, wait)
         finally:
             self.pending.pop(key, None)
 
@@ -326,6 +348,9 @@ class HomeAssistant:
                 elif event.get('event_type') == calendar_feed.EVENT:
                     if self.calendar_requests.qsize() < 32:
                         self.calendar_requests.put_nowait(body)
+                elif event.get('event_type') == todo_feed.EVENT:
+                    if self.todo_requests.qsize() < 64:
+                        self.todo_requests.put_nowait(body)
                 elif event.get('event_type') == PLUGIN_EVENT:
                     if self.plugin_requests.qsize() < 32:
                         self.plugin_requests.put_nowait(body)
@@ -363,6 +388,8 @@ class HomeAssistant:
                     self.tile_events.put_nowait((event['event_type'], body))
                 elif event.get('event_type') in (*doorbell.EVENTS, doorbell.EVENT):
                     self.doorbell_events.put_nowait((event['event_type'], body))
+                elif event.get('event_type') == CALL_EVENT:
+                    self.call_events.put_nowait(body)
         raise ConnectionError('Home Assistant connection lost.')
 
     async def subscribe_template(self, template, callback):
@@ -384,6 +411,27 @@ class HomeAssistant:
         return key
 
     async def unsubscribe_template(self, key):
+        if self.template_subs.pop(key, None) is not None:
+            await self.request('unsubscribe_events', subscription=key)
+
+    async def subscribe_todo(self, entity, callback):
+        """A to-do list's items (todo_feed.TodoService): `callback(event)` takes the whole list ({"items": [...]}) each
+        time Home Assistant sends it, which is once at the start and after every change; returns its id for
+        unsubscribe_todo. A list Home Assistant does not have is Refused."""
+        if self.ws is None or self.ws.closed:
+            raise ConnectionError("Home Assistant isn't connected.")
+        # Registered before the request: the first list comes right behind the answer. The id is a subscription's, as
+        # a template's is, so the two share the table read() looks in.
+        key = self.next_id + 1
+        self.template_subs[key] = callback
+        try:
+            await self.request('todo/item/subscribe', entity_id=entity)
+        except BaseException:
+            self.template_subs.pop(key, None)
+            raise
+        return key
+
+    async def unsubscribe_todo(self, key):
         if self.template_subs.pop(key, None) is not None:
             await self.request('unsubscribe_events', subscription=key)
 
@@ -628,8 +676,10 @@ class HomeAssistant:
                     await self.request('subscribe_events', event_type='esphome.screen_setting')
                     await self.request('subscribe_events', event_type='esphome.screen_history')
                     await self.request('subscribe_events', event_type='esphome.screen_camera')
+                    await self.request('subscribe_events', event_type=CALL_EVENT)
                     await self.request('subscribe_events', event_type=light_effects.OPTIONS_EVENT)
                     await self.request('subscribe_events', event_type=calendar_feed.EVENT)
+                    await self.request('subscribe_events', event_type=todo_feed.EVENT)
                     await self.request('subscribe_events', event_type=PLUGIN_EVENT)
                     await self.request('subscribe_events', event_type=media_library.BROWSE_EVENT)
                     await self.request('subscribe_events', event_type=media_library.PLAY_EVENT)
@@ -1034,6 +1084,9 @@ class Manager:
         self.forecasts = {}
         # The template tiles' results from Home Assistant (docs/TEXT_TILE.md).
         self.templates = template_service.TemplateService(ha)
+        # The to-do lists' items from Home Assistant (docs/TODO.md), and when each list last went to a screen.
+        self.todos = todo_feed.TodoService(ha)
+        self.todo_sent = {}
         self.listeners = set()  # asyncio.Event per open /api/events stream
         self.firmware = Firmware(os.environ.get("ESPHOME_CONFIG", "/homeassistant/esphome"), self.path.parent)
         # The app's one build line (docs/BUILDS.md): updates, plugin builds, New screen and Firmware & USB wait in it.
@@ -1042,6 +1095,7 @@ class Manager:
         self.build_server = self.firmware.server = build_server.BuildServer(self.path.parent, self.notify)
         # Plugins (docs/PLUGINS.md): which exist, which each screen runs, their files and their tiles' data.
         self.plugins = plugins.Plugins(self, self.path.parent, self.firmware.root)
+        self.icons = screen_icons.ScreenIcons(self, self.path.parent)
         self.updates = Updater(self, self.path.parent / 'updates.json')
         # Does this screen work as you expect? One shared answer per board, with its own key (app 0.3.10).
         self.feedback = feedback.Feedback(self.path.parent / 'feedback.json')
@@ -1104,6 +1158,8 @@ class Manager:
                                                    picture=lambda entity: self.ha.media_picture(self.followed(entity)))
         self.alert_cameras = {}
         # A camera live on a P4 (live_stream.py): its links and the sources behind them, on the camera port.
+        # A screen's voice to a doorbell's speaker, through Home Assistant's two-way audio (talk_bridge, docs/DOORBELL.md).
+        self.talks = talk_bridge.Links(lambda: self.ha.websocket(), sink=os.environ.get('SCREEN_TALK_SINK'))
         self.live = live_stream.LiveFeed(lambda entity: self.ha.camera_image(entity), lambda: self.ha.websocket(),
                                        lambda entity: self.ha.camera_streams(entity), live_tiles=self.live_tiles_of,
                                        screen_name=self.name_of)
@@ -1115,6 +1171,8 @@ class Manager:
         # own, and a page that loads again for its camera does not draw its map again.
         self.map_source = map_tiles.TileSource(lambda z, x, y: self.ha.map_tile(z, x, y))
         self.map_renders = OrderedDict()
+        self.map_drawing = {}                # the drawings under way, by what map_renders keeps them by
+        self.map_provisional = OrderedDict() # a drawing some streets were missing from, and when it was made
         # A media player's library (app 0.4.42, firmware 0.24.0, media_library.py): the widest features each player
         # reported (GitHub #88), the numbers each screen's items go by, the folders read a moment ago, the players
         # that browse, the colours of each cover, the item this app started last on each player, and the thumbnails.
@@ -1139,6 +1197,12 @@ class Manager:
         self.alert_actions = {}
         # The rings of doorbells and the last one nobody answered (doorbell.py, docs/DOORBELL.md).
         self.doorbells = doorbell.Doorbells()
+        self.calls = calls.Calls()
+        self.call_cameras_off = set()  # nodes in a call whose camera is off
+        self.call_switches = {}        # the voice switch of each call that is up, by its key
+        self.call_direct = {}          # {node: token} of each call whose media go straight between its screens, by its key
+        self.call_relayed = set()      # keys of calls a screen could not reach the other for: through this app from then on
+        screen_source.provider = self.call_rtsp
         self.store = LayoutStore(self.path, self.record_grid)
         # An app from before Language & region (app 0.2.90): its screens keep the 24 hours they show, until Home Assistant
         # says every screen's own clock setting was 12 hours (resolve_clock_pin). A new install starts on Automatic, and
@@ -1355,8 +1419,10 @@ class Manager:
         sender = self.page_senders.get(inbox)
         live = getattr(sender, 'memory', None)
         memory = live or getattr(sender, 'last_memory', None)
-        # Whether its tiles of the top bar count too (core.layout_cost): a screen that takes cards from its top bar.
-        return {**memory, 'live': live is not None, 'bar_cards': BAR_CARDS_FEATURE in (getattr(sender, 'features', None) or ())} if memory else None
+        # Whether its tiles of the top bar count too (core.layout_cost): a screen that takes cards from its top bar; and its
+        # pages' sections: a screen that draws them (any other is sent none).
+        features = getattr(sender, 'features', None) or ()
+        return {**memory, 'live': live is not None, 'bar_cards': BAR_CARDS_FEATURE in features, 'sections': SECTIONS_FEATURE in features} if memory else None
 
     def _discovered(self, inbox):
         """The screen as discovery sees it now, or None while it is not in Home Assistant's registry."""
@@ -1487,7 +1553,7 @@ class Manager:
 
     def inventory(self):
         """(screens, every tile/top-bar entity): the full walk over the registry, for the editor and saving."""
-        return discover(self.ha.registry, self.ha.states, self.ha.devices, self.ha.areas)
+        return discover(self.ha.registry, self.ha.states, self.ha.devices, self.ha.areas, list(getattr(self.ha, 'words_by_language', {}).values()))
 
     def screen_registry(self):
         """The few registry entries that describe screens; rebuilt only when HA delivers a new registry."""
@@ -1581,6 +1647,7 @@ class Manager:
         self.page_senders.pop(old, None)
         self.page_capabilities.forget(old)
         self.page_values.pop(old, None)
+        self.icons.renamed(old, new)
         if self.updates.renamed(old, new):
             moved.append('update history')
         for store in (self.sent, self.status, self.last, self.pinged):
@@ -1796,6 +1863,7 @@ class Manager:
                 await self.ha.remove_state(sensor)
         self.forget_inbox(inbox)
         self.plugins.forget_screen(inbox)
+        self.icons.forget_screen(inbox)
         self.labels.forget(screen.get('device_id'))
         self.hangs.forget(screen.get('device_id'))
         self.savers.forget(screen.get('device_id'))
@@ -1951,7 +2019,7 @@ class Manager:
                 keys = [key for key in keys if key not in ('auto_home', 'auto_home_seconds')]
             # Dark mode, the page buttons and the home key came after the screens took over their settings: firmware
             # that gets them with the layout lacks them.
-            keys = [key for key in keys if key not in ('dark_mode', 'page_buttons', 'home_button')]
+            keys = [key for key in keys if key not in ('dark_mode', 'page_buttons', 'home_button', 'loop_pages')]
             return {'owner': 'layout', 'values': values, 'keys': keys, 'unavailable': [], 'rotations': list(turns),
                     'switches': switches, 'calibrate': calibrate}
         # Only the settings this screen has an entity for: one added in later firmware stays out of the panel.
@@ -2135,6 +2203,80 @@ class Manager:
             return
         message = {'v': 1, 'op': 'calendar_event', 'c': cal, 's': start, 'e': end, **(found or {'x': 1})}
         await self.send_auxiliary(inbox, message, action, request)
+
+    async def todo_loop(self):
+        """Do what a screen asks of a to-do list (todo_feed.request): tick an item, add one, rename or remove one."""
+        while True:
+            request = await self.ha.todo_requests.get()
+            try:
+                await self.answer_todo(request)
+            except Exception as error:   # one screen's request never ends the app
+                LOG.info('A to-do list was not changed (%s)', type(error).__name__)
+
+    async def answer_todo(self, request):
+        """One screen's request: a to-do tile of its own layout (by its place `i` and its entity), the item by the
+        number the app gave it (`n`), and the text it typed (`t`). The list's own change comes back from Home Assistant
+        through the subscription, to every screen that shows the list."""
+        if not isinstance(request, dict):
+            return
+        inbox = self.aliases.get(request.get('inbox'), request.get('inbox'))
+        layout, screen = self.layouts.get(inbox), self.screen(inbox) if isinstance(inbox, str) else None
+        if not layout or not screen:
+            return
+        try:
+            index = int(request.get('i'))
+            number = int(request.get('n') or 0)
+        except (TypeError, ValueError):
+            return
+        tiles = layout['tiles']
+        if not 0 <= index < len(tiles) or tiles[index]['entity'] != request.get('entity') or not tiles[index]['entity'].startswith('todo.'):
+            return
+        tile, action = tiles[index], request.get('a')
+        entity = tile['entity']
+        if action not in todo_feed.ACTIONS:
+            return
+        features = ((self.ha.states.get(entity) or {}).get('attributes') or {}).get('supported_features') or 0
+        may = todo_feed.flags(tile, features)
+        allowed = {'tick': todo_feed.MAY_TICK, 'untick': todo_feed.MAY_TICK, 'add': todo_feed.MAY_ADD,
+                   'rename': todo_feed.MAY_RENAME, 'remove': todo_feed.MAY_REMOVE, 'clear': todo_feed.MAY_CLEAR}[action]
+        if not may & allowed:
+            return
+        uid = self.todos.numbers.uid(entity, number) if number else None
+        call = todo_feed.request(action, self.todos.of(entity), uid, request.get('t'), features)
+        if not call:
+            return
+        service, data = call
+        await self.ha.request('call_service', domain='todo', service=service, service_data=data,
+                              target={'entity_id': entity})
+
+    async def sync_todos(self):
+        """Home Assistant sends the items of every to-do list a screen shows, and of the editor's last preview."""
+        if not hasattr(self.ha, 'subscribe_todo'):
+            return
+        wanted = todo_feed.wanted_lists([layout.get('tiles', []) for layout in self.layouts.values()] + [self.preview_tiles])
+        try:
+            await self.todos.sync(wanted)
+        except Exception as error:
+            LOG.warning('To-do lists were not brought up to date (%s)', type(error).__name__)
+
+    def todo_extras(self, tile, features=None, caps=None):
+        """A to-do tile's `x.todo` (todo_feed.card): the list's items in the tile's order, for a screen that draws
+        them (its hello says todo_card); a screen without the card gets no layout with a to-do tile (needs_firmware)."""
+        if features is not None and todo_feed.FEATURE not in features:
+            return None
+        entity = tile['entity']
+        tz = getattr(self.ha, 'time_zone', None) or timezone.utc
+        supported = ((self.ha.states.get(entity) or {}).get('attributes') or {}).get('supported_features') or 0
+        self.todo_sent[entity] = time.monotonic()
+        return todo_feed.card(tile, self.todos.of(entity), self.todos.numbers.of(entity), supported, tz,
+                              datetime.now(tz), todo_feed.keeps(caps))
+
+    def todo_due(self, tile):
+        """A list with a due date is sent again each minute: an item turns late, and tomorrow turns into today."""
+        entity = tile['entity']
+        if not any(item.get('due') for item in self.todos.of(entity) or []):
+            return False
+        return time.monotonic() - self.todo_sent.get(entity, 0) > 60
 
     async def plugin_loop(self):
         """Answer the plugins on the screens (docs/PLUGINS.md): a Home Assistant command their manifest names."""
@@ -2742,6 +2884,13 @@ class Manager:
                 return item.get('name_by_user') or item.get('name')
         return None
 
+    def summary_text(self, entity):
+        """An entity's state as a section's band says it (docs/PAGES.md "Sections"): the top bar's words, number format
+        and unit (header_bar.value); empty for a moment, which the band does not count down."""
+        text, _ = header_bar.value(entity, self.ha.states.get(entity), self.registry_index().get(entity),
+                                   getattr(self.ha, 'units', {}), getattr(self.ha, 'time_zone', None), getattr(self.ha, 'state_words', None))
+        return text or ''
+
     def header_message(self, layout, features=None, cards=None):
         """`features`: the screen's hello (page_delivery.Sender.features); None for this app's own firmware (the preview).
         `cards`: which tile's card each entity's item opens (core.bar_cards)."""
@@ -2757,6 +2906,12 @@ class Manager:
         sender = self.page_senders.get(inbox)
         if sender is not None and getattr(sender, 'features', None) is not None and text_tile.unsupported(layout.get('tiles', []), sender.features):
             return text_tile.FIRMWARE
+        # A to-do tile: a screen whose hello names todo_card (module todo, a full-tier build) draws it.
+        if sender is not None and getattr(sender, 'features', None) is not None and todo_feed.unsupported(layout.get('tiles', []), sender.features):
+            return todo_feed.FIRMWARE
+        # The Call tile: a screen whose hello names call (module call, a P4 with a microphone and a speaker) draws it.
+        if sender is not None and calls.unsupported(layout.get('tiles', []), getattr(sender, 'features', None)):
+            return calls.FIRMWARE
         return None
 
     def save(self, inbox, data):
@@ -3152,6 +3307,11 @@ class Manager:
         if tile['entity'].startswith('calendar.'):
             sender = self.page_senders.get(inbox) if inbox else None
             extra = {**(extra or {}), 'cal': await self.calendar_extras(tile, features, getattr(sender, 'caps', None))}
+        if tile['entity'].startswith('todo.'):
+            sender = self.page_senders.get(inbox) if inbox else None
+            block = self.todo_extras(tile, features, getattr(sender, 'caps', None))
+            if block:
+                extra = {**(extra or {}), 'todo': block}
         message=state_message(index,tile,states,extra,
                               precision=header_bar.precision_of(entry) if tile['entity'].startswith('sensor.') else None,entry=entry,
                               units=getattr(self.ha,'units',None),week=week)
@@ -3281,6 +3441,10 @@ class Manager:
         return await page_service.sync_pages(self, inbox=inbox, record=record, screen=screen, dirty=dirty, force=force, context=context)
 
     async def sync_one(self, inbox, layout, force=False, screen=None, dirty=None):
+        with tile_icons.carrying(self.icons.on_screen(inbox)):
+            return await self._sync_screen(inbox, layout, force, screen, dirty)
+
+    async def _sync_screen(self, inbox, layout, force=False, screen=None, dirty=None):
         """Send the screen what it lacks; True when something went out.
 
         `dirty` is the set of entity ids whose state changed since the last pass: only their tiles
@@ -3356,6 +3520,8 @@ class Manager:
             if reuse and tile['entity'].startswith('weather.') and self.forecast_due(tile['entity']):
                 reuse = False
             if reuse and tile['entity'].startswith('calendar.') and self.calendar_due(tile):
+                reuse = False
+            if reuse and tile['entity'].startswith('todo.') and self.todo_due(tile):
                 reuse = False
             # A screen on this route has no hello, and none of the flags a newer option needs.
             states.append(previous['states'][i] if reuse else await self.tile_message(i, tile, features=frozenset(), inbox=inbox))
@@ -3470,6 +3636,7 @@ class Manager:
             changed = self._screens_key != screens_key
             self.ha.relevant = self.watched_entities()
             await self.sync_templates()
+            await self.sync_todos()
             # A setting changed on a screen that owns them: the editor shows it.
             settings_key = self.settings_states_key()
             if settings_key != self._settings_key:
@@ -3652,6 +3819,10 @@ class Manager:
                                       getattr(self.ha, 'time_zone', None), getattr(self.ha, 'state_words', None))[0]
 
     async def sync_saver(self, inbox, screen):
+        with tile_icons.carrying(self.icons.on_screen(inbox)):
+            return await self._sync_saver(inbox, screen)
+
+    async def _sync_saver(self, inbox, screen):
         """Tell a screen that takes a screensaver (its hello lists it, firmware 0.29.0+) what it shows now, whenever that
         changes and once in every new session. A small message in the screen's session, as a camera's answer is. Only
         once the screen holds a layout: before it confirmed one (a saved layout that waits for its grid to be adapted,
@@ -3738,7 +3909,7 @@ class Manager:
         return (self.plugins.saver_kinds(inbox).get(key, (None, None))[1]) or {}
 
     def plugin_place(self, inbox, screen, question):
-        """(manifest entry, the manifest's tile, card or screensaver, of_entity) of a plugin's question: of_entity says
+        """(manifest entry, the manifest's tile, card, popup or screensaver, of_entity) of a plugin's question: of_entity says
         whether its card or step shows an entity whose Home Assistant pictures it may have (None for a tile: its manifest
         says). (None, None, False) for a plugin or place this screen does not run."""
         owner = question.owner
@@ -3753,7 +3924,10 @@ class Manager:
         if owner.kind == 'plugin_card':
             entry = self.plugins.known(parts[0], inbox) if self.plugins.store.get(inbox, parts[0]) else None
             of = bool(owner.of) and any(owner.of in (t['entity'], (t.get('options') or {}).get('plugin_entity')) for t in placed)
-            return entry, (entry.card(parts[1]) if entry else None), of
+            kind = entry.card(parts[1]) if entry else None
+            # A popup's places (plugin API 0.27) ask as a card's do; a popup is shown for no entity, so only the hosts of
+            # permissions.network.
+            return entry, kind, False if (kind or {}).get('popup') else of
         if not (0 <= owner.index < len(placed) and placed[owner.index]['entity'] == owner.key):
             return None, None, False
         entry = self.plugins.known(parts[0], inbox)
@@ -3865,6 +4039,9 @@ class Manager:
 
     # The maps kept drawn: a page's maps in both looks and the page before it.
     MAP_RENDERS_KEPT = 12
+    # A map with streets missing is not kept, so the next look gets them; meanwhile an open full view asks every four
+    # seconds, and on a slow host each drawing would take longer than that. It is drawn again after this long.
+    MAP_PROVISIONAL_SECONDS = 60
 
     def map_render(self, tile, shape, dark, full=False, focus=None, move=None):
         """(mark, draw) of one saved map tile for CameraFeed.live: the mark is its movement mark and the look, `draw`
@@ -3887,6 +4064,18 @@ class Manager:
                 self.map_renders.move_to_end(key)
                 self.map_hits[key[:3]] = self.map_renders[key].info.get('hits', [])
                 return self.map_renders[key]
+            held = self.map_provisional.get(key)
+            if held and time.monotonic() - held[1] < self.MAP_PROVISIONAL_SECONDS:
+                self.map_hits[key[:3]] = held[0].info.get('hits', [])
+                return held[0]
+            # A screen asks again after ten seconds, and a slow host may still be drawing: one drawing answers both.
+            drawing = self.map_drawing.get(key)
+            if drawing is None:
+                drawing = self.map_drawing[key] = asyncio.ensure_future(drawn(key, width, height))
+                drawing.add_done_callback(lambda _: self.map_drawing.pop(key, None))
+            return await asyncio.shield(drawing)
+
+        async def drawn(key, width, height):
             registry = self.registry_index()
             view = map_card.view_for(tile, self.ha.states, (width, height), board, registry, full, focus, move)
             wanted = view.tiles() if map_card.wants_streets(tile) else []
@@ -3900,6 +4089,9 @@ class Manager:
                 self.map_hits.pop(next(iter(self.map_hits)))
             if self.map_source.available() and len(streets) < len(wanted):
                 image.info['provisional'] = True
+                self.map_provisional[key] = (image, time.monotonic())
+                while len(self.map_provisional) > self.MAP_RENDERS_KEPT:
+                    self.map_provisional.popitem(last=False)
             else:
                 self.map_renders[key] = image
                 while len(self.map_renders) > self.MAP_RENDERS_KEPT:
@@ -4158,6 +4350,35 @@ class Manager:
         token = self.live.link(camera, None, sound=sound, screen=screen['id'], turn=self.picture_turn_of(screen['id']))
         return f'{base}/camera/{token}.mjpeg'
 
+    async def doorbell_talk(self, screen, camera):
+        """The Talk link of `camera` for the ring's view on `screen`, or None when the view has no Talk key: a screen without
+        a microphone, a camera Home Assistant offers no two-way audio for (camera/capabilities, Settings > Labs, 2026.11 and
+        later; docs/DOORBELL.md), or no address for this app on its network."""
+        talks = self.talks.sink is not None or await self.camera_talks(camera)  # the bench's stand-in talks to any camera
+        if not (self.caps_of_screen(screen) or {}).get('microphone') or not talks:
+            return None
+        base = await self.link_base(screen)
+        return f'{base}/camera/{self.talks.link(camera, screen=screen["id"], turned=self.door_switch(camera))}/talk' if base else None
+
+    def door_switch(self, camera):
+        """The doorbell's Talk is always switched: while someone speaks at the door the screen's microphone goes down, so the
+        doorbell's own echo does not come back (docs/CALLS.md)."""
+        def turned(data):
+            source = self.live.sources.get(camera)
+            recent = source is not None and time.monotonic() - source.loud_at < calls.HOLD_SECONDS
+            return calls.scaled(data, calls.DUCK) if recent else data
+        return turned
+
+    async def camera_talks(self, camera):
+        """Whether Home Assistant offers two-way audio for `camera`; False on an older Home Assistant, whose camera/capabilities
+        has no such key, and when it does not answer."""
+        try:
+            found = await self.ha.request('camera/capabilities', entity_id=camera)
+        except Exception as err:  # noqa: BLE001 - a Home Assistant without it: no Talk key
+            LOG.debug('camera/capabilities for %s: %s', camera, err)
+            return False
+        return bool(isinstance(found, dict) and found.get('two_way_audio'))
+
     async def doorbell_show(self, data):
         """esp_screens_doorbell (docs/DOORBELL.md): the doorbell's camera on the screens the event names, every screen
         without a name. A screen that draws a doorbell opens the camera live with its sound and a chime; any other gets
@@ -4193,11 +4414,13 @@ class Manager:
                                    door, [screen.get('node') for screen in views if screen.get('node')], sound, chime, keep)
         links = dict(zip((screen['id'] for screen in views),
                          await asyncio.gather(*(self.doorbell_link(screen, camera) for screen in views))))
+        talks = dict(zip((screen['id'] for screen in views),
+                         await asyncio.gather(*(self.doorbell_talk(screen, camera) for screen in views))))
         if any(links.values()):
             self.live.warm(camera)  # its first picture on its way before the first screen opens its link
         state = self.doorbell_lock_state(door)
-        sent = await self.doorbell_send(views, lambda screen: self.doorbells.message(key, door_state=state,
-                                                                                  link=links.get(screen['id']))) if views else 0
+        sent = await self.doorbell_send(views, lambda screen: self.doorbells.message(key, door_state=state, link=links.get(screen['id']),
+                                                                                  talk=talks.get(screen['id']))) if views else 0
         if door and door.get('lock') and views:
             asyncio.ensure_future(self.doorbell_follow_lock(key))
         alerts = {'sent': 0, 'skipped': 0, 'failed': 0}
@@ -4327,6 +4550,212 @@ class Manager:
                     asyncio.ensure_future(self.doorbell_follow_lock(key))
             if self.doorbells.seen():
                 self.ha.changed.set()
+
+    # ---- Calls between screens (calls.py is the state machine; docs/CALLS.md) ----
+    def call_screens(self):
+        """The screens that can be in a call: online ones say `call` in their hello, offline ones keep their last word."""
+        out = {}
+        for screen in self.screens():
+            node = screen.get('node')
+            if not node:
+                continue
+            sender = self.page_senders.get(screen['id'])
+            features = getattr(sender, 'features', ()) or ()
+            if sender is not None and CALL_FEATURE not in features:
+                continue
+            caps = self.caps_of_screen(screen) or {}
+            out[node] = {'screen': screen, 'name': self.labels.get(screen.get('device_id')) or screen.get('name') or node,
+                         'icon': CALL_ICON, 'hears': bool(caps.get('microphone')), 'speaks': bool(caps.get('speaker')),
+                         'shows': bool(caps.get('live')),
+                         'films': bool(caps.get('camera') and self.call_can_film(node)),
+                         'online': bool(screen.get('online')), 'quiet': self.call_quiet(screen),
+                         'direct': calls.DIRECT_FEATURE in features and self.call_switch_on(screen, calls.DIRECT_SWITCH),
+                         'ip': screen.get('ip') or ''}
+        return out
+
+    def call_switch_on(self, screen, switch):
+        """Whether one of the screen's own call switches is on (calls.switch_on)."""
+        device = screen.get('device_id')
+        if not device:
+            return False
+        return calls.switch_on([item for item in getattr(self.ha, 'registry', None) or [] if isinstance(item, dict) and item.get('device_id') == device],
+                               getattr(self.ha, 'states', None), switch)
+
+    def call_quiet(self, screen):
+        """Whether the screen's switch Do not disturb is on."""
+        return self.call_switch_on(screen, calls.QUIET_SWITCH)
+
+    def call_can_film(self, node):
+        return screen_source.url_of(screen_source.PREFIX + node) is not None
+
+    def call_rtsp(self, node):
+        """The address of a screen's own video server, from its IP and its API key; None without either."""
+        screen = next((s for s in self.screens() if s.get('node') == node), None)
+        key = self.call_api_key(screen)
+        return screen_source.rtsp_url(screen['ip'], key) if screen and screen.get('ip') and key else None
+
+    def call_api_key(self, screen):
+        """A screen's API key: from the profile this app keeps for it, else from Home Assistant's own record of it."""
+        if not screen:
+            return None
+        profile = next((meta for meta in self.firmware.profile_names().values() if meta.get('node') == screen.get('node')), None)
+        if profile and profile.get('api_key'):
+            return profile['api_key']
+        try:
+            import json as jsonlib
+            entries = jsonlib.loads((Path(os.environ.get('HA_CONFIG', '/homeassistant')) / '.storage/core.config_entries').read_text())
+        except (OSError, ValueError):
+            return None
+        for entry in entries.get('data', {}).get('entries', []):
+            data = entry.get('data') or {}
+            if entry.get('domain') == 'esphome' and data.get('host') == screen.get('ip'):
+                return data.get('noise_psk')
+        return None
+
+    async def call_send(self, outs):
+        """What calls.py said: each state to its screen with what it needs, each event into Home Assistant."""
+        known = self.call_screens()
+        for out in outs:
+            if isinstance(out, calls.Fire):
+                await self.ha.fire(out.event, out.data)
+                continue
+            if out.state == calls.END:
+                self.call_switches.pop(out.key, None)
+                self.call_direct.pop(out.key, None)
+                self.call_relayed.discard(out.key)
+            mine = known.get(out.node)
+            if not mine:
+                continue
+            peer = known.get(out.peer) or {}
+            message = calls.message(out, name=peer.get('name', out.peer), icon=glyph_of(peer.get('icon') or CALL_ICON))
+            # Straight between the two screens where both can and neither said it could not reach the other
+            # (docs/CALLS.md, "Screen to screen"): each serves under its token and fetches the other's. Whether two
+            # addresses reach each other cannot be told from here, so the attempt decides and a screen says `direct`.
+            direct = (out.state == calls.LIVE and out.key not in self.call_relayed and mine.get('direct') and peer.get('direct')
+                      and mine.get('ip') and peer.get('ip'))
+            if direct:
+                tokens = self.call_direct.setdefault(out.key, calls.direct_tokens(out.node, out.peer))
+                video = out.video and out.peer not in self.call_cameras_off and peer.get('films')
+                message['ds'] = tokens[out.node]
+                message['l'] = calls.direct_link(peer['ip'], tokens[out.peer])
+                message['vd'] = int(bool(video))
+                message['pc'] = int(bool(video))
+                switch = self.call_switch(out.key, known)
+                if switch is not None:
+                    message.update(switch.keys())
+            elif out.state == calls.LIVE:
+                base = await self.link_base(mine['screen'])
+                if base:
+                    video = out.video and out.peer not in self.call_cameras_off and peer.get('films')
+                    source = (screen_source.PREFIX if video else screen_source.VOICE_PREFIX) + out.peer
+                    token = self.live.link(source, None, sound=True, screen=mine['screen']['id'], turn=self.picture_turn_of(mine['screen']['id']), talk=True, cover=True)
+                    message['l'] = f'{base}/camera/{token}.mjpeg'
+                    message['vd'] = int(bool(video))
+                    message['pc'] = int(bool(video))
+                    talk = self.talks.link(f'call:{out.node}', screen=mine['screen']['id'], into=self.call_voice_to(out.node, out.key, known))
+                    message['tk'] = f'{base}/camera/{talk}/talk'
+                    # The call's voice switching and echo cancelling, for the small keys (docs/CALLS.md, "Echo").
+                    switch = self.call_switch(out.key, known)
+                    if switch is not None:
+                        message.update(switch.keys())
+            await self.send_auxiliary(mine['screen']['id'], message, self.transport(mine['screen']['id'], mine['screen']), self.page_scope(mine['screen']['id']))
+
+    def call_switch(self, key, known):
+        """The voice switch of the call `key`, made when its first end goes live; None once the call is gone."""
+        call = self.calls.calls.get(key)
+        if key not in self.call_switches and call:
+            cancels = [each for each in (call.caller, call.callee) if ((self.caps_of_screen(known[each]['screen']) or {}).get('echo_cancel') if each in known else False)]
+            self.call_switches[key] = calls.VoiceSwitch(call.caller, call.callee, cancels)
+        return self.call_switches.get(key)
+
+    def call_voice_to(self, node, key, known):
+        """Where `node`'s voice goes: through the call's voice switch, to whichever stream of it the other end listens to."""
+        switch = self.call_switch(key, known)
+
+        def feed(data):
+            part = switch.feed(node, data, time.monotonic()) if switch else data
+            for entity in (screen_source.PREFIX + node, screen_source.VOICE_PREFIX + node):
+                source = self.live.sources.get(entity)
+                if source is not None:
+                    source.voice(part)
+        return feed
+
+    async def call_report(self, data):
+        """esphome.screen_call: what a finger did on a screen."""
+        node, action, key = str(data.get('screen') or '').replace('_', '-'), data.get('action'), data.get('key') or ''
+        to, video, now = str(data.get('to') or ''), str(data.get('video')) == '1', time.monotonic()
+        known = self.call_screens()
+        if action == 'list':
+            rows = self.calls.contacts(node, known)
+            self.calls.seen(node)
+            for row in rows:
+                row['i'] = glyph_of(row['i'] or CALL_ICON)
+            mine = known.get(node)
+            if mine:
+                for part in calls.contacts_messages(rows):
+                    await self.send_auxiliary(mine['screen']['id'], part, self.transport(mine['screen']['id'], mine['screen']), self.page_scope(mine['screen']['id']))
+            return
+        if action == 'dial':
+            target = known.get(to)
+            await self.call_send(self.calls.dial(node, to, video, now, reachable=bool(target and target['online']), quiet=bool(target and target['quiet'])))
+        elif action == 'answer':
+            await self.call_send(self.calls.answer(key, node, now))
+        elif action == 'decline':
+            await self.call_send(self.calls.decline(key, node, now))
+        elif action in ('cancel', 'end'):
+            call = self.calls.calls.get(key)
+            await self.call_send(self.calls.hang_up(key, node, now))
+            if call:
+                self.call_cameras_off.discard(call.caller)
+                self.call_cameras_off.discard(call.callee)
+        elif action in ('switch', 'echo'):
+            # A small key of the call (voice switching, echo cancelling), or a screen's own switch as the call goes live:
+            # for the call, so both screens hear it.
+            call = self.calls.of(node)
+            switch = self.call_switches.get(call.key) if call else None
+            if switch is not None:
+                switch.turn(action, video)
+                for each in (call.caller, call.callee):
+                    mine = known.get(each)
+                    if mine:
+                        await self.send_auxiliary(mine['screen']['id'], calls.choices_message(call.key, switch.keys()),
+                                                  self.transport(mine['screen']['id'], mine['screen']), self.page_scope(mine['screen']['id']))
+        elif action == 'direct' and not video:
+            # A screen could not reach the other, or nothing came from it: the call goes on through this app.
+            call = self.calls.of(node)
+            if call and call.key not in self.call_relayed:
+                LOG.info('Call %s: %s could not reach the other screen, its media go through the app', call.key, node)
+                self.call_relayed.add(call.key)
+                self.call_direct.pop(call.key, None)
+                await self.call_send([calls.Say(call.caller, call.key, calls.LIVE, call.callee, call.video),
+                                      calls.Say(call.callee, call.key, calls.LIVE, call.caller, call.video)])
+        elif action == 'camera':
+            call = self.calls.of(node)
+            if call:
+                (self.call_cameras_off.discard if video else self.call_cameras_off.add)(node)
+                await self.call_send([calls.Say(call.other(node), call.key, calls.LIVE, node, call.video)])
+
+    async def call_loop(self):
+        while True:
+            # With no call up nothing runs here but this wait: no pull, no thread, no poll (docs/CALLS.md).
+            try:
+                data = await asyncio.wait_for(self.ha.call_events.get(), 1 if self.calls.calls else None)
+            except asyncio.TimeoutError:
+                data = None
+            try:
+                if data is not None:
+                    await self.call_report(data)
+                now = time.monotonic()
+                if not self.calls.calls:
+                    continue
+                await self.call_send(self.calls.tick(now))
+                online = {node for node, facts in self.call_screens().items() if facts['online']}
+                for call in list(self.calls.calls.values()):
+                    for node in (call.caller, call.callee):
+                        if node not in online:
+                            await self.call_send(self.calls.gone(node, now))
+            except Exception as err:  # noqa: BLE001 - one call that fails must not end the others
+                LOG.exception('Calls: %r', err)
 
     async def doorbell_loop(self):
         """Rings and the screens' reports of them, in arrival order."""
@@ -4520,12 +4949,25 @@ def create_app(manager, development=False):
             screen['caps'] = manager.caps_of_screen(screen)
             # The Dock (docs/MODULES.md): the editor offers "Show in Dock" on a page of a board that has it.
             screen['dock'] = has_module(screen, 'dock')
+            # Sections on a page (docs/PAGES.md "Sections"): only a board with the module sections draws them, so the editor
+            # offers them there only; `sections_drawn`: the screen's own hello says it draws them now (an older firmware does not).
+            screen['sections'] = has_module(screen, 'sections')
+            screen['sections_drawn'] = SECTIONS_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ())
             # A vacuum's larger tile (docs/VACUUM.md, "A larger tile"): its map, rooms and routines on a board with the
             # vacuum card's module; the editor offers them there only, and a screen whose hello lacks vacuum_tile gets
             # the keys (catalogue screen else).
             screen['vacuum_tile'] = has_module(screen, 'vacuum_card')
             # The template tile (docs/TEXT_TILE.md): only a board with the module text_card draws it.
             screen['text_tiles'] = has_module(screen, text_tile.FEATURE)
+            # The Call tile: only a screen that says it can (a build of the full tier without live pictures, a microphone or a
+            # speaker has the module and cannot).
+            screen['call_tiles'] = calls.FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ())
+            # The to-do card (docs/TODO.md): only a board with the module todo (8 MB of flash or more) has it; the
+            # editor offers to-do lists there only.
+            screen['todo_lists'] = has_module(screen, todo_feed.MODULE)
+            # A text's field (docs/TEXT_ENTITY.md): only a board with the module text_edit edits a text on the glass; the
+            # editor says that any other shows the value only.
+            screen['text_edit'] = has_module(screen, 'text_edit')
             # A light's presets (docs/LIGHT_PRESETS.md): only a board with the module light_presets draws them.
             screen['light_presets'] = has_module(screen, 'light_presets')
             # Whether the board draws pictures (camera tiles, an alert's snapshot, an album cover): the boards with
@@ -4612,6 +5054,9 @@ def create_app(manager, development=False):
         # What's new for the Update badge: here only, not in every live update (app 0.2.78).
         payload['changelog'] = manager.updates.changelog
         payload['claude_skill'] = claude_skill.status(manager.skill_dir)
+        # Layoutbot (docs/LAYOUTBOT.md): the AI Tasks of this Home Assistant that can make data; the editor shows the bot
+        # only when there is one.
+        payload['layoutbot'] = layoutbot.agents(manager.ha.states)
         payload['video'] = manager.video_status()
         # The name in the editor's language for the library, and as the screens show it for the mockup (app 0.2.90).
         payload['builtin'] = [{'id': key, 'name': builtin_name(key, t), 'screen_name': builtin_name(key),
@@ -4619,6 +5064,53 @@ def create_app(manager, development=False):
         payload['header'] = {**header_bar.catalogue(), 'suggestions': {
             screen['id']: header_bar.suggestions(screen, entities, manager.ha.states, manager.registry_index()) for screen in payload['screens']}}
         return web.json_response(payload)
+    # The answer Layoutbot gives the editor: 2 is a checked plan the editor places (dev 2026-11), 1 was a whole document.
+    LAYOUTBOT_PLAN = 2
+    async def layoutbot_ask(request):
+        """Layoutbot (docs/LAYOUTBOT.md): a sentence and the editor's draft in, a checked plan out (layoutbot.checked),
+        made by the AI Task the person connected to Home Assistant; the editor places it (web/src/model/layoutbot.ts).
+        Other screens only when the person chose all of them (`all_screens`). It saves nothing and calls no action but
+        ai_task.generate_data."""
+        data = await request.json()
+        inbox = manager.aliases.get(request.match_info['inbox'], request.match_info['inbox'])
+        screen = manager.screen(inbox)
+        grid = manager.verified_grid(inbox)
+        if screen is None or grid is None:
+            raise LayoutError(t('addon.errors.not_paired'))
+        if not isinstance(data, dict) or not isinstance(data.get('prompt'), str) or not data['prompt'].strip():
+            raise ValueError(t('addon.errors.pages.fields'))
+        # An editor from before plans (it applied a whole document the add-on made) would show nothing of this answer:
+        # it is told to reload, as an old tab is for a save (LAYOUTBOT_PLAN).
+        if data.get('version') != LAYOUTBOT_PLAN:
+            raise ValueError(t('addon.errors.refresh_page'))
+        agents = layoutbot.agents(manager.ha.states)
+        if not agents:
+            raise ValueError(t('addon.layoutbot.none'))
+        draft = validate_document(data.get('layout'), grid)
+        agent = data.get('agent') if data.get('agent') in {a['id'] for a in agents} else await layoutbot.preferred(manager.ha.request, agents)
+        _, entities = manager.inventory()
+        known = {entity['id'] for entity in entities}
+        name_of = lambda item: manager.labels.get(item.get('device_id')) or item['name']
+        # The other screens with a page document, described to the model only when the person chose all screens.
+        others = []
+        if data.get('all_screens') is True:
+            for other in manager.screens():
+                record = manager.store.get(other['id'])
+                other_grid = manager.verified_grid(other['id'])
+                if other['id'] == inbox or not record or record.get('format') != PAGE_FORMAT or other_grid is None:
+                    continue
+                others.append({'id': other['id'], 'name': name_of(other), 'grid': other_grid,
+                               'sections': has_module(other, 'sections'), 'document': record['layout']})
+        answer, seconds = await layoutbot.ask(manager.ha.request, data['prompt'][:layoutbot.PROMPT_CHARS], draft, grid,
+                                              entities, has_module(screen, 'sections'), agent, name=name_of(screen), others=others)
+        words = lambda notes: [t(f"addon.layoutbot.notes.{note['key']}", **{k: v for k, v in note.items() if k != 'key'}) for note in notes]
+        # Another screen's plan is checked against its saved document; the editor shows it before anything is saved.
+        plan, notes, elsewhere = layoutbot.answered(answer, draft, known, others, data.get('all_screens'))
+        elsewhere = [{**other, 'notes': words(other['notes'])} for other in elsewhere]
+        LOG.info('Layoutbot answered in %.1f s with %s (%d notes, %d other screens)', seconds, agent, len(notes), len(elsewhere))
+        return web.json_response({'version': LAYOUTBOT_PLAN, 'reply': answer.get('reply') if isinstance(answer.get('reply'), str) else '',
+                                  'plan': plan, 'notes': words(notes), 'elsewhere': elsewhere, 'agent': agent,
+                                  'seconds': round(seconds, 1)})
     async def header_preview(request):
         """The top bar as a screen would draw it right now, so the editor shows unsaved changes live."""
         data = await request.json()
@@ -4640,7 +5132,7 @@ def create_app(manager, development=False):
                 raise LayoutError(t('addon.errors.layout.invalid'))
             grid = grid_of_record(source)
             record = {'format': PAGE_FORMAT, 'sourceGrid': source['sourceGrid'],
-                      'layout': validate_document(source.get('layout'), grid), 'revision': ''}
+                      'layout': validate_document(flattened(source.get('layout'))[0], grid), 'revision': ''}
             if 'editor' in source:
                 editor = source['editor']
                 if not isinstance(editor, dict) or set(editor) != {'positions'}:
@@ -4764,6 +5256,14 @@ def create_app(manager, development=False):
         manager.ha.changed.set()
         manager.notify()
         return web.json_response({'screensaver': choice})
+    async def home_facts_view(request):
+        """The facts of Home Assistant's registries a first layout reads (home_facts.py, docs/AUTO_LAYOUT.md): every
+        tile entity's area, device, category, class and group, the areas and floors in Home Assistant's order, and which
+        entities belong to the screens themselves."""
+        ha = manager.ha
+        screens = {screen.get('device_id') for screen in manager.screens() if screen.get('device_id')}
+        return web.json_response(home_facts.facts(getattr(ha, 'registry', []), getattr(ha, 'states', {}), getattr(ha, 'devices', []),
+                                                  getattr(ha, 'areas', []), getattr(ha, 'floors', []), screens))
     async def capabilities(request):
         """What Home Assistant says each entity can do, for the tile settings (app 0.2.67). Unknown is null: the editor
         then offers what it always offered."""
@@ -5062,7 +5562,9 @@ def create_app(manager, development=False):
         bars = [manager.header_message({'header': {'items': bar_items(page)}})['items']
                 for page in record['layout']['pages']]
         region = manager.page_region()
-        begin, initial_tiles, initial_bars, states = page_delivery.prepare('', record, region, values, bars)
+        # The preview is this app's own firmware, of the full tier: it draws sections (docs/PAGES.md "Sections").
+        begin, initial_tiles, initial_bars, states = page_delivery.prepare('', record, region, values, bars, (), True,
+                                                                           page_service.section_sums(manager, record['layout']))
         revision = page_delivery.configuration(record, region)
         manager.preview_layouts[revision] = tiles
         manager.preview_layouts.move_to_end(revision)
@@ -5604,6 +6106,12 @@ def create_app(manager, development=False):
             return web.json_response({'ok': True})
         app.router.add_delete('/api/plugins/{plugin}/link', plugins_forget)
 
+        async def plugins_forget_folder(request):
+            # A plugin someone was making, off the Plugins page: its folder goes to tessera-plugins/.removed/.
+            moved = manager.plugins.forget_folder(request.match_info['plugin'])
+            return web.json_response({'ok': True, 'moved_to': str(moved)})
+        app.router.add_delete('/api/plugins/{plugin}/folder', plugins_forget_folder)
+
         async def plugins_settings(request):
             return web.json_response(manager.plugins.settings_for(request.match_info['inbox'], REQUEST_LANGUAGE.get()))
 
@@ -5657,6 +6165,31 @@ def create_app(manager, development=False):
                     state['attributes']['supported_features'] & calendar_feed.CREATE_EVENT]
         return web.json_response({'cal': card, 'places': [place for place, _ in places.most_common(24)], 'bookable': sorted(bookable)})
     app.router.add_post('/api/calendar/preview', calendar_preview)
+
+    async def todo_preview(request):
+        """A to-do card as the screen would get it, for the editor's mockup (docs/TODO.md): the list's items in the
+        tile's order. A list no screen shows yet is asked of Home Assistant once (todo/item/list)."""
+        data = await request.json()
+        tile = data.get('tile') if isinstance(data, dict) else None
+        if not isinstance(tile, dict) or not str(tile.get('entity', '')).startswith('todo.'):
+            raise ValueError(t('addon.errors.invalid_input'))
+        try:
+            options = todo_feed.validate({k: v for k, v in (tile.get('options') or {}).items() if k in todo_feed.KEYS})
+        except ValueError:
+            options = {}
+        entity = tile['entity']
+        items = manager.todos.of(entity)
+        if items is None:
+            try:
+                answer = await manager.ha.request('todo/item/list', entity_id=entity)
+                items = [item for item in (answer or {}).get('items') or [] if isinstance(item, dict)]
+            except (ConnectionError, TimeoutError):
+                items = None
+        tz = getattr(manager.ha, 'time_zone', None) or timezone.utc
+        features = ((manager.ha.states.get(entity) or {}).get('attributes') or {}).get('supported_features') or 0
+        numbers = manager.todos.numbers.of(entity) or todo_feed.Numbers().update(entity, items or [])
+        return web.json_response({'todo': todo_feed.card({'entity': entity, 'options': options}, items, numbers, features, tz, datetime.now(tz))})
+    app.router.add_post('/api/todo/preview', todo_preview)
 
     async def text_preview(request):
         """A template tile as a screen would get it, for the editor's inspector (docs/TEXT_TILE.md): Home Assistant's
@@ -5732,12 +6265,39 @@ def create_app(manager, development=False):
         return web.Response(body=body, content_type='image/png', headers={'Cache-Control': 'max-age=60'})
     app.router.add_get('/api/vacuum/preview', vacuum_preview)
     app.router.add_get('/api/vacuum/map', vacuum_map_picture)
+    # The icons a screen takes on top of the fixed set (screen_icons.py, docs/ICONS.md).
+    async def icons_all(request):
+        return web.json_response({'icons': tile_icons.mdi()})
+
+    async def icons_view(request):
+        return web.json_response(manager.icons.view(request.match_info['inbox']))
+
+    async def icons_choose(request):
+        data = await request.json()
+        return web.json_response(manager.icons.choose(request.match_info['inbox'], data.get('icons') if isinstance(data, dict) else None))
+
+    async def icons_build(request):
+        inbox = request.match_info['inbox']
+        outcome = manager.icons.apply(inbox)
+        return web.json_response({**outcome, 'view': manager.icons.view(inbox)})
+
+    async def icons_everywhere(request):
+        inbox = request.match_info['inbox']
+        outcome = manager.icons.apply_everywhere(inbox)
+        return web.json_response({**outcome, 'view': manager.icons.view(inbox)})
+
+    app.router.add_get('/api/icons', icons_all)
+    app.router.add_get('/api/screens/{inbox}/icons', icons_view)
+    app.router.add_put('/api/screens/{inbox}/icons', icons_choose)
+    app.router.add_post('/api/screens/{inbox}/icons/build', icons_build)
+    app.router.add_post('/api/screens/{inbox}/icons/everywhere', icons_everywhere)
     app.router.add_get('/api/screens/{inbox}/extras', extras)
     app.router.add_get('/api/screens/{inbox}/extras/events', extras_events)
     app.router.add_post('/api/screens/{inbox}/extras', extra)
     app.router.add_get('/', index)
     app.router.add_get('/api/inventory', inventory)
     app.router.add_get('/api/capabilities', capabilities)
+    app.router.add_get('/api/home-facts', home_facts_view)
     app.router.add_get('/api/states', states)
     app.router.add_get('/api/history-preview', preview_history)
     app.router.add_get('/api/media-art', media_art_preview)
@@ -5764,6 +6324,7 @@ def create_app(manager, development=False):
     app.router.add_get('/api/display-precision', display_precision)
     app.router.add_put('/api/display-precision', display_precision)
     app.router.add_post('/api/header-preview', header_preview)
+    app.router.add_post('/api/screens/{inbox}/layoutbot', layoutbot_ask)
     app.router.add_post('/api/claude-skill', install_claude_skill)
     app.router.add_get('/api/claude-skill.zip', download_claude_skill)
     app.router.add_post('/api/video', install_video)
@@ -5829,16 +6390,13 @@ async def main():
         await runner.setup()
         await web.TCPSite(runner, '127.0.0.1' if development else '0.0.0.0', 8099).start()
         # Camera images for the screens: their own port on the LAN, not the ingress page (docs/CAMERA.md).
-        cameras = web.AppRunner(picture_links.web_app(manager.links, manager.live), access_log=None)
+        cameras = web.AppRunner(picture_links.web_app(manager.links, manager.live, manager.talks), access_log=None)
         await cameras.setup()
-        try:
-            await web.TCPSite(cameras, '0.0.0.0', picture_links.port()).start()
-        except OSError as error:
-            # Everything else still works; only camera images stay away.
-            LOG.error('Camera images are off: port %d is not available (%s)', picture_links.port(), error)
+        # A port another program holds turns camera images off, and nothing else.
+        await picture_links.open_port(cameras)
         try:
             await asyncio.gather(ha.run(), manager.run(), manager.history_loop(), manager.updates.run(),
-                                 manager.alert_loop(), manager.doorbell_loop(), manager.tile_loop(), manager.card_history_loop(), manager.camera_loop(), manager.card_options_loop(), manager.calendar_loop(),
+                                 manager.alert_loop(), manager.doorbell_loop(), manager.call_loop(), manager.tile_loop(), manager.card_history_loop(), manager.camera_loop(), manager.card_options_loop(), manager.calendar_loop(), manager.todo_loop(),
                                  manager.media_loop(), manager.pairing_loop(), manager.photo_loop(), manager.video_loop(),
                                  *([manager.plugins.loop(), manager.plugin_loop()] if core.plugins_enabled() else []))
         finally:

@@ -20,6 +20,7 @@ export type TileOptions = {
   guard?: string;
   // Where a cover's slats stand open: "100" (Home Assistant's rule, never stored) or "50".
   tilt_open?: string;
+  send_after?: string;
   // A light's presets (docs/LIGHT_PRESETS.md, light_presets.py): at most four, each a brightness with a white shade or a
   // colour, and whether each disc shows its brightness (stored only when it does).
   presets?: LightPreset[];
@@ -97,7 +98,7 @@ export type HeaderItem = { id?: string; type: string; entity?: string; content?:
 // `bar_cards`: the screen takes cards from its top bar (firmware 0.56.0), so its tiles of the top bar count too (model/memory.ts).
 // `sections`: the screen draws sections, so a page's sections count too (any other screen is sent none).
 export type ScreenMemory = { room: number | null; used: number; psram: boolean; tile: number; extra: number; page?: number; short?: boolean; live?: boolean;
-  bar_cards?: boolean; sections?: boolean };
+  bar_cards?: boolean; sections?: boolean; alarms?: string[] };
 // `barItems`: the items one page's top bar takes there (model/pages.ts barLimit). `plugins`: whether plugin tiles and
 // items are taken there (the add-on serves plugins, the plugins store's pluginsEnabled); never stored with a document.
 export type PageGrid = Readonly<{ columns: number; rows: number; pages?: number; barItems?: number; plugins?: boolean }>;
@@ -468,6 +469,8 @@ export type Inventory = {
   line?: LineBuild[];
   // The build server (build_server.py, docs/BUILDS.md "On a build server"), in every live answer.
   build_server?: BuildServerView;
+  // What the builds left in /data, the automatic clean-up and whether to offer one (build_files.py, docs/BUILDS.md).
+  build_files?: import("./model/build-files").BuildFilesView;
   // What this app shares about plugins (plugin_likes.py): whether a like counts publicly, counting, the stars cards.
   plugin_sharing?: PluginSharing | null;
   // The live streams of every screen together and the most the app serves at once (live_stream.py, LiveFeed.usage).

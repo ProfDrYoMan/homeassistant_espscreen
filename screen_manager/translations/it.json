@@ -1008,6 +1008,12 @@
         "unknown": "Il server di compilazione non riconosce più Tessera. Abbinalo di nuovo.",
         "pending": "Il server di compilazione non ha ancora accettato Tessera."
       },
+      "build_files": {
+        "automatic": "La pulizia automatica può essere solo attiva o disattiva.",
+        "level": "Scegli quali file di compilazione rimuovere.",
+        "cleaning": "I file di compilazione sono già in pulizia.",
+        "building": "Uno schermo è in compilazione o in attesa. Pulisci i file di compilazione quando ha finito."
+      },
       "video": {
         "not_written": "Impossibile scrivere Tessera video in {folder}: {reason}.",
         "not_installed": "Installa prima Tessera video."
@@ -1648,8 +1654,10 @@
       "none": "Layoutbot ha bisogno di un AI Task in Home Assistant che possa generare dati (Impostazioni > Dispositivi e servizi, un'integrazione IA).",
       "notes": {
         "unknown": "{entity} tralasciato: non è un'entità di questo Home Assistant.",
-        "no_page": "Non esiste la pagina {page}."
-      }
+        "no_page": "Non esiste la pagina {page}.",
+        "kept": "Layoutbot ha dimenticato {count} dei tuoi riquadri: sono sparsi nell'ultima pagina."
+      },
+      "nothing_to_restructure": "Su questa pagina non ci sono ancora riquadri di dispositivi da ristrutturare. Aggiungine qualcuno e chiedi di nuovo."
     }
   },
   "editor": {
@@ -1979,6 +1987,7 @@
       "search_label": "Aggiungi un'entità",
       "filters": {
         "all": "Tutti",
+        "plugin": "Plugin",
         "light": "Luci",
         "climate": "Clima",
         "switch": "Interruttori",
@@ -2969,6 +2978,18 @@
         "never": "Non mostrare più",
         "done": "Fatto"
       },
+      "look": {
+        "title": "Che aspetto deve avere?",
+        "text": "Questo sensore parte come indicatore. Punta su un aspetto per vederlo sul riquadro; puoi cambiarlo dopo in Visualizzazione.",
+        "ring": "Indicatore: anello",
+        "tape": "Indicatore: scala",
+        "bar": "Indicatore: barra",
+        "graph": "Grafico delle ultime ore",
+        "watch": "Valore grande",
+        "standard": "Solo il valore",
+        "never": "Non mostrare più",
+        "done": "Fatto"
+      },
       "text": {
         "title": "Modello",
         "hint": "Scrivi testo con modelli di Home Assistant, come in Strumenti per sviluppatori › Modello. Home Assistant lo compila, e lo schermo mostra il risultato e lo tiene aggiornato. Se il risultato è vuoto, il riquadro scompare.",
@@ -3523,6 +3544,32 @@
         "forget_confirm": "Dimenticare {name}? Gli schermi tornano a compilarsi qui. Per rimuovere Tessera anche lì, toglilo dai dispositivi abbinati del server di compilazione.",
         "forget_go": "Dimentica",
         "unavailable": "Questo Tessera non può comunicare con un server di compilazione."
+      },
+      "build_files": {
+        "title": "File di compilazione",
+        "intro": "Ogni compilazione del firmware lascia dei file, così la compilazione successiva dello stesso schermo è veloce. I backup di Home Assistant non li includono.",
+        "measuring": "Misurazione…",
+        "total": "{size} in tutto",
+        "folders": "Cartelle di compilazione",
+        "folders_detail": "1 schermo | {count} schermi",
+        "cache": "Cache di compilazione",
+        "tools": "ESP-IDF e download",
+        "clean": "Pulisci le cartelle di compilazione",
+        "cleaning": "Pulizia in corso…",
+        "clean_confirm": "Rimuovere le cartelle di compilazione di tutti gli schermi? Questo libera {size}. La prossima compilazione di ogni schermo compila di nuovo tutto e richiede qualche minuto in più, di più su un Raspberry Pi. Layout, plugin e impostazioni restano come sono.",
+        "clean_all": "Rimuovi anche la cache di compilazione e ESP-IDF",
+        "clean_all_confirm": "Rimuovere tutti i file di compilazione, anche la cache di compilazione e ESP-IDF? Questo libera {size}. La prossima compilazione scarica di nuovo ESP-IDF, circa 1 GB, e compila tutto da capo, il che può richiedere mezz'ora su un Raspberry Pi. Layout, plugin e impostazioni restano come sono.",
+        "clean_go": "Pulisci",
+        "cleaned": "Pulizia fatta: {size} di nuovo liberi.",
+        "cleaned_nothing": "Pulizia fatta.",
+        "busy": "Uno schermo è in compilazione. Puoi pulire quando ha finito.",
+        "auto_label": "Pulisci dopo la compilazione",
+        "auto_hint": "Dalla prossima compilazione in poi, rimuove le cartelle di compilazione quando non si sta più compilando nulla. Fa risparmiare spazio, ma ogni compilazione successiva di uno schermo compila di nuovo tutto e richiede qualche minuto in più.",
+        "auto_on": "Le cartelle di compilazione vengono pulite dopo la compilazione.",
+        "auto_off": "Le cartelle di compilazione restano per compilazioni più veloci.",
+        "offer": "Libera {size}",
+        "not_now": "Non ora",
+        "large": "Le cartelle di compilazione occupano {size}. Pulirle libera la maggior parte dello spazio che occupano le compilazioni."
       }
     },
     "firmware": {
@@ -4851,6 +4898,8 @@
       "close": "Chiudi",
       "hello": "Ciao! Dimmi cosa deve mostrare questo schermo e ne organizzo le pagine. Cambio solo la disposizione, mai i tuoi dispositivi.",
       "privacy": "Uso {agent} di Home Assistant. La tua domanda, le pagine dei tuoi schermi e gli id, i nomi e le aree delle tue entità vanno lì.",
+      "model_hint": "Lavoro molto meglio con un modello più grande che con il più economico. In Home Assistant, aggiungi un AI Task per me alla tua integrazione IA, disattiva «Impostazioni del modello consigliate», scegli un modello più grande e selezionalo in cima a questa chat.",
+      "model_link": "Apri le integrazioni",
       "placeholder": "Crea una pagina con…",
       "ask": "Chiedi",
       "send": {
@@ -4877,6 +4926,10 @@
       "show": "Mostra",
       "undo": "Annulla",
       "undone": "Annullato",
+      "restructure": {
+        "page": "Ristruttura questa pagina",
+        "screen": "Ristruttura l'intero schermo"
+      },
       "suggest": {
         "lights_sections": "Metti tutte le luci su una pagina, con una sezione per stanza",
         "lights": "Metti tutte le luci su una pagina",
@@ -4905,7 +4958,8 @@
         "memory_full": "La memoria dello schermo è piena, quindi {count} riquadro è stato tralasciato. | La memoria dello schermo è piena, quindi {count} riquadri sono stati tralasciati.",
         "left_out": "Lo schermo non aveva spazio per {count} altro riquadro. | Lo schermo non aveva spazio per altri {count} riquadri.",
         "no_page": "Non esiste la pagina {page}.",
-        "not_drawn": "Lo schermo non disegna alcun riquadro per {count} entità. | Lo schermo non disegna alcun riquadro per {count} entità."
+        "not_drawn": "Lo schermo non disegna alcun riquadro per {count} entità. | Lo schermo non disegna alcun riquadro per {count} entità.",
+        "restructure_no_room": "Ristrutturando non ci sarebbe spazio per {count} dei tuoi riquadri, quindi ho lasciato le pagine come erano. | Ristrutturando non ci sarebbe spazio per {count} dei tuoi riquadri, quindi ho lasciato le pagine come erano."
       },
       "update_app": "Aggiorna l'app Tessera: questo editor colloca da sé i piani di Layoutbot.",
       "scope": {

@@ -1008,6 +1008,12 @@
         "unknown": "A fordítószerver már nem ismeri a Tesserát. Párosítsd újra.",
         "pending": "A fordítószerver még nem fogadta el a Tesserát."
       },
+      "build_files": {
+        "automatic": "Az automatikus takarítás csak be- vagy kikapcsolt lehet.",
+        "level": "Válaszd ki, mely fordítási fájlokat töröljük.",
+        "cleaning": "A fordítási fájlok takarítása már folyamatban van.",
+        "building": "Egy kijelző fordítása folyamatban van, vagy várakozik. A fordítási fájlokat a befejezés után takaríthatod ki."
+      },
       "video": {
         "not_written": "A Tessera video nem írható ide: {folder}: {reason}.",
         "not_installed": "Először telepítsd a Tessera videót."
@@ -1648,8 +1654,10 @@
       "none": "A Layoutbotnak egy adatokat előállítani képes AI Taskra van szüksége a Home Assistantben (Beállítások > Eszközök és szolgáltatások, egy AI-integráció).",
       "notes": {
         "unknown": "{entity} kimaradt: ez nem ennek a Home Assistantnek az entitása.",
-        "no_page": "Nincs {page}. oldal."
-      }
+        "no_page": "Nincs {page}. oldal.",
+        "kept": "A Layoutbot kihagyta {count} csempédet: ezek szabadon állnak az utolsó oldalon."
+      },
+      "nothing_to_restructure": "Ezen az oldalon még nincs átszervezhető eszközcsempe. Adj hozzá párat, aztán kérdezz újra."
     }
   },
   "editor": {
@@ -1979,6 +1987,7 @@
       "search_label": "Entitás hozzáadása",
       "filters": {
         "all": "Összes",
+        "plugin": "Bővítmények",
         "light": "Lámpák",
         "climate": "Klíma",
         "switch": "Kapcsolók",
@@ -2969,6 +2978,18 @@
         "never": "Ne mutasd újra",
         "done": "Kész"
       },
+      "look": {
+        "title": "Hogyan nézzen ki?",
+        "text": "Ez az érzékelő mérőként indul. Mutass egy megjelenésre, hogy lásd a csempén; később a Megjelenítés alatt módosíthatod.",
+        "ring": "Mérő: gyűrű",
+        "tape": "Mérő: skála",
+        "bar": "Mérő: sáv",
+        "graph": "Grafikon az elmúlt órákról",
+        "watch": "Nagy érték",
+        "standard": "Csak az érték",
+        "never": "Ne mutasd újra",
+        "done": "Kész"
+      },
       "text": {
         "title": "Sablon",
         "hint": "Írj szöveget Home Assistant sablonokkal, mint a Fejlesztői eszközök › Sablon alatt. A Home Assistant kitölti, a képernyő pedig megmutatja és naprakészen tartja az eredményt. Ha az eredmény üres, a csempe eltűnik.",
@@ -3523,6 +3544,32 @@
         "forget_confirm": "Elfelejted ezt: {name}? A kijelzők újra itt fordulnak. Hogy ott is eltávolítsd a Tesserát, töröld a fordítószerver párosított eszközei közül.",
         "forget_go": "Elfelejtés",
         "unavailable": "Ez a Tessera nem tud fordítószerverrel beszélni."
+      },
+      "build_files": {
+        "title": "Fordítási fájlok",
+        "intro": "Minden firmware-fordítás fájlokat hagy maga után, hogy ugyanannak a kijelzőnek a következő fordítása gyors legyen. A Home Assistant biztonsági mentései kihagyják őket.",
+        "measuring": "Mérés…",
+        "total": "{size} összesen",
+        "folders": "Fordítási mappák",
+        "folders_detail": "1 kijelző | {count} kijelző",
+        "cache": "Fordítási gyorsítótár",
+        "tools": "ESP-IDF és letöltések",
+        "clean": "Fordítási mappák takarítása",
+        "cleaning": "Takarítás…",
+        "clean_confirm": "Törlöd az összes kijelző fordítási mappáit? Ez {size} helyet szabadít fel. Minden kijelző következő fordítása újra mindent lefordít, és néhány perccel tovább tart, Raspberry Pi-n még tovább. Az elrendezések, a bővítmények és a beállítások érintetlenek maradnak.",
+        "clean_all": "A fordítási gyorsítótárat és az ESP-IDF-et is töröld",
+        "clean_all_confirm": "Törlöd az összes fordítási fájlt, a fordítási gyorsítótárat és az ESP-IDF-et is? Ez {size} helyet szabadít fel. A következő fordítás újra letölti az ESP-IDF-et, nagyjából 1 GB-ot, és mindent az elejétől fordít, ami Raspberry Pi-n fél óráig is tarthat. Az elrendezések, a bővítmények és a beállítások érintetlenek maradnak.",
+        "clean_go": "Takarítás",
+        "cleaned": "Kitakarítva: ismét {size} szabad.",
+        "cleaned_nothing": "Kitakarítva.",
+        "busy": "Egy kijelző fordítása folyamatban van. A befejezése után takaríthatsz.",
+        "auto_label": "Takarítás fordítás után",
+        "auto_hint": "A következő fordítástól kezdve törli a fordítási mappákat, amint már semmi sem fordul. Helyet spórol, de a kijelzők minden további fordítása újra mindent lefordít, és néhány perccel tovább tart.",
+        "auto_on": "A fordítási mappák fordítás után takarítva lesznek.",
+        "auto_off": "A fordítási mappák megmaradnak a gyorsabb fordításért.",
+        "offer": "{size} felszabadítása",
+        "not_now": "Most nem",
+        "large": "A fordítási mappák {size} helyet foglalnak. A takarításukkal felszabadul a fordítások által használt hely nagy része."
       }
     },
     "firmware": {
@@ -4851,6 +4898,8 @@
       "close": "Bezárás",
       "hello": "Szia! Mondd el, mit mutasson ez a kijelző, és elrendezem az oldalait. Csak az elrendezést módosítom, az eszközeidet soha.",
       "privacy": "A Home Assistant {agent} szolgáltatását használom. A kérdésed, a kijelzőid oldalai és az entitásaid azonosítói, nevei és területei oda kerülnek.",
+      "model_hint": "Sokkal jobban dolgozom egy nagyobb modellel, mint a legolcsóbbal. A Home Assistantben add hozzá nekem az AI-integrációdhoz egy AI Taskot, kapcsold ki az „Ajánlott modellbeállítások” opciót, válassz egy nagyobb modellt, majd jelöld ki a chat tetején.",
+      "model_link": "Integrációk megnyitása",
       "placeholder": "Készíts egy oldalt, amelyen…",
       "ask": "Kérdezés",
       "send": {
@@ -4877,6 +4926,10 @@
       "show": "Mutatás",
       "undo": "Visszavonás",
       "undone": "Visszavonva",
+      "restructure": {
+        "page": "Szervezd át ezt az oldalt",
+        "screen": "Szervezd át az egész kijelzőt"
+      },
       "suggest": {
         "lights_sections": "Tedd az összes lámpát egy oldalra, helyiségenként egy szakaszba",
         "lights": "Tedd az összes lámpát egy oldalra",
@@ -4905,7 +4958,8 @@
         "memory_full": "A kijelző memóriája megtelt, ezért {count} csempe kimaradt. | A kijelző memóriája megtelt, ezért {count} csempe kimaradt.",
         "left_out": "A kijelzőn nem volt hely további {count} csempének. | A kijelzőn nem volt hely további {count} csempének.",
         "no_page": "Nincs {page}. oldal.",
-        "not_drawn": "A kijelző {count} entitáshoz nem rajzol csempét. | A kijelző {count} entitáshoz nem rajzol csempét."
+        "not_drawn": "A kijelző {count} entitáshoz nem rajzol csempét. | A kijelző {count} entitáshoz nem rajzol csempét.",
+        "restructure_no_room": "Átszervezve nem lenne hely {count} csempédnek, ezért úgy hagytam az oldalakat, ahogy voltak. | Átszervezve nem lenne hely {count} csempédnek, ezért úgy hagytam az oldalakat, ahogy voltak."
       },
       "update_app": "Frissítsd a Tessera alkalmazást: ez a szerkesztő maga helyezi el a Layoutbot terveit.",
       "scope": {

@@ -623,7 +623,7 @@ class Links(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_index_an_app_reads_is_the_version_a_screen_gets_back_and_forth(self):
         """The dev app reads the plugins index of the dev branch, the stable app that of main (Plugins.index_branches):
-        a screen moved to dev and back (the deploy-home skill) takes each index's version through the same update,
+        a screen moved to dev and back takes each index's version through the same update,
         the newer one on dev and the older one again on main, so a lower version is an update too."""
         import plugins as plugin_service
         tmp = tempfile.TemporaryDirectory()
@@ -3091,6 +3091,16 @@ class WhetherTheScreenRunsIt(unittest.TestCase):
         self.assertFalse(plugin_service.runs('tablet', dict(record, version='0.2.1'), running, now=5000), 'another version')
         self.assertFalse(plugin_service.runs('tablet', dict(record, id='bt_proxy'), running, now=5000), 'not in the hello')
         self.assertTrue(plugin_service.runs('tablet', {'id': 'cinema', 'version': '0.1.0'}, running, now=5000), 'a record from before `settled`')
+
+    def test_the_version_a_screen_runs_instead(self):
+        import plugins as plugin_service
+        record = {'id': 'co2_ring', 'version': '0.2.16', 'state': 'active', 'settled': 1000}
+        running = {'tablet': [{'id': 'co2_ring', 'version': '0.2.17', 'tiles': ['co2']}]}
+        self.assertEqual(plugin_service.runs_version('tablet', record, running, now=5000), '0.2.17', 'built elsewhere')
+        self.assertIsNone(plugin_service.runs_version('tablet', dict(record, version='0.2.17'), running, now=5000), 'this version')
+        self.assertIsNone(plugin_service.runs_version('tablet', dict(record, id='cinema'), running, now=5000), 'not in the hello')
+        self.assertIsNone(plugin_service.runs_version('kitchen', record, running, now=5000), 'not known')
+        self.assertIsNone(plugin_service.runs_version('tablet', record, running, now=1001), 'just built')
 
     def test_nothing_while_it_cannot_be_known(self):
         import plugins as plugin_service

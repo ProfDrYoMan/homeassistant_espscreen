@@ -194,7 +194,8 @@ its states without a microphone.
 ## 4. One screen on the glass
 
 `diagnostics/send_layout.py` pushes the same demo layout to a screen over its API; `diagnostics/run_ui_test.py` runs
-its self test (don't touch the screen meanwhile); `diagnostics/capture_ui.py` saves what LVGL draws as a picture. A
+its self test (don't touch the screen meanwhile); `diagnostics/capture_ui.py` saves what LVGL draws as a picture (`--glass`: the panel's frame buffer, live pictures
+included; both the whole glass, docs/PICTURE_ARCHITECTURE.md). A
 new board is flashed and walked through by hand: touch in the corners, a drag, the backlight, the colour order, a page
 swipe from each edge, and the same standing up (docs/ADDING_A_BOARD.md). A resistive panel's calibration is tapped by
 a person (docs/CALIBRATING.md); a GT911 panel is checked with `tools/verify_gt911.py`.
@@ -220,15 +221,13 @@ The release a user gets, from end to end, on a screen of its own (not one a hous
 ## 6. The upgrade
 
 What a user goes through when a release comes out: the app they run updates, and then each screen, from the release
-before. Every release runs it, on the commit that will be published (docs/RELEASING.md, "The release", step 5). Since
-2026-10-29 the test Home Assistant is Max's own home Home Assistant (the bench VM is gone): its screens are his real
-ones plus the bench boards on the Mac mini's USB, every build runs on the Mac mini as its build server, and the
-`deploy-home` skill (`.claude/skills/deploy-home/deploy_home.py`, local to that Mac) does the steps below in one
-command, `release-test --candidate <commit> [--other-order <node>]`: the candidate's app is installed locally (a copy
-of `screen_manager/` in the local add-ons folder, with the GitHub app's data copied in, so it keeps the data the way an
-installed app does), and the report it writes names every step with its time. Before anything, it keeps a backup of
-the tiles in Home Assistant; everything it makes there carries `tessera:test` in its name, so it can all be cleaned
-up one day. After the release, `deploy_home.py main` puts the house back on the GitHub app (which is then the release).
+before. Every release runs it, on the commit that will be published (docs/RELEASING.md, "The release", step 5). The
+test Home Assistant is the owner's own home Home Assistant (the bench VM is gone): its screens are the real ones plus
+the bench boards, and every build runs on the app's build server. The steps below are done over Home Assistant's own
+API from the machine the release is made on; nothing runs on the build server's machine but the build server. Before
+anything, keep a backup of the app in Home Assistant; everything made there for a test carries `tessera:test` in its
+name, so it can all be cleaned up one day. After the release the house runs the app from GitHub, which is then the
+release, on the house's own data, and the dev app is stopped.
 
 1. **Start from main.** The app as main has it, and every test screen on main's firmware: `ref: main` under
    `packages: display:` in its YAML, built by the app (Firmware & USB, Install over Wi-Fi). The screens keep the

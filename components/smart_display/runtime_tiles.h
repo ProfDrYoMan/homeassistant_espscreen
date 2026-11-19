@@ -34,6 +34,14 @@
 #include "esphome/components/logger/logger.h"
 #endif
 #endif
+// The words of a Home Assistant action's fields (its service, each key and value) as this ESPHome's API has them:
+// StringRef up to ESPHome 2026.10, ProgmemStringRef from 2026.11, which is made from a StringRef only explicitly. Every
+// field is filled through api_text::of, so the firmware builds on both. The text stays the caller's, as before.
+namespace api_text {
+using Text = decltype(esphome::api::HomeassistantServiceMap::key);
+inline Text of(const std::string &text) { return Text(esphome::StringRef(text)); }
+inline Text of(const char *text) { return Text(esphome::StringRef(text)); }
+}  // namespace api_text
 #include "header_bar.h"
 #include "page_header.h"
 #include "tile_palette.h"
@@ -67,8 +75,6 @@
 #include "boot_trial.h"
 #include "heap_watch.h"
 #include "kept_pages.h"
-#include "page_pictures.h"
-#include "page_pictures_log.h"
 #include "tile_memory.h"
 #include "wifi_status.h"
 #include "ota_status.h"
@@ -800,19 +806,6 @@ struct CardLook { lv_style_t *tile = nullptr, *circle = nullptr, *title = nullpt
 inline CardLook card_look;
 inline uint32_t last_turn_ms = 0;
 inline void live_tiles_halt();  // live tiles stop at once (a page turns; live_tiles_round)
-// Page pictures (page_pictures_lvgl.h): a page's picture from the glass, put back on it when the screen turns to it.
-inline void page_pictures_start();
-inline void page_pictures_leave();
-inline bool page_pictures_put(int page);
-inline void page_pictures_untrue(int page);
-inline void page_pictures_forget();
-inline void page_pictures_switch(bool on);
-inline void page_pictures_report();
-inline void page_pictures_hold(unsigned mb, unsigned seconds);
-inline void page_pictures_prove();
-// warm_page says when the page it works on stands drawn in its cards, off the glass (page_pictures_lvgl.h, made ahead).
-inline void (*warm_drawn)(int page) = nullptr;
-inline unsigned page_pictures_count();
 inline void live_tile_answer(size_t index, const std::string &url);  // the last page turn: pictures wait until the pages stand still (camera_view::settled)
 inline uint32_t touched_at = 0;    // the last finger on the glass: pages are prepared in the background only after a pause
 inline int kept_limit = -1;        // at most this many pages kept, -1 for as many as fit (a diagnostic build's A/B)
@@ -1103,14 +1096,14 @@ inline bool action(const std::string &service, const std::string &entity, const 
   // Of any domain: a tile's entity was checked when it came, and a plugin may act on one Tessera draws no tile for.
   if (!fresh() || !entity_id(entity)) return false;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef(service);
+  request.service = api_text::of(service);
   request.data.init(1 + !key.empty() + !key2.empty());
   esphome::api::HomeassistantServiceMap entry;
-  entry.key = esphome::StringRef("entity_id");
-  entry.value = esphome::StringRef(entity);
+  entry.key = api_text::of("entity_id");
+  entry.value = api_text::of(entity);
   request.data.push_back(entry);
-  if(!key.empty()) {esphome::api::HomeassistantServiceMap param;param.key=esphome::StringRef(key);param.value=esphome::StringRef(value);request.data.push_back(param);}
-  if(!key2.empty()) {esphome::api::HomeassistantServiceMap param;param.key=esphome::StringRef(key2);param.value=esphome::StringRef(value2);request.data.push_back(param);}
+  if(!key.empty()) {esphome::api::HomeassistantServiceMap param;param.key=api_text::of(key);param.value=api_text::of(value);request.data.push_back(param);}
+  if(!key2.empty()) {esphome::api::HomeassistantServiceMap param;param.key=api_text::of(key2);param.value=api_text::of(value2);request.data.push_back(param);}
   const bool watched = send_action(request, entity, watch, busy);
   ESP_LOGI("runtime_action","Sent service=%s entity=%s",service.c_str(),entity.c_str());
   return watched;
@@ -1142,11 +1135,11 @@ inline void wish_watch(lv_timer_t *) {
 inline void step_action(const std::string &service, const std::string &entity, const std::string &key = "", const std::string &value = "") {
   if (!fresh() || !valid_entity(entity)) return;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef(service);
+  request.service = api_text::of(service);
   request.data.init(key.empty() ? 1 : 2);
   esphome::api::HomeassistantServiceMap target, field;
-  target.key = esphome::StringRef("entity_id"); target.value = esphome::StringRef(entity); request.data.push_back(target);
-  if (!key.empty()) { field.key = esphome::StringRef(key); field.value = esphome::StringRef(value); request.data.push_back(field); }
+  target.key = api_text::of("entity_id"); target.value = api_text::of(entity); request.data.push_back(target);
+  if (!key.empty()) { field.key = api_text::of(key); field.value = api_text::of(value); request.data.push_back(field); }
   esphome::api::global_api_server->send_homeassistant_action(request);
   ESP_LOGI("runtime_action", "Sent %s%s%s to %s", service.c_str(), value.empty() ? "" : " ", value.c_str(), entity.c_str());
 }
@@ -1160,21 +1153,21 @@ inline bool action_template(const std::string &service, const std::string &entit
                             bool busy, const std::string &key2, const std::string &value2) {
   if (!fresh() || !valid_entity(entity)) return false;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef(service);
+  request.service = api_text::of(service);
   request.data.init(1);
   esphome::api::HomeassistantServiceMap target;
-  target.key = esphome::StringRef("entity_id");
-  target.value = esphome::StringRef(entity);
+  target.key = api_text::of("entity_id");
+  target.value = api_text::of(entity);
   request.data.push_back(target);
   request.data_template.init(1 + !key2.empty());
   esphome::api::HomeassistantServiceMap entry;
-  entry.key = esphome::StringRef(key);
-  entry.value = esphome::StringRef(value);
+  entry.key = api_text::of(key);
+  entry.value = api_text::of(value);
   request.data_template.push_back(entry);
   if (!key2.empty()) {
     esphome::api::HomeassistantServiceMap second;
-    second.key = esphome::StringRef(key2);
-    second.value = esphome::StringRef(value2);
+    second.key = api_text::of(key2);
+    second.value = api_text::of(value2);
     request.data_template.push_back(second);
   }
   const bool watched = send_action(request, entity, true, busy);
@@ -1187,23 +1180,23 @@ inline void perform(const Tile &tile) {
   const auto &x = tile.extra();
   if (!fresh() || !valid_entity(tile.entity) || x.action.empty()) return;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef(x.action);
+  request.service = api_text::of(x.action);
   request.data.init(1 + x.action_data.size());
   esphome::api::HomeassistantServiceMap target;
-  target.key = esphome::StringRef("entity_id");
-  target.value = esphome::StringRef(tile.entity);
+  target.key = api_text::of("entity_id");
+  target.value = api_text::of(tile.entity);
   request.data.push_back(target);
   for (const auto &pair : x.action_data) {
     esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(pair.first);
-    entry.value = esphome::StringRef(pair.second);
+    entry.key = api_text::of(pair.first);
+    entry.value = api_text::of(pair.second);
     request.data.push_back(entry);
   }
   request.data_template.init(x.action_templates.size());
   for (const auto &pair : x.action_templates) {
     esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(pair.first);
-    entry.value = esphome::StringRef(pair.second);
+    entry.key = api_text::of(pair.first);
+    entry.value = api_text::of(pair.second);
     request.data_template.push_back(entry);
   }
   send_action(request, tile.entity, true);
@@ -1215,15 +1208,15 @@ inline void perform(const Tile &tile) {
 inline void options_request(const std::string &entity, unsigned page) {
   if (inbox.empty()) return;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef("esphome.screen_options");
+  request.service = api_text::of("esphome.screen_options");
   request.is_event = true;
   const std::string number = std::to_string(page);
   const std::string keys[] = {"inbox", "entity", "page", "session", "rev", "view"}, values[] = {inbox, entity, number, protocol_key(transfer.lease), layout_rev, std::to_string(++options_view_id)};
   request.data.init(6);
   for (int i = 0; i < 6; ++i) {
     esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(keys[i]);
-    entry.value = esphome::StringRef(values[i]);
+    entry.key = api_text::of(keys[i]);
+    entry.value = api_text::of(values[i]);
     request.data.push_back(entry);
   }
   esphome::api::global_api_server->send_homeassistant_action(request);
@@ -1235,7 +1228,7 @@ inline void options_request(const std::string &entity, unsigned page) {
 inline void library_event(const char *service, std::initializer_list<std::pair<const char *, std::string>> pairs) {
   if (inbox.empty()) return;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef(service);
+  request.service = api_text::of(service);
   request.is_event = true;
   // The values live until the request is sent: the request holds references to them.
   std::vector<std::pair<std::string, std::string>> data = {{"inbox", inbox}, {"session", protocol_key(transfer.lease)}, {"rev", layout_rev}};
@@ -1243,8 +1236,8 @@ inline void library_event(const char *service, std::initializer_list<std::pair<c
   request.data.init(data.size());
   for (const auto &pair : data) {
     esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(pair.first);
-    entry.value = esphome::StringRef(pair.second);
+    entry.key = api_text::of(pair.first);
+    entry.value = api_text::of(pair.second);
     request.data.push_back(entry);
   }
   esphome::api::global_api_server->send_homeassistant_action(request);
@@ -1281,13 +1274,13 @@ inline void picture_ask(const picture_question::Question &q, const char *kind, c
     for (auto &field : picture_question::legacy(q)) data.push_back(std::move(field));
   }
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef("esphome.screen_camera");
+  request.service = api_text::of("esphome.screen_camera");
   request.is_event = true;
   request.data.init(data.size());
   for (const auto &pair : data) {
     esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(pair.first);
-    entry.value = esphome::StringRef(pair.second);
+    entry.key = api_text::of(pair.first);
+    entry.value = api_text::of(pair.second);
     request.data.push_back(entry);
   }
   esphome::api::global_api_server->send_homeassistant_action(request);
@@ -1314,15 +1307,15 @@ inline void play_request(const std::string &entity, uint32_t item, const std::st
 inline void history_request(const std::string &entity, uint32_t hours) {
   if (inbox.empty()) return;
   esphome::api::HomeassistantActionRequest request;
-  request.service = esphome::StringRef("esphome.screen_history");
+  request.service = api_text::of("esphome.screen_history");
   request.is_event = true;
   const std::string span = std::to_string(hours);
   const std::string keys[] = {"inbox", "entity", "hours", "session", "rev", "view"}, values[] = {inbox, entity, span, protocol_key(transfer.lease), layout_rev, std::to_string(++history_view_id)};
   request.data.init(6);
   for (int i = 0; i < 6; ++i) {
     esphome::api::HomeassistantServiceMap entry;
-    entry.key = esphome::StringRef(keys[i]);
-    entry.value = esphome::StringRef(values[i]);
+    entry.key = api_text::of(keys[i]);
+    entry.value = api_text::of(values[i]);
     request.data.push_back(entry);
   }
   esphome::api::global_api_server->send_homeassistant_action(request);
@@ -1334,10 +1327,10 @@ inline void history_request(const std::string &entity, uint32_t hours) {
 }
 inline void setting_event(const std::string &key, int value) {
   if(inbox.empty())return;
-  esphome::api::HomeassistantActionRequest request;request.service=esphome::StringRef("esphome.screen_setting");request.is_event=true;
+  esphome::api::HomeassistantActionRequest request;request.service=api_text::of("esphome.screen_setting");request.is_event=true;
   std::string number=std::to_string(value);request.data.init(3);
   const std::string keys[]={"inbox","key","value"},values[]={inbox,key,number};
-  for(int i=0;i<3;++i){esphome::api::HomeassistantServiceMap entry;entry.key=esphome::StringRef(keys[i]);entry.value=esphome::StringRef(values[i]);request.data.push_back(entry);}
+  for(int i=0;i<3;++i){esphome::api::HomeassistantServiceMap entry;entry.key=api_text::of(keys[i]);entry.value=api_text::of(values[i]);request.data.push_back(entry);}
   esphome::api::global_api_server->send_homeassistant_action(request);
 }
 } // namespace runtime_tiles
@@ -3067,7 +3060,6 @@ inline void slow_pass_log(unsigned drawn,uint32_t took,size_t index,uint32_t slo
 inline void render(lv_obj_t *room) {
   if (!enabled) return;
   room_label=room; swipe_profile::Lap lap;
-  page_pictures_start();
   ota_status::watch();
   ota_status::draw = ota_draw;
   if (const auto wifi = wifi_status::problem(); wifi.shown) {
@@ -3795,7 +3787,6 @@ inline std::function<void()> grid_changed;
 inline void regrid(size_t columns, size_t rows) {
   if (columns == grid.columns && rows == grid.rows) return;
   shelf.forget();
-  page_pictures_forget();
   release_kept(0);
   for (auto &w : widgets) drop_card(w);
 #ifdef SD_MOD_SECTIONS
@@ -3856,7 +3847,6 @@ inline lv_obj_t *face_picture(const Widgets &w) {
 }
 inline void forget_kept() {
   shelf.forget();
-  page_pictures_forget();
 #ifdef SD_MOD_SECTIONS
   // A new layout's sections are drawn anew when their pages are placed.
   ::sections::forget();
@@ -3896,10 +3886,6 @@ inline void show_page(int &page, lv_obj_t *previous, lv_obj_t *next, lv_obj_t *n
   swipe_profile::FillTimer timer;
   last_turn_ms=esphome::millis();
   live_tiles_halt();  // a live tile's picture never stays where its card left
-  // The page's picture, where it is still true, goes on the glass before a card is exchanged, placed or drawn
-  // (page_pictures_lvgl.h); what follows draws the page as ever, underneath.
-  page_pictures_leave();
-  page_pictures_put(page);
   const auto kept=keep_page(page,glass_synced);
   applied_page=place_page(page,kept.kept);
   // A page with a title of its own carries it into the top bar with the same frame as its tiles, not a tick later.
@@ -3965,7 +3951,6 @@ inline bool warm_page(int page) {
       const auto &w = widgets[slot];
       if (w.tile && w.index < model.count && (all || changes.tile_after(w.index, visit.synced))) render_slot(slot);
     }
-    if (warm_drawn) warm_drawn(page);
     keep_page(glass, changes.last);  // the glass's own cards come back; the page stays on the shelf, drawn up to now
     applied_page = place_page(glass, true);
   }
@@ -4317,7 +4302,6 @@ inline void restyle() {
 #include "pressure_lvgl.h"
 #include "camera_answer_lvgl.h"
 #include "picture_rounds_lvgl.h"
-#include "page_pictures_lvgl.h"
 #include "saver_state_lvgl.h"
 namespace runtime_tiles {
 #ifdef SD_MOD_CLOCK_FACES

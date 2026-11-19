@@ -588,14 +588,6 @@ struct Tile {
   bool favorite() const { return display == "favorite" && domain() == "media_player" && !full; }
   // A tile that draws its picture out of the page's strip (runtime_tiles.h, live_*).
   bool pictured() const { return live() || cover_tile() || is_map() || (favorite() && !extra().fav_mark.empty()) || vacuum_map(); }
-  // A tile whose look depends on its card being on the glass: pictures load while their card is seen, a camera shows
-  // a spinner or its last still until then, a player's cover comes when its card asks. Drawn off the glass (a page's
-  // picture made ahead, page_pictures_lvgl.h) such a card is not what the glass will show, so its part of that
-  // picture is never true: every tile that shows a picture, and every camera, image and player whatever it shows now.
-  bool seen_to_look_right() const {
-    const auto d = domain();
-    return pictured() || d == "camera" || d == "image" || d == "media_player";
-  }
   // A robot's map on its larger tile (module vacuum, module_vacuum_tile.cpp): the app draws it at the map's place.
   bool vacuum_map() const {
 #ifdef SD_MOD_VACUUM_CARD
@@ -641,6 +633,11 @@ struct Tile {
   // Where the slats stand open (the tile's tilt_open option): at 100 as Home Assistant's rule has it, or at 50 for a blind
   // that reports 0 and 100 as closed one way and the other.
   bool tilt_middle = false;
+  // An alarm panel's tile: how many digits send the code by themselves (4 to 8, the alarm's choice on the Events page,
+  // which the app gives every tile of it), 0 for the OK key. Home Assistant never says how long a code is.
+  uint8_t send_after = 0;
+  // An alarm panel this screen does not wake for when it goes off (alarm_wake "off": the Events page left it out).
+  bool alarm_quiet = false;
   // A sensor's graph: 24 samples over `history_hours`, empty without one.
   unsigned history_hours = 24;
   std::vector<float> history;
@@ -808,7 +805,10 @@ struct Tile {
     // A cover that cannot tell whether it is open (an awning or a blind without feedback: Home Assistant's is_closed is
     // None) reports "unknown" and still takes its keys, as in Home Assistant, where only "unavailable" turns them off
     // (frontend data/cover.ts canOpen, canClose, canStop).
-    return state != "unknown" || d == "scene" || d == "button" || d == "input_button" || d == "cover";
+    // A remote that never reports on or off (Home Assistant's Android TV integration over ADB: always "unknown") still
+    // sends its keys, as in Home Assistant, whose toggle shows both keys for "unknown" and turns them off only for
+    // "unavailable" (frontend components/entity/ha-entity-toggle.ts; GitHub #387).
+    return state != "unknown" || d == "scene" || d == "button" || d == "input_button" || d == "cover" || d == "remote";
   }
   // Home Assistant's stateActive() (frontend src/common/entity/state_active.ts), the rule its cards colour by: an
   // entity it calls inactive is grey, such as an airco that is off, a closed blind, a docked robot, a player in

@@ -1008,6 +1008,12 @@
         "unknown": "Der Build-Server kennt Tessera nicht mehr. Kopple ihn erneut.",
         "pending": "Der Build-Server hat Tessera noch nicht angenommen."
       },
+      "build_files": {
+        "automatic": "Das automatische Aufräumen kann nur an oder aus sein.",
+        "level": "Wähle, welche Build-Dateien entfernt werden.",
+        "cleaning": "Die Build-Dateien werden schon aufgeräumt.",
+        "building": "Ein Bildschirm baut gerade oder wartet auf seinen Build. Räume die Build-Dateien auf, sobald er fertig ist."
+      },
       "video": {
         "not_written": "Tessera video konnte nicht nach {folder} geschrieben werden: {reason}.",
         "not_installed": "Installiere zuerst Tessera video."
@@ -1648,8 +1654,10 @@
       "none": "Layoutbot braucht einen AI Task in Home Assistant, der Daten erzeugen kann (Einstellungen > Geräte & Dienste, eine KI-Integration).",
       "notes": {
         "unknown": "{entity} ausgelassen: Das ist keine Entität dieses Home Assistant.",
-        "no_page": "Es gibt keine Seite {page}."
-      }
+        "no_page": "Es gibt keine Seite {page}.",
+        "kept": "Layoutbot hat {count} deiner Kacheln vergessen: Sie stehen lose auf der letzten Seite."
+      },
+      "nothing_to_restructure": "Auf dieser Seite gibt es noch keine Gerätekacheln zum Umstrukturieren. Füge ein paar hinzu und frag dann noch einmal."
     }
   },
   "editor": {
@@ -1979,6 +1987,7 @@
       "search_label": "Entität hinzufügen",
       "filters": {
         "all": "Alle",
+        "plugin": "Plugins",
         "light": "Leuchten",
         "climate": "Klima",
         "switch": "Schalter",
@@ -2969,6 +2978,18 @@
         "never": "Nicht mehr anzeigen",
         "done": "Fertig"
       },
+      "look": {
+        "title": "Wie soll es aussehen?",
+        "text": "Dieser Sensor beginnt als Messanzeige. Zeige auf eine Darstellung, um sie auf der Kachel zu sehen; ändern kannst du sie später unter Anzeige.",
+        "ring": "Messanzeige: Ring",
+        "tape": "Messanzeige: Skala",
+        "bar": "Messanzeige: Balken",
+        "graph": "Diagramm der letzten Stunden",
+        "watch": "Großer Wert",
+        "standard": "Nur der Wert",
+        "never": "Nicht mehr anzeigen",
+        "done": "Fertig"
+      },
       "text": {
         "title": "Template",
         "hint": "Schreibe Text mit Home-Assistant-Templates darin, wie unter Entwicklerwerkzeuge › Template. Home Assistant füllt ihn aus, und der Bildschirm zeigt das Ergebnis und hält es aktuell. Ist das Ergebnis leer, verschwindet die Kachel.",
@@ -3523,6 +3544,32 @@
         "forget_confirm": "{name} vergessen? Bildschirme werden wieder hier gebaut. Um Tessera auch dort zu entfernen, entferne es aus den gekoppelten Geräten des Build-Servers.",
         "forget_go": "Vergessen",
         "unavailable": "Dieses Tessera kann nicht mit einem Build-Server sprechen."
+      },
+      "build_files": {
+        "title": "Build-Dateien",
+        "intro": "Jeder Firmware-Build lässt Dateien zurück, damit der nächste Build desselben Bildschirms schnell geht. Backups von Home Assistant lassen sie aus.",
+        "measuring": "Wird gemessen…",
+        "total": "{size} insgesamt",
+        "folders": "Build-Ordner",
+        "folders_detail": "1 Bildschirm | {count} Bildschirme",
+        "cache": "Compile-Cache",
+        "tools": "ESP-IDF und Downloads",
+        "clean": "Build-Ordner aufräumen",
+        "cleaning": "Räumt auf…",
+        "clean_confirm": "Die Build-Ordner aller Bildschirme entfernen? Das gibt {size} frei. Der nächste Build jedes Bildschirms kompiliert wieder alles und dauert ein paar Minuten länger, auf einem Raspberry Pi noch mehr. Layouts, Plugins und Einstellungen bleiben, wie sie sind.",
+        "clean_all": "Auch Compile-Cache und ESP-IDF entfernen",
+        "clean_all_confirm": "Alle Build-Dateien entfernen, auch den Compile-Cache und ESP-IDF? Das gibt {size} frei. Der nächste Build lädt ESP-IDF erneut herunter, etwa 1 GB, und kompiliert alles von vorn, was auf einem Raspberry Pi eine halbe Stunde dauern kann. Layouts, Plugins und Einstellungen bleiben, wie sie sind.",
+        "clean_go": "Aufräumen",
+        "cleaned": "Aufgeräumt: {size} wieder frei.",
+        "cleaned_nothing": "Aufgeräumt.",
+        "busy": "Ein Bildschirm wird gebaut. Du kannst aufräumen, sobald er fertig ist.",
+        "auto_label": "Nach dem Build aufräumen",
+        "auto_hint": "Ab dem nächsten Build entfernt es die Build-Ordner, sobald nichts mehr gebaut wird. Spart Platz, aber jeder weitere Build eines Bildschirms kompiliert wieder alles und dauert ein paar Minuten länger.",
+        "auto_on": "Build-Ordner werden nach dem Build aufgeräumt.",
+        "auto_off": "Build-Ordner bleiben für schnellere Builds.",
+        "offer": "{size} freigeben",
+        "not_now": "Nicht jetzt",
+        "large": "Die Build-Ordner belegen {size}. Wenn du sie aufräumst, wird der größte Teil des Platzes frei, den die Builds belegen."
       }
     },
     "firmware": {
@@ -4851,6 +4898,8 @@
       "close": "Schließen",
       "hello": "Hi! Sag mir, was dieser Bildschirm zeigen soll, und ich richte seine Seiten ein. Ich ändere nur das Layout, nie deine Geräte.",
       "privacy": "Ich nutze {agent} aus Home Assistant. Deine Frage, die Seiten deiner Bildschirme und die IDs, Namen und Bereiche deiner Entitäten gehen dorthin.",
+      "model_hint": "Ich arbeite mit einem größeren Modell viel besser als mit dem günstigsten. Füge in Home Assistant deiner KI-Integration einen AI Task für mich hinzu, schalte „Empfohlene Modelleinstellungen“ aus, wähle ein größeres Modell und wähle es dann oben in diesem Chat aus.",
+      "model_link": "Integrationen öffnen",
       "placeholder": "Erstelle eine Seite mit…",
       "ask": "Fragen",
       "send": {
@@ -4877,6 +4926,10 @@
       "show": "Zeigen",
       "undo": "Rückgängig",
       "undone": "Rückgängig gemacht",
+      "restructure": {
+        "page": "Strukturiere diese Seite um",
+        "screen": "Strukturiere den ganzen Bildschirm um"
+      },
       "suggest": {
         "lights_sections": "Setz alle Leuchten auf eine Seite, mit einem Bereich pro Raum",
         "lights": "Setz alle Leuchten auf eine Seite",
@@ -4905,7 +4958,8 @@
         "memory_full": "Der Speicher des Bildschirms ist voll, daher wurde {count} Kachel ausgelassen. | Der Speicher des Bildschirms ist voll, daher wurden {count} Kacheln ausgelassen.",
         "left_out": "Der Bildschirm hatte keinen Platz für {count} weitere Kachel. | Der Bildschirm hatte keinen Platz für {count} weitere Kacheln.",
         "no_page": "Es gibt keine Seite {page}.",
-        "not_drawn": "Der Bildschirm zeichnet keine Kachel für {count} Entität. | Der Bildschirm zeichnet keine Kachel für {count} Entitäten."
+        "not_drawn": "Der Bildschirm zeichnet keine Kachel für {count} Entität. | Der Bildschirm zeichnet keine Kachel für {count} Entitäten.",
+        "restructure_no_room": "Nach dem Umstrukturieren wäre kein Platz für {count} deiner Kacheln, daher habe ich die Seiten so gelassen, wie sie waren. | Nach dem Umstrukturieren wäre kein Platz für {count} deiner Kacheln, daher habe ich die Seiten so gelassen, wie sie waren."
       },
       "update_app": "Aktualisiere die Tessera-App: Dieser Editor platziert die Pläne von Layoutbot selbst.",
       "scope": {

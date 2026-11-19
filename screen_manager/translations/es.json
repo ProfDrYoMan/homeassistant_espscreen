@@ -1008,6 +1008,12 @@
         "unknown": "El servidor de compilación ya no conoce a Tessera. Vuelve a emparejarlo.",
         "pending": "El servidor de compilación aún no ha aceptado a Tessera."
       },
+      "build_files": {
+        "automatic": "La limpieza automática solo puede estar activada o desactivada.",
+        "level": "Elige qué archivos de compilación quitar.",
+        "cleaning": "Los archivos de compilación ya se están limpiando.",
+        "building": "Una pantalla se está compilando o espera para hacerlo. Limpia los archivos de compilación cuando termine."
+      },
       "video": {
         "not_written": "No se pudo escribir Tessera video en {folder}: {reason}.",
         "not_installed": "Instala primero Tessera video."
@@ -1648,8 +1654,10 @@
       "none": "Layoutbot necesita un AI Task en Home Assistant que pueda generar datos (Ajustes > Dispositivos y servicios, una integración de IA).",
       "notes": {
         "unknown": "Se omitió {entity}: no es una entidad de este Home Assistant.",
-        "no_page": "No hay página {page}."
-      }
+        "no_page": "No hay página {page}.",
+        "kept": "Layoutbot olvidó {count} de tus mosaicos: están sueltos en la última página."
+      },
+      "nothing_to_restructure": "Esta página aún no tiene mosaicos de dispositivos que reestructurar. Añade algunos y vuelve a preguntar."
     }
   },
   "editor": {
@@ -1979,6 +1987,7 @@
       "search_label": "Añadir una entidad",
       "filters": {
         "all": "Todo",
+        "plugin": "Plugins",
         "light": "Luces",
         "climate": "Climatización",
         "switch": "Interruptores",
@@ -2969,6 +2978,18 @@
         "never": "No volver a mostrar",
         "done": "Listo"
       },
+      "look": {
+        "title": "¿Cómo debe verse?",
+        "text": "Este sensor empieza como medidor. Apunta a un aspecto para verlo en el mosaico; puedes cambiarlo después en Presentación.",
+        "ring": "Medidor: anillo",
+        "tape": "Medidor: regla",
+        "bar": "Medidor: barra",
+        "graph": "Gráfico de las últimas horas",
+        "watch": "Valor grande",
+        "standard": "Solo el valor",
+        "never": "No volver a mostrar",
+        "done": "Listo"
+      },
       "text": {
         "title": "Plantilla",
         "hint": "Escribe texto con plantillas de Home Assistant, como en Herramientas para desarrolladores › Plantilla. Home Assistant lo rellena, y la pantalla muestra el resultado y lo mantiene al día. Si el resultado está vacío, el mosaico desaparece.",
@@ -3523,6 +3544,32 @@
         "forget_confirm": "¿Olvidar {name}? Las pantallas vuelven a compilarse aquí. Para quitar también a Tessera allí, quítala de los dispositivos emparejados del servidor de compilación.",
         "forget_go": "Olvidar",
         "unavailable": "Este Tessera no puede hablar con un servidor de compilación."
+      },
+      "build_files": {
+        "title": "Archivos de compilación",
+        "intro": "Cada compilación de firmware deja archivos para que la siguiente compilación de la misma pantalla sea rápida. Las copias de seguridad de Home Assistant no los incluyen.",
+        "measuring": "Midiendo…",
+        "total": "{size} en total",
+        "folders": "Carpetas de compilación",
+        "folders_detail": "1 pantalla | {count} pantallas",
+        "cache": "Caché de compilación",
+        "tools": "ESP-IDF y descargas",
+        "clean": "Limpiar carpetas de compilación",
+        "cleaning": "Limpiando…",
+        "clean_confirm": "¿Quitar las carpetas de compilación de todas las pantallas? Esto libera {size}. La próxima compilación de cada pantalla vuelve a compilar todo y tarda unos minutos más, más aún en una Raspberry Pi. Los diseños, los plugins y los ajustes se quedan como están.",
+        "clean_all": "Quitar también la caché de compilación y ESP-IDF",
+        "clean_all_confirm": "¿Quitar todos los archivos de compilación, también la caché de compilación y ESP-IDF? Esto libera {size}. La próxima compilación vuelve a descargar ESP-IDF, cerca de 1 GB, y compila todo desde cero, lo que puede tardar media hora en una Raspberry Pi. Los diseños, los plugins y los ajustes se quedan como están.",
+        "clean_go": "Limpiar",
+        "cleaned": "Limpieza hecha: {size} libres de nuevo.",
+        "cleaned_nothing": "Limpieza hecha.",
+        "busy": "Una pantalla se está compilando. Puedes limpiar cuando termine.",
+        "auto_label": "Limpiar después de compilar",
+        "auto_hint": "A partir de la próxima compilación, quita las carpetas de compilación cuando ya no se esté compilando nada. Ahorra espacio, pero cada compilación posterior de una pantalla vuelve a compilar todo y tarda unos minutos más.",
+        "auto_on": "Las carpetas de compilación se limpian después de compilar.",
+        "auto_off": "Las carpetas de compilación se conservan para compilar más rápido.",
+        "offer": "Liberar {size}",
+        "not_now": "Ahora no",
+        "large": "Las carpetas de compilación ocupan {size}. Al limpiarlas se libera la mayor parte del espacio que usan las compilaciones."
       }
     },
     "firmware": {
@@ -4851,6 +4898,8 @@
       "close": "Cerrar",
       "hello": "¡Hola! Dime qué debe mostrar esta pantalla y organizo sus páginas. Solo cambio el diseño, nunca tus dispositivos.",
       "privacy": "Uso {agent} de Home Assistant. Tu pregunta, las páginas de tus pantallas y los ids, nombres y áreas de tus entidades van allí.",
+      "model_hint": "Trabajo mucho mejor con un modelo más grande que con el más barato. En Home Assistant, añade un AI Task para mí a tu integración de IA, desactiva «Configuración recomendada del modelo», elige un modelo más grande y selecciónalo en la parte superior de este chat.",
+      "model_link": "Abrir integraciones",
       "placeholder": "Haz una página con…",
       "ask": "Preguntar",
       "send": {
@@ -4877,6 +4926,10 @@
       "show": "Mostrar",
       "undo": "Deshacer",
       "undone": "Deshecho",
+      "restructure": {
+        "page": "Reestructura esta página",
+        "screen": "Reestructura toda la pantalla"
+      },
       "suggest": {
         "lights_sections": "Pon todas las luces en una página, con una sección por habitación",
         "lights": "Pon todas las luces en una página",
@@ -4905,7 +4958,8 @@
         "memory_full": "La memoria de la pantalla está llena, así que se omitió {count} mosaico. | La memoria de la pantalla está llena, así que se omitieron {count} mosaicos.",
         "left_out": "La pantalla no tenía sitio para {count} mosaico más. | La pantalla no tenía sitio para {count} mosaicos más.",
         "no_page": "No hay página {page}.",
-        "not_drawn": "La pantalla no dibuja ningún mosaico de {count} entidad. | La pantalla no dibuja ningún mosaico de {count} entidades."
+        "not_drawn": "La pantalla no dibuja ningún mosaico de {count} entidad. | La pantalla no dibuja ningún mosaico de {count} entidades.",
+        "restructure_no_room": "Al reestructurar no habría sitio para {count} de tus mosaicos, así que dejé las páginas como estaban. | Al reestructurar no habría sitio para {count} de tus mosaicos, así que dejé las páginas como estaban."
       },
       "update_app": "Actualiza la app Tessera: este editor coloca él mismo los planes de Layoutbot.",
       "scope": {

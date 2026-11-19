@@ -1008,6 +1008,12 @@
         "unknown": "Serwer kompilacji nie zna już Tessera. Sparuj go ponownie.",
         "pending": "Serwer kompilacji jeszcze nie zaakceptował Tessera."
       },
+      "build_files": {
+        "automatic": "Automatyczne czyszczenie może być tylko włączone albo wyłączone.",
+        "level": "Wybierz, które pliki kompilacji usunąć.",
+        "cleaning": "Pliki kompilacji są już czyszczone.",
+        "building": "Ekran jest kompilowany albo czeka na kompilację. Wyczyść pliki kompilacji, gdy skończy."
+      },
       "video": {
         "not_written": "Nie udało się zapisać Tessera video w {folder}: {reason}.",
         "not_installed": "Najpierw zainstaluj Tessera video."
@@ -1648,8 +1654,10 @@
       "none": "Layoutbot potrzebuje w Home Assistant zadania AI Task, które potrafi generować dane (Ustawienia > Urządzenia oraz usługi, integracja AI).",
       "notes": {
         "unknown": "Pominięto {entity}: to nie jest encja tego Home Assistant.",
-        "no_page": "Nie ma strony {page}."
-      }
+        "no_page": "Nie ma strony {page}.",
+        "kept": "Layoutbot pominął {count} Twoich kafelków: stoją luzem na ostatniej stronie."
+      },
+      "nothing_to_restructure": "Na tej stronie nie ma jeszcze kafelków urządzeń do przebudowania. Dodaj kilka i zapytaj ponownie."
     }
   },
   "editor": {
@@ -1979,6 +1987,7 @@
       "search_label": "Dodaj encję",
       "filters": {
         "all": "Wszystkie",
+        "plugin": "Wtyczki",
         "light": "Światła",
         "climate": "Klimat",
         "switch": "Przełączniki",
@@ -2969,6 +2978,18 @@
         "never": "Nie pokazuj ponownie",
         "done": "Gotowe"
       },
+      "look": {
+        "title": "Jak ma wyglądać?",
+        "text": "Ten czujnik zaczyna jako wskaźnik. Wskaż wygląd, aby zobaczyć go na kafelku; zmienisz to później w Widoku.",
+        "ring": "Wskaźnik: pierścień",
+        "tape": "Wskaźnik: skala",
+        "bar": "Wskaźnik: pasek",
+        "graph": "Wykres z ostatnich godzin",
+        "watch": "Duża wartość",
+        "standard": "Tylko wartość",
+        "never": "Nie pokazuj ponownie",
+        "done": "Gotowe"
+      },
       "text": {
         "title": "Szablon",
         "hint": "Napisz tekst z szablonami Home Assistant, jak w Narzędzia deweloperskie › Szablon. Home Assistant go wypełnia, a ekran pokazuje wynik i na bieżąco go aktualizuje. Gdy wynik jest pusty, kafelek znika.",
@@ -3523,6 +3544,32 @@
         "forget_confirm": "Zapomnieć {name}? Ekrany znów kompilują się tutaj. Aby usunąć tam także Tessera, usuń ją ze sparowanych urządzeń serwera kompilacji.",
         "forget_go": "Zapomnij",
         "unavailable": "Ta Tessera nie może rozmawiać z serwerem kompilacji."
+      },
+      "build_files": {
+        "title": "Pliki kompilacji",
+        "intro": "Każda kompilacja firmware'u zostawia pliki, dzięki czemu kolejna kompilacja tego samego ekranu jest szybka. Kopie zapasowe Home Assistanta ich nie obejmują.",
+        "measuring": "Mierzenie…",
+        "total": "{size} łącznie",
+        "folders": "Foldery kompilacji",
+        "folders_detail": "1 ekran | {count} ekrany | {count} ekranów",
+        "cache": "Pamięć podręczna kompilacji",
+        "tools": "ESP-IDF i pobrane pliki",
+        "clean": "Wyczyść foldery kompilacji",
+        "cleaning": "Czyszczenie…",
+        "clean_confirm": "Usunąć foldery kompilacji wszystkich ekranów? Zwolni to {size}. Następna kompilacja każdego ekranu skompiluje wszystko od nowa i potrwa o kilka minut dłużej, na Raspberry Pi jeszcze dłużej. Układy, wtyczki i ustawienia pozostaną bez zmian.",
+        "clean_all": "Usuń także pamięć podręczną kompilacji i ESP-IDF",
+        "clean_all_confirm": "Usunąć wszystkie pliki kompilacji, także pamięć podręczną kompilacji i ESP-IDF? Zwolni to {size}. Następna kompilacja pobierze ESP-IDF od nowa, około 1 GB, i skompiluje wszystko od początku, co na Raspberry Pi może zająć pół godziny. Układy, wtyczki i ustawienia pozostaną bez zmian.",
+        "clean_go": "Wyczyść",
+        "cleaned": "Wyczyszczono: znów wolne {size}.",
+        "cleaned_nothing": "Wyczyszczono.",
+        "busy": "Ekran jest kompilowany. Możesz wyczyścić, gdy skończy.",
+        "auto_label": "Czyść po kompilacji",
+        "auto_hint": "Od następnej kompilacji usuwa foldery kompilacji, gdy nic już się nie kompiluje. Oszczędza miejsce, ale każda kolejna kompilacja ekranu kompiluje wszystko od nowa i trwa o kilka minut dłużej.",
+        "auto_on": "Foldery kompilacji są czyszczone po kompilacji.",
+        "auto_off": "Foldery kompilacji zostają dla szybszych kompilacji.",
+        "offer": "Zwolnij {size}",
+        "not_now": "Nie teraz",
+        "large": "Foldery kompilacji zajmują {size}. Wyczyszczenie ich zwalnia większość miejsca, które zajmują kompilacje."
       }
     },
     "firmware": {
@@ -4851,6 +4898,8 @@
       "close": "Zamknij",
       "hello": "Cześć! Powiedz, co ma pokazywać ten ekran, a ułożę jego strony. Zmieniam tylko układ, nigdy Twoje urządzenia.",
       "privacy": "Korzystam z {agent} z Home Assistant. Trafiają tam Twoje pytanie, strony Twoich ekranów oraz identyfikatory, nazwy i obszary Twoich encji.",
+      "model_hint": "Pracuję znacznie lepiej z większym modelem niż z najtańszym. W Home Assistant dodaj dla mnie AI Task do swojej integracji AI, wyłącz „Zalecane ustawienia modelu”, wybierz większy model, a następnie wskaż go u góry tego czatu.",
+      "model_link": "Otwórz integracje",
       "placeholder": "Zrób stronę z…",
       "ask": "Zapytaj",
       "send": {
@@ -4877,6 +4926,10 @@
       "show": "Pokaż",
       "undo": "Cofnij",
       "undone": "Cofnięto",
+      "restructure": {
+        "page": "Przebuduj tę stronę",
+        "screen": "Przebuduj cały ekran"
+      },
       "suggest": {
         "lights_sections": "Umieść wszystkie światła na jednej stronie, z sekcją na każde pomieszczenie",
         "lights": "Umieść wszystkie światła na jednej stronie",
@@ -4905,7 +4958,8 @@
         "memory_full": "Pamięć ekranu jest pełna, więc pominięto {count} kafelek. | Pamięć ekranu jest pełna, więc pominięto {count} kafelki. | Pamięć ekranu jest pełna, więc pominięto {count} kafelków.",
         "left_out": "Na ekranie zabrakło miejsca na jeszcze {count} kafelek. | Na ekranie zabrakło miejsca na jeszcze {count} kafelki. | Na ekranie zabrakło miejsca na jeszcze {count} kafelków.",
         "no_page": "Nie ma strony {page}.",
-        "not_drawn": "Ekran nie rysuje kafelka dla {count} encji. | Ekran nie rysuje kafelka dla {count} encji. | Ekran nie rysuje kafelka dla {count} encji."
+        "not_drawn": "Ekran nie rysuje kafelka dla {count} encji. | Ekran nie rysuje kafelka dla {count} encji. | Ekran nie rysuje kafelka dla {count} encji.",
+        "restructure_no_room": "Po przebudowie zabrakłoby miejsca na {count} Twoich kafelków, więc zostawiłem strony bez zmian. | Po przebudowie zabrakłoby miejsca na {count} Twoich kafelków, więc zostawiłem strony bez zmian. | Po przebudowie zabrakłoby miejsca na {count} Twoich kafelków, więc zostawiłem strony bez zmian."
       },
       "update_app": "Zaktualizuj aplikację Tessera: ten edytor sam rozmieszcza plany Layoutbota.",
       "scope": {

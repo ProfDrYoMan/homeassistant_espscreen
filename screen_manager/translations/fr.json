@@ -1042,6 +1042,18 @@
       "icons": {
         "request": "Ce n'est pas une liste d'icônes.",
         "too_many": "Un écran accepte au plus {most} icônes à lui."
+      },
+      "sounds": {
+        "name": "Donnez un nom au son.",
+        "many": "Il y a déjà {most} sons personnels. Supprimez-en un d'abord.",
+        "format": "Un son est un fichier WAV de 16 kHz, mono, 16 bits.",
+        "short": "Un son dure au moins un quart de seconde.",
+        "long": "Un son dure {seconds} secondes au plus.",
+        "unknown": "Ce son n'existe pas.",
+        "volume": "Un volume est un nombre entier de dB de -40 à 0.",
+        "none": "Cet écran ne joue aucun son pour cela. Choisissez-en un d'abord.",
+        "older": "Cet écran a besoin d'une mise à jour du firmware pour cela.",
+        "busy": "Cet écran est en appel en ce moment."
       }
     },
     "status": {
@@ -1658,6 +1670,9 @@
         "kept": "Layoutbot a oublié {count} de vos tuiles : elles sont posées en vrac sur la dernière page."
       },
       "nothing_to_restructure": "Cette page n'a pas encore de tuiles d'appareils à restructurer. Ajoutez-en quelques-unes, puis redemandez."
+    },
+    "sounds": {
+      "test": "Test de sonnerie"
     }
   },
   "editor": {
@@ -2058,7 +2073,8 @@
         "fits_none": "Ne convient à aucun de vos écrans",
         "failed": "Échec de la compilation",
         "not_running": "Ne s'exécute pas sur l'écran",
-        "queued": "Attend son tour"
+        "queued": "Attend son tour",
+        "runs_other": "La version {version} tourne sur l'écran"
       },
       "source": {
         "link": "Depuis un lien",
@@ -2444,6 +2460,19 @@
         "go": "Retirer de la liste",
         "note": "Aucun écran n'utilise ce plugin. Retirez-le de la liste pour oublier le lien.",
         "note_folder": "Aucun écran n'utilise ce plugin depuis son dossier. Le retirer déplace le dossier vers config/tessera-plugins/.removed/{id}, où vous pouvez le supprimer pour de bon."
+      },
+      "runs_elsewhere": "{screen} exécute la version {running}, compilée ailleurs. La compiler ici y installe la version {version}.",
+      "suggest": {
+        "why": {
+          "camera": "Cette carte a une caméra."
+        },
+        "question": "Ajouter {name} à {screen} ?",
+        "yes": "Ajouter",
+        "yes_update": "Ajouter avec la prochaine mise à jour",
+        "no": "Non, merci",
+        "building": "{name} est en cours de compilation pour {screen}.",
+        "with_update": "{name} arrive avec la prochaine mise à jour de {screen}.",
+        "declined": "D'accord. {name} reste sur la page Plugins si vous le voulez plus tard."
       }
     },
     "plugin_tile": {
@@ -3391,6 +3420,35 @@
       "extras": {
         "title": "Extras",
         "note": "Des réglages que seul cet écran possède, venant de sa carte. Les mêmes interrupteurs sont sur la page de réglages de l’écran et dans Home Assistant."
+      },
+      "parts": {
+        "display": {
+          "title": "Affichage",
+          "grid": "{columns} × {rows} tuiles"
+        },
+        "standby": {
+          "title": "Veille et nuit",
+          "after": "Veille après {time}",
+          "off": "Pas de veille",
+          "night": "Nuit de {start} à {end}"
+        },
+        "navigation": {
+          "title": "Navigation",
+          "home_after": "Retour à l’accueil après {time}"
+        },
+        "board": {
+          "title": "Cette carte"
+        },
+        "help": {
+          "title": "Aide",
+          "feedback": "Avis"
+        }
+      },
+      "blocks": {
+        "display": "Luminosité et rotation",
+        "standby": "Veille",
+        "night": "Nuit",
+        "navigation": "Navigation"
       }
     },
     "update": {
@@ -3458,8 +3516,6 @@
       "title": "Tout ce qui entoure vos écrans.",
       "back": "← Mes écrans",
       "screens": {
-        "title": "Écrans",
-        "text": "Ajoutez un écran, ou compilez et réinstallez le firmware d'un écran que vous avez déjà.",
         "firmware_detail": "Compiler et installer via USB ou Wi-Fi"
       },
       "language": {
@@ -3570,6 +3626,40 @@
         "offer": "Libérer {size}",
         "not_now": "Pas maintenant",
         "large": "Les dossiers de compilation occupent {size}. Les nettoyer libère presque toute la place que prennent les compilations."
+      },
+      "parts": {
+        "updates": {
+          "title": "Mises à jour",
+          "nightly": "Mis à jour chaque nuit",
+          "badge": "1 mise à jour | {n} mises à jour"
+        },
+        "builds": {
+          "title": "Compilation",
+          "server": "Sur le serveur de compilation {name}",
+          "server_pending": "Le serveur de compilation {name} attend l’accord",
+          "no_server": "Compilé dans cette app"
+        },
+        "language": {
+          "auto": "{name}, depuis Home Assistant",
+          "auto_plain": "Depuis Home Assistant"
+        },
+        "plugins": {
+          "title": "Plugins",
+          "counting_on": "Compté dans la boutique",
+          "counting_off": "Non compté dans la boutique",
+          "asking_on": "Demande des étoiles",
+          "asking_off": "Ne demande jamais d’étoiles"
+        },
+        "home_assistant": {
+          "title": "Home Assistant",
+          "video": "Vidéo {state}",
+          "claude": "Claude {state}",
+          "running": "en marche",
+          "not_installed": "non installé",
+          "installed": "installé",
+          "update": "mise à jour prête",
+          "restart": "redémarrage requis"
+        }
       }
     },
     "firmware": {
@@ -3712,7 +3802,8 @@
       "steps": {
         "board": "Écran",
         "setup": "Configurer",
-        "install": "Installer"
+        "install": "Installer",
+        "plugins": "Plugins"
       },
       "pick_title": "Quel écran as-tu ?",
       "pick_intro": "Choisis ta carte. Cherche par marque, taille ou ce qui est imprimé dessus.",
@@ -3789,7 +3880,9 @@
       "grid": "Grille",
       "grid_hint": "La grille proposée est la meilleure pour cet écran. Vous pourrez la changer, et son orientation, plus tard à côté des pages dans l’éditeur, sans nouvelle compilation.",
       "grid_best": "Revenir à la meilleure",
-      "waits_turn": "Un autre écran est en cours de compilation. Celui-ci attend son tour et démarre tout seul juste après."
+      "waits_turn": "Un autre écran est en cours de compilation. Celui-ci attend son tour et démarre tout seul juste après.",
+      "plugins_title": "Plugins pour cet écran",
+      "plugins_intro": "Ils vont avec ce que possède cette carte. Décochez ce que vous ne voulez pas : ce n'est pas intégré, et vous pouvez l'ajouter plus tard sur la page Plugins."
     },
     "alerts": {
       "intro": "Chaque écran a l'action {action}. Elle place une carte par-dessus tout, réveille l'écran et garde le rétroéclairage à luminosité normale jusqu'à ce que quelqu'un touche le bouton ou que le délai expire. Home Assistant n'affiche lui-même ni explication ni listes déroulantes pour les actions ESPHome ; tout ce que vous pouvez remplir est listé ici.",
@@ -4167,7 +4260,8 @@
       "actions_allowed": "{name} peut maintenant commander vos appareils.",
       "part_page": "La page : titre et navigation",
       "part_page_hint": "Titre, page d'accueil et comment y arriver",
-      "home_control_hint": "Place le bouton Accueil à gauche de la barre du haut de cette page. Il mène à la page d'accueil."
+      "home_control_hint": "Place le bouton Accueil à gauche de la barre du haut de cette page. Il mène à la page d'accueil.",
+      "place_on_new_page": "Sur une nouvelle page"
     },
     "feedback": {
       "question": "Votre écran fonctionne-t-il comme prévu ?",
@@ -4642,7 +4736,9 @@
         "remove_confirm": "Supprimer « {name} » de Home Assistant ?",
         "on": "Activée",
         "off": "Désactivée"
-      }
+      },
+      "alarm": "Alarme",
+      "calls": "Appels"
     },
     "doorbell": {
       "intro": "Quelqu'un sonne et vos écrans montrent la porte. Une automatisation envoie l'événement avec la caméra de la sonnette : un écran P4 se réveille, joue un carillon et ouvre la caméra en direct avec le son ; tout autre écran affiche son image dans une alerte. Toute sonnette fonctionne, quel que soit le déclencheur.",
@@ -4967,6 +5063,97 @@
         "all": "Tous les écrans"
       },
       "preview": "Voir"
+    },
+    "alarm": {
+      "hero_title": "Quand l'alarme se déclenche",
+      "hero_text": "Quelqu'un entre ou l'alarme se déclenche : vos écrans se réveillent d'eux-mêmes et ouvrent le clavier en rouge, avec le temps qui reste. Tapez le code et l'alarme est désactivée. Aucune automatisation n'est nécessaire ; Tessera suit votre alarme dans Home Assistant.",
+      "none": "Home Assistant n'a aucun panneau d'alarme. Ajoutez-en un, comme Manual alarm ou Alarmo, et il apparaît ici.",
+      "no_code": "Cette alarme ne demande pas de code pour la désactiver : les écrans ouvrent donc sa carte avec une touche Désactiver au lieu du clavier.",
+      "screens_label": "Écrans qui ouvrent le clavier",
+      "every_screen": "Tous les écrans",
+      "every_screen_hint": "Aussi un écran ajouté plus tard. Désactivez pour choisir vous-même les écrans.",
+      "none_chosen": "Aucun écran n'ouvre le clavier de lui-même. La tuile de l'alarme l'ouvre toujours d'un toucher.",
+      "older": "Nécessite une mise à jour du firmware pour l'ouvrir sans la tuile de l'alarme sur une page.",
+      "send_label": "Envoyer le code après",
+      "send_off": "Touche OK",
+      "send_off_hint": "Le code part quand vous touchez OK. Home Assistant ne dit pas combien de chiffres compte un code.",
+      "send_on_hint": "Le code part de lui-même après {digits} chiffres, sans OK. Ne choisissez cela que si tous les codes de cette alarme ont {digits} chiffres : un code envoyé trop tôt compte comme faux.",
+      "saved": "Enregistré. Vos écrans l’auront dans un instant.",
+      "how_title": "Comment cela fonctionne sur l'écran",
+      "how_wake": "Quand l'alarme décompte parce que quelqu'un est entré, ou se déclenche, les écrans choisis se réveillent et ouvrent le clavier. Pendant le décompte avant l'armement, la carte de l'alarme affiche plutôt une touche Désactiver.",
+      "how_keys": "Les touches prennent toute la place de l'écran, jusqu'à la taille du clavier d'un grand téléphone. Effacer retire le dernier chiffre.",
+      "how_wrong": "Trois codes faux bloquent le clavier 30 secondes, et chaque code faux ensuite double ce temps, jusqu'à 15 minutes. Home Assistant apprend chacun par l'événement esphome.screen_alarm_code_refused, jamais avec le code.",
+      "how_code": "Le code part vers Home Assistant avec l'action, comme sa propre carte d'alarme l'envoie, et est effacé aussitôt sur l'écran. Un écran ne le garde ni ne le journalise jamais.",
+      "how_tile": "Placez aussi l'alarme sur une page : un toucher sur sa tuile ouvre à tout moment la carte avec une touche par mode."
+    },
+    "calls": {
+      "hero_title": "Appels",
+      "hero_text": "Quand un écran en appelle un autre, l'écran appelé sonne. Choisissez ci-dessous ce qui le fait sonner : une sonnerie a sa propre pause et joue en boucle jusqu'à ce que quelqu'un réponde. Un nouveau choix arrive sur un écran à sa prochaine sonnerie, sans mise à jour."
+    },
+    "sounds": {
+      "kinds": {
+        "call": {
+          "title": "Sonnerie",
+          "text": "Ce qui sonne sur un écran quand un autre écran l'appelle."
+        },
+        "doorbell": {
+          "title": "Carillon",
+          "text": "Ce qu'un écran joue quand la sonnette retentit : sur les écrans qui ouvrent la sonnette, et sur les autres avec son alerte."
+        },
+        "alert": {
+          "title": "Son d'alerte",
+          "text": "Ce qu'un écran joue quand une de vos alertes s'affiche, envoyée avec l'événement esp_screens_show_alert. Sans son, c'est comme avant. Une alerte peut rester silencieuse avec sound: false."
+        }
+      },
+      "builtin": {
+        "classic": "Classique",
+        "marimba": "Marimba",
+        "digital": "Numérique",
+        "bell": "Cloche",
+        "chime": "Ding-dong",
+        "notice": "Notification"
+      },
+      "none": "Aucun son",
+      "play": "Écouter",
+      "stop": "Arrêter",
+      "seconds": "{seconds} s",
+      "chosen": "Son choisi",
+      "saved": "Son enregistré",
+      "removed": "Son supprimé",
+      "own_add": "Ajouter votre propre son",
+      "own_choose": "Choisir un fichier son",
+      "own_unreadable": "Ce fichier n'a pas pu être lu comme un son.",
+      "own_full": "Il y a déjà {most} sons personnels. Supprimez-en un d'abord.",
+      "own_drag_loop": "Faites glisser la partie, ou l'un de ses bords, ici ou dans le fichier entier ci-dessus ; les touches fléchées la déplacent aussi. Écouter (ou la barre d'espace) la joue en boucle comme le fera l'écran.",
+      "own_drag_once": "Faites glisser la partie, ou l'un de ses bords, ici ou dans le fichier entier ci-dessus ; les touches fléchées la déplacent aussi. Écouter (ou la barre d'espace) la joue comme le fera l'écran.",
+      "own_name": "Nom",
+      "own_save": "Enregistrer le son",
+      "screens_title": "Par écran",
+      "screens_same": "Comme tous les écrans",
+      "screens_none": "Aucun écran capable de jouer ceci n'a encore de haut-parleur.",
+      "volume": "Volume",
+      "volume_db": "{volume} dB",
+      "volume_saved": "Volume réglé à {volume} dB",
+      "test": "Tester",
+      "test_hint": "Le joue maintenant sur cet écran, tel qu'il sonnera pour de vrai",
+      "test_sent": "Lecture sur l'écran",
+      "editor": {
+        "drop": "Déposez un fichier son ici",
+        "drop_loop": "N'importe quelle chanson ou n'importe quel son convient : vous choisissez la partie qui sonne, {seconds} secondes au maximum, avec la pause voulue avant qu'elle sonne de nouveau.",
+        "drop_once": "N'importe quelle chanson ou n'importe quel son convient : vous choisissez la partie qui est jouée, {seconds} secondes au maximum.",
+        "total": "{time} au total",
+        "other_file": "Un autre fichier",
+        "whole": "Le fichier entier",
+        "part": "La partie jouée",
+        "start": "Début",
+        "end": "Fin",
+        "of_most": "de {most} s au maximum",
+        "made": "Ce qui est fait au son",
+        "no_bass": "Sans graves",
+        "soft_ends": "Bords doux",
+        "even_level": "Volume égal",
+        "repeats": "Se répète"
+      }
     }
   }
 }

@@ -25,16 +25,13 @@ light:
     default_transition_length: 0ms
 
 script:
-  # The 7B always applies 0 ms, including when screen motion owns the light.
+  # The 7B always applies 0 ms.
   - id: set_backlight
     mode: restart
     parameters:
       level: int
     then:
       - lambda: |-
-          // While a change of the whole glass is drawn in the dark the light is that change's (screen_motion::cut): it
-          // comes up at the level the screen should have once the page is at rest.
-          if (screen_motion::holds_light()) return;
           id(back_light).turn_on().set_transition_length(0).set_brightness(level / 100.0f).perform();
 
   - id: wake_display
@@ -47,16 +44,9 @@ script:
           id(last_touch_ms) = millis();
           id(display_dimmed) = false;
           id(sleep_requested) = false;
-          // The backlight as screen_motion.h drives it for a change of the whole glass: out at once, and back to this level.
-          if (!screen_motion::dark) {
-            screen_motion::dark = []() { id(set_backlight).execute(0); };
-            screen_motion::lit = [](int) {
-              id(set_backlight).execute(id(display_dimmed) ? runtime_tiles::standby_level() : screen_settings::current.brightness);
-            };
-          }
           // The screensaver goes with the standby, and the touch that woke the screen does nothing else (0.29.0+).
           runtime_tiles::saver_wake();
-          // Restore brightness after leaving standby unless the page change still owns the backlight.
+          // Restore brightness immediately after leaving standby or the screensaver.
           id(set_backlight).execute(screen_settings::current.brightness);
       - lvgl.widget.hide: dim_wake_overlay
       - script.execute: close_cards

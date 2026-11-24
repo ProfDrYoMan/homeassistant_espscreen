@@ -50,6 +50,8 @@ subject in the same commit, and a measurement goes with it; the map is updated w
 | change Layoutbot, the editor's chat that arranges pages | docs/LAYOUTBOT.md | `screen_manager/app/layoutbot.py`, `web/src/stores/layoutbot.ts` |
 | change how pages are kept or prepared | docs/KEPT_PAGES.md, docs/PAGES.md | `kept_pages.h`, `page_protocol.h` |
 | give a part of the UI a keyboard, or add a keyboard layout | docs/KEYBOARD.md | `keyboard.h`, `keyboard_lvgl.h` |
+| change when a screen goes to standby, what wakes it, or Back to page 1 | docs/ARCHITECTURE.md, "The standby" | `screen_standby.h`, `tests/test_screen_standby.cpp` |
+| change when an alert shows, what ends it, its blinks or what Home Assistant hears of it | docs/ARCHITECTURE.md, "An alert's life" | `alert_life.h`, `tests/test_alert_life.cpp` |
 | make a control click or buzz as a finger presses or drags it | docs/PLUGINS.md, "Touch feedback" | `touch_feedback.h`, `touch_feedback_lvgl.h` |
 | change what a troubleshooting report holds, or how a crash is read | docs/REPORTS.md | `reports.py`, `redaction.py`, `ReportPanel.vue`, the website's `AddonReportController` |
 | change the alarm panel's card, the keypad for a code, or what the screens do when it goes off | docs/ALARM_PANEL.md | `alarm_panel.h`, `alarm_panel_lvgl.h`, `screen_manager/app/alarm_screens.py` |
@@ -57,7 +59,9 @@ subject in the same commit, and a measurement goes with it; the map is updated w
 | make something move, dim the page behind an overlay, or change the whole glass at once | docs/MOTION.md | `screen_motion.h`, `glass::veil`, `sheet_motion.h`, `hw::Caps::motion` |
 | make a card follow a change without being built again | docs/CARD_PARTS.md | `card_bind()`, `card_shaped()` in `runtime_tiles.h` |
 | suggest a plugin for hardware a board has (New screen's Plugins step, the card above a screen) | docs/PLUGINS.md, "Plugins a board starts with" | `RULES` in `screen_manager/app/plugin_defaults.py` |
+| change how a plugin's own tile is shown in the editor, or how its code reaches the preview | docs/EMULATOR_ARCHITECTURE.md, "Plugins" | `web/wasm/build_plugin.py`, `web/wasm/toolchain.py`, `screen_manager/app/plugin_module.py`, `web/src/components/GlassFaces.vue` |
 | change what a plugin can do, or how plugins reach a screen | docs/PLUGINS.md, then the tessera-plugins repository's docs | `plugin_api.h`, `plugin_host.cpp`, `screen_manager/app/plugins.py`, `plugin_manifest.py` |
+| build for a chip's silicon revision, or add a rule when a chip changes its silicon (the ESP32-P4 before and from v3) | docs/CHIP_REVISIONS.md | `CHIP_REVISION` in `packages/hardware/esp32p4-core.yaml`, `screen_manager/app/chip_revision.py` |
 | touch the flash of a board with 4 MB | docs/FLASH_LAYOUT.md | `components/flash_layout/`, `packages/hardware/flash-4mb.yaml` |
 | change how a build waits its turn (updates, plugins, New screen, Firmware & USB) | docs/BUILDS.md | `screen_manager/app/build_queue.py`, `web/src/stores/builds.ts` |
 | change how a build is sent to a build server (ESPHome's remote build) | docs/BUILDS.md, "On a build server" | `screen_manager/app/build_server.py`, `web/src/components/BuildServerCard.vue` |

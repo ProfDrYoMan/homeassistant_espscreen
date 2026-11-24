@@ -10,6 +10,33 @@ The toolbar above the pages switches between two views, **Row** and **Map**, and
 
 The library lists everything a tile can show: the rows come as the list is scrolled (`libraryWindow` in `web/src/model/library.ts`), and a room's number is the whole room's. A search (`web/src/model/search.ts`) takes each word on its own, in any order, in the name, the entity id, the device, the room or what the entity is: its kind in the editor's language and its device class in Home Assistant's words (`kind_words` in `core.py`). Case, accents and whether words are joined by a space, a dash or an underscore make no difference, and a match in the name stands first.
 
+### The library
+
+The library shows what a tile can show in one of two views, switched at its top right and remembered in the browser:
+
+- **Tiles** (the default): every entity as the tiles it can be on this screen, side by side on a strip of the screen's
+  background: one cell, a row of two and two rows of two (the tall size where the grid has no 2 x 2), each size the
+  screen or the type does not take left out. These are the mockup's own cards (`TileCard`) at the sizes the glass gives
+  them, scaled alike so the sizes compare, and each is as rich as the screen draws it there: from two cells up the face
+  its type is shown in (catalogue `showcase`, docs/CATALOGUE.md "The library's tiles"), and of the control sets that
+  fit, the one with the most parts. A light shown with presets gets a first set that suits it (`starterPresets` in
+  `web/src/model/light-presets.ts`). Only a tile the add-on saves is shown. A click puts that very tile on the marked
+  cell or the first free one, a drag where it is let go. `web/src/editor/library-tiles.ts` chooses the tiles,
+  `web/src/components/LibraryShelf.vue` draws one entity. A phone keeps the list.
+  The cards scale with the drawer: a card of two rows fills the height the list has under a shelf's name and sizes, never
+  larger than on the page and never under half of it, and the drawer opens at least that high. The strip they stand
+  on takes the screen's own colours, the firmware's roles (`web/src/model/glass-colours.ts`), as the page mockup does.
+  A plugin's tile stands on the shelf as the plugin's own code draws it, at each size, with the plugin's own example
+  (docs/EMULATOR_ARCHITECTURE.md, "The page editor's own cards"); a plugin without a module for the preview keeps its
+  placeholder face, as on a page.
+- **List**: the entities as rows, as the library always was.
+
+A device's extras stand apart, the way Home Assistant's device page puts them apart from the controls: a setting
+(`entity_category: config`, such as a lamp's power-on behaviour), a reading for diagnosis (`diagnostic`) and an entity
+hidden in Home Assistant. The add-on marks them (`category`, `hidden` in the inventory, `discover` in `core.py`), and the
+library lists them after the rest of their room, folded under "N extras", in both views. A search finds them, after an
+equally good match that is not an extra.
+
 **Map** adds a spatial page map and links from navigation tiles to their destinations. Workspace positions belong to the editor, so arranging pages vertically does not change their order on the device. Reordering pages changes the device order while preserving destinations. Returning to Row removes the map connections and keeps the same pages and tiles.
 
 The navigation preview runs locally. It does not switch entities in Home Assistant. Entity values and available history come from Home Assistant; unavailable history is left empty.
@@ -49,6 +76,8 @@ Menus, lists to pick from and switches use Reka UI (app 0.3.19), wrapped in `web
 panel uses the same few building blocks. Build a new control from Reka's rich parts, never from a hand-made list or
 popup: `UiMenu` for a few fixed actions, `UiSelect` for one value from a short fixed list, and `UiPicker` (a Reka
 Popover with a Combobox) for anything picked from the user's own Home Assistant, such as entities, players or areas.
+`UiSegmented` (Reka's ToggleGroup, one at a time) switches between a few views or modes that all stay in sight, such
+as the library's Tiles and List; the older hand-made `.seg` rows move to it as they are touched.
 Such a list can run to dozens of items, so it needs a search field and a list that scrolls inside the window. When
 Reka has a part for what you need (Combobox, Popover, Tooltip, Dialog, Tabs, Slider, ...), wrap it in
 `web/src/components/ui/` first and use that wrapper. The inspector groups a tile's settings in five cards (Text, Look,
@@ -74,29 +103,45 @@ or writes `location.hash`: a view is opened with `ui.go()` (the route names the 
 or the overview), a screen with `session.select()`, an override with `ui.openOverride()`; what is open is read from
 `ui.route`, `scr.selected` and `ui.overrideProfile`.
 
-### Settings
+### Pages of parts
 
-The app's Settings page and a screen's Settings tab work the same way, the way Home Assistant's own Settings do: each
-opens on a list of its parts, one row per part with its icon, its name and one line of what is set now, and a row opens
-its part as a page of its own, one column of cards, with the way back to the list above its title. The look is Home
-Assistant's too: one column of 600 px in the middle of a wide page, the rows in a few separate cards, each part's icon
-white on a round colour of its own (`PART_LOOK` in `settings-parts.ts`, the `--tone-*` tokens in `styles/tokens.css`). The parts are in
-`web/src/model/settings-parts.ts`, and so is the part each of a screen's settings is in:
+A page that holds many things is a page of parts, the way Home Assistant's own Settings are: the app's Settings, a
+screen's Settings tab and Events. Each opens on a list of its parts, one row per part with its icon, its name and one
+line of what is set now, and a row opens its part as a page of its own, with the way back to the list above its title.
+The look is Home Assistant's too: one column of 600 px in the middle of a wide page, the rows in a few separate cards,
+each part's icon white on a round colour of its own (`PART_LOOK` in `settings-parts.ts`: every part's icon, colour and
+card in one table; the `--tone-*` tokens in
+`styles/tokens.css`). A part is in the address, so a link, a reload and Back reach it.
+
+It is one design system, in `web/src/model/parts.ts` and `web/src/components/parts/`:
+
+| Piece | What it is |
+|---|---|
+| `PartRow`, `cardsOf` (`model/parts.ts`) | a part as its list shows it (icon, colour, card, title, summary, badge), and the rows in their cards |
+| `PartsPage.vue` | a whole page of parts: its title and intro over the list, or an open part with the way back; the key that leaves |
+| `PartList.vue` | the cards of rows, with a slot for one control of a row's own |
+| `PartLink.vue` | one row |
+| `PartHead.vue` | the head of an open part: the way back and its title |
 
 | Page | Parts | Address |
 |---|---|---|
-| Settings (`AppSettingsView.vue`) | Updates, Builds, Language & region, Plugins, Home Assistant | `#/settings/<part>` |
-| A screen's Settings tab (`SettingsTab.vue`) | Display, Standby & night, Navigation, This board, Help | `?settings=<part>` on the screen's address |
+| Settings (`AppSettingsView.vue`, a `PartsPage`) | Updates, Builds, Language & region, Plugins, Home Assistant | `#/settings/<part>` |
+| A screen's Settings tab (`SettingsTab.vue`, `PartList` and `PartHead` inside the screen's tabs) | Display, Standby & night, Navigation, This board, Help | `?settings=<part>` on the screen's address |
+| Events (`EventsView.vue`, a `PartsPage`) | Alerts and Doorbell (fired by an automation), Alarm and Calls (followed by the screens) | `#/events/<part>` |
 
 A part that has nothing on this app or this screen (Language on an add-on without languages, This board on a preview
 screen) has no row, and its address opens the list. The rows of the screen's own settings are `SettingRows.vue`, which a
 part shows by key, so the editor groups them by what a person looks for while the screen's own settings page keeps the
-groups of `settings_screen.h`. A row of the list (`SettingsLink.vue`) may carry one control for what people change most
-there, so that needs no page: dark mode, on the row of Display. A setting ⌘K finds opens its part and marks its row.
-Leaving the Settings tab takes the part out of the address again, in place, so Back does not walk through it.
+groups of `settings_screen.h`. A row may carry one control for what people change most there, so that needs no page:
+dark mode, on the row of Display. A setting ⌘K finds opens its part and marks its row. Leaving the Settings tab takes the
+part out of the address again, in place, so Back does not walk through it. Events says of each part what Home Assistant
+has: its automations of Tessera, its alarm panels, the ring a call plays, read from the stores the parts read too
+(`stores/automations.ts`, `stores/alarms.ts`, `stores/sounds.ts`), so a change in a part shows in the list at once.
 
-A new card goes in the part it belongs to, and a new part needs a good reason: its name in the list, an icon of
-`web/src/model/ui-icons.json`, a summary line made of what is set, and its texts in every language.
+A page that grows gets one more part, never a longer page; a new page that holds many things is a `PartsPage`. A new
+card goes in the part it belongs to, and a new part needs a good reason: its name in the list, an icon of
+`web/src/model/ui-icons.json` (`tools/generate_icons.py` puts a new one in the editor's font), its icon, colour and card
+in `PART_LOOK`, a summary line made of what is set, and its texts in every language.
 
 ### Menus
 

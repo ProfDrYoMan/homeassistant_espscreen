@@ -158,6 +158,7 @@
       "extras": "Extras",
       "microphone": "Microphone",
       "media_player": "Volume",
+      "volume": "Volume",
       "wake_when_moved": "Wake when moved",
       "backlight_pwm": "Backlight PWM",
       "dimmest_level": "Dimmest level",
@@ -1061,6 +1062,9 @@
         "none": "This screen plays no sound for this. Choose one first.",
         "older": "This screen needs a firmware update for this.",
         "busy": "This screen is in a call right now."
+      },
+      "steps": {
+        "request": "This step does not exist on this screen."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Echo cancellation",
           "hint": "Reduce the screen speaker in microphone input. Off bypasses cancellation; it does not disable the microphone or full-duplex audio. Requires the AEC transport."
+        },
+        "volume": {
+          "label": "Volume",
+          "hint": "How loud the buzzer plays: the doorbell's chime, the sounds of alerts and a plugin's sounds. The screen keeps it after a restart."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Log copied.",
         "selected": "Log is selected. Copy with Ctrl+C or Command+C."
+      },
+      "address": {
+        "copied": "Address copied.",
+        "selected": "Address is selected. Copy with Ctrl+C or Command+C."
       }
     },
     "sidebar": {
@@ -3456,7 +3468,7 @@
         "here_click": "Click Install below.",
         "here_pick": "Your browser asks which device: choose the screen and click Connect.",
         "file_title": "You'll get a file to put on it",
-        "file_lead": "This browser cannot write to a screen itself. Tessera makes a file, and you put it on the screen with ESPHome Web in Chrome or Edge.",
+        "file_lead": "Tessera makes a file, and you put it on the screen with ESPHome Web in Chrome or Edge.",
         "ha_title": "Plug the cable into your Home Assistant",
         "ha_lead": "Not into this computer, but into the machine Home Assistant runs on. We see it as soon as it is there.",
         "ha_which": "Which one is the screen?",
@@ -3494,7 +3506,8 @@
           "ha": "Adding it to Home Assistant"
         },
         "may_close": "you can close this window",
-        "keep_open": "keep this page open until it is on the screen",
+        "keep_open_title": "Keep this page open",
+        "keep_open": "This page puts the software on the screen itself, as soon as it is built. Close this tab, leave the page or let the computer sleep, and nothing is written. Leave the USB cable in too.",
         "show_log": "What happens exactly",
         "to_pages": "Make its pages",
         "another": "Add another screen",
@@ -3504,6 +3517,19 @@
           "ha": "In Home Assistant",
           "actions": "Allowed to control your home"
         }
+      },
+      "no_usb": {
+        "insecure_title": "This page is not on a secure address, so it cannot reach USB",
+        "insecure": "Installing from this computer is two clicks, without any file, but only in Chrome or Edge on a page with a secure address (https). This page was opened over plain http, where a browser hides its USB ports.",
+        "browser_title": "This browser cannot reach USB",
+        "browser": "Installing from this computer is two clicks, without any file, but only in Chrome or Edge on a computer. Open Home Assistant there and start New screen again.",
+        "fix": "Two ways to make it work:",
+        "https": "Open Home Assistant over https in Chrome or Edge, for example through your Home Assistant Cloud address.",
+        "flag": "Or tell Chrome to treat this Home Assistant's address as secure:",
+        "flag_open": "Copy this into Chrome's address bar and press Enter. A page cannot open it for you.",
+        "flag_add": "In the box under \"Insecure origins treated as secure\", put this address, and set it to Enabled.",
+        "flag_relaunch": "Click Relaunch, open Home Assistant again and start New screen.",
+        "else": "Until then Tessera makes a file here that you put on the screen yourself."
       }
     },
     "alerts": {
@@ -3966,6 +3992,8 @@
         "blocked": "The browser doesn't let this page use USB ports. Check the site's permissions in the browser, or choose Download instead.",
         "busy": "The screen's port is in use by another program or tab, such as a serial monitor or ESPHome Web. Close it and try again.",
         "connect": "The board didn't answer. Hold the BOOT button on the board while you choose the port, until the installation starts, and try again. Unplugging and plugging in the cable can help too.",
+        "silent": "Nothing answered on that port within {seconds} seconds, so nothing was installed. If your browser listed more than one port for the screen, try again and choose the other one. Otherwise hold the BOOT button on the board while you choose the port, and try again.",
+        "other_chip": "That port belongs to the board's second chip (an RP2040), not to the chip the screen runs on. Nothing was installed. Try again and choose the board's other port; on a SenseCAP Indicator that is the one called USB Serial.",
         "wrong_chip": "The board on the cable has an {found} chip, but this screen's firmware is for an {expected}. Plug in the right screen, or choose its board.",
         "wrong_image": "The firmware Tessera built is for an {expected}, but the board on the cable has an {found}. Nothing was written.",
         "wrong_revision": "The firmware Tessera built is for chip revisions {from} to {to}, but the chip on the cable is {found}. Nothing was written. Start again, so Tessera builds for this chip.",
@@ -4709,7 +4737,11 @@
       "leave": "Leave {name} out",
       "copy": "Copy",
       "hint": "{copy} copies the tiles with every setting. Choose a page or a cell, here or on another screen, and press {paste}.",
-      "remove": "Remove tile | Remove {n} tiles"
+      "remove": "Remove tile | Remove {n} tiles",
+      "shared": {
+        "hint": "A change here is for all {n} tiles.",
+        "mixed": "Mixed"
+      }
     },
     "menu": {
       "cut": "Cut",
@@ -5308,6 +5340,60 @@
         "install": "Install",
         "icons": "Icons",
         "other": "Build"
+      }
+    },
+    "steps": {
+      "later": "Later",
+      "set_up": "Set it up",
+      "update": "Update it",
+      "not_now": "Not now",
+      "not_done": "not done",
+      "kept": "Fine. It waits in the menu of {screen}.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Write the firmware",
+          "again": "Try again",
+          "cable": "Put the screen's USB cable in this computer first.",
+          "phase": {
+            "port": "Choose the chip in the browser's list. It shows only this one.",
+            "restart": "The chip restarts as a USB drive.",
+            "drive": "The chip is a USB drive called {drive} now. Choose it, and let this page write to it.",
+            "write": "Writing the firmware.",
+            "wait": "The chip starts. Waiting for the screen to find it.",
+            "wait_chip": "The chip runs {version}. Waiting for the screen to find it."
+          },
+          "choose_drive": "Choose the drive {drive}",
+          "wrong_drive": "That is not the drive {drive}. Choose the drive itself, at the top of the list, not a folder on this computer.",
+          "no_window": "The browser did not open its window for the drive. Another of its file windows may still be open somewhere: close it, or reload this page, and click again.",
+          "drive_there": "The drive {drive} is there already",
+          "done": "Firmware {version} is on the chip, and the screen found it.",
+          "try": "Play a sound",
+          "errors": {
+            "no_port": "No port was chosen. With the screen's USB cable in this computer, the browser's list shows the chip.",
+            "port": "The chip's port did not open. Close any other program that uses it, then try again.",
+            "file": "The firmware did not arrive from Tessera. Try again.",
+            "write": "The file could not be written to the drive. Try again.",
+            "silent": "The screen did not find the chip. Take the USB cable out, put it back in, and try again."
+          },
+          "hand": {
+            "insecure": "This page was opened over plain http, so the browser gives it no USB port. Opened over https in Chrome or Edge (your Home Assistant Cloud address works), this is two clicks. It also goes by hand:",
+            "browser": "This browser cannot reach USB ports. In Chrome or Edge on a computer this is two clicks. It also goes by hand:",
+            "download": "Download {name}",
+            "drag": "A drive called {drive} appears. Drag the file onto it. The drive goes away by itself and the chip starts.",
+            "did": "I did that"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Buzzer firmware",
+        "title": "Give the buzzer its sound",
+        "lead": "A second chip in this screen drives its buzzer. With Tessera's firmware on that chip the buzzer plays the doorbell's chime and the sounds of your alerts. It takes half a minute.",
+        "note": "This replaces Seeed's firmware on that chip, which you can get back from Seeed. Tessera's does not read the sensors of a D1S or D1Pro.",
+        "button": "Take the USB cable out of the screen. Hold the button inside the small hole of its case with a paperclip, and put the cable back in with the other end in this computer.",
+        "done_title": "The buzzer has its sound",
+        "done_lead": "Choose what it plays for alerts and for the doorbell under Events.",
+        "update_title": "A newer firmware for the buzzer",
+        "update_lead": "Tessera has a newer firmware for the chip that drives this screen's buzzer than the one on it. It takes half a minute."
       }
     }
   }

@@ -158,6 +158,7 @@
       "extras": "Extras",
       "microphone": "Mikrofon",
       "media_player": "Lautstärke",
+      "volume": "Lautstärke",
       "wake_when_moved": "Bei Bewegung aufwecken",
       "backlight_pwm": "Hintergrundlicht-PWM",
       "dimmest_level": "Dunkelste Stufe",
@@ -1061,6 +1062,9 @@
         "none": "Dieser Bildschirm spielt dafür keinen Ton. Wähle zuerst einen.",
         "older": "Dieser Bildschirm braucht dafür ein Firmware-Update.",
         "busy": "Dieser Bildschirm ist gerade in einem Anruf."
+      },
+      "steps": {
+        "request": "Diesen Schritt gibt es auf diesem Bildschirm nicht."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Echounterdrückung",
           "hint": "Verringert den eigenen Lautsprecher im Mikrofonsignal. Aus umgeht die Echounterdrückung; Mikrofon und Vollduplex bleiben aktiv. Erfordert den AEC-Audiopfad."
+        },
+        "volume": {
+          "label": "Lautstärke",
+          "hint": "Wie laut der Summer spielt: den Gong der Türklingel, die Töne von Meldungen und die Töne eines Plugins. Der Bildschirm behält sie nach einem Neustart."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Protokoll kopiert.",
         "selected": "Protokoll ist ausgewählt. Kopiere mit Strg+C oder Befehl+C."
+      },
+      "address": {
+        "copied": "Adresse kopiert.",
+        "selected": "Adresse ist markiert. Kopiere sie mit Strg+C oder Befehl+C."
       }
     },
     "sidebar": {
@@ -3947,7 +3959,7 @@
         "here_click": "Klicke unten auf Installieren.",
         "here_pick": "Dein Browser fragt nach dem Gerät: Wähle den Bildschirm und klicke auf Verbinden.",
         "file_title": "Du bekommst eine Datei zum Aufspielen",
-        "file_lead": "Dieser Browser kann nicht selbst auf einen Bildschirm schreiben. Tessera erstellt eine Datei, und die spielst du mit ESPHome Web in Chrome oder Edge auf den Bildschirm.",
+        "file_lead": "Tessera erstellt eine Datei, und die spielst du mit ESPHome Web in Chrome oder Edge auf den Bildschirm.",
         "ha_title": "Stecke das Kabel in deinen Home Assistant",
         "ha_lead": "Nicht in diesen Computer, sondern in das Gerät, auf dem Home Assistant läuft. Wir sehen automatisch, sobald es angeschlossen ist.",
         "ha_which": "Welches ist der Bildschirm?",
@@ -3985,7 +3997,8 @@
           "ha": "Zu Home Assistant hinzufügen"
         },
         "may_close": "du kannst dieses Fenster schließen",
-        "keep_open": "lass diese Seite offen, bis sie auf dem Bildschirm ist",
+        "keep_open_title": "Lass diese Seite offen",
+        "keep_open": "Diese Seite spielt die Software selbst auf den Bildschirm, sobald sie gebaut ist. Wenn du diesen Tab schließt, die Seite verlässt oder der Computer in den Ruhezustand geht, wird nichts geschrieben. Lass auch das USB-Kabel stecken.",
         "show_log": "Was genau passiert",
         "to_pages": "Seiten erstellen",
         "another": "Noch einen Bildschirm hinzufügen",
@@ -3995,6 +4008,19 @@
           "ha": "In Home Assistant",
           "actions": "Darf dein Zuhause steuern"
         }
+      },
+      "no_usb": {
+        "insecure_title": "Diese Seite hat keine sichere Adresse und kommt deshalb nicht an USB",
+        "insecure": "Von diesem Computer aus installierst du mit zwei Klicks, ganz ohne Datei, aber nur in Chrome oder Edge auf einer Seite mit sicherer Adresse (https). Diese Seite wurde über einfaches http geöffnet, und dort versteckt ein Browser seine USB-Anschlüsse.",
+        "browser_title": "Dieser Browser kommt nicht an USB",
+        "browser": "Von diesem Computer aus installierst du mit zwei Klicks, ganz ohne Datei, aber nur in Chrome oder Edge auf einem Computer. Öffne Home Assistant dort und starte Neuer Bildschirm noch einmal.",
+        "fix": "Zwei Wege, wie es klappt:",
+        "https": "Öffne Home Assistant über https in Chrome oder Edge, zum Beispiel über deine Home Assistant Cloud-Adresse.",
+        "flag": "Oder sag Chrome, dass es die Adresse dieses Home Assistant als sicher behandeln soll:",
+        "flag_open": "Kopiere das in die Adressleiste von Chrome und drücke Enter. Eine Seite kann das nicht für dich öffnen.",
+        "flag_add": "Trage diese Adresse in das Feld unter \"Insecure origins treated as secure\" ein und stelle es auf Enabled.",
+        "flag_relaunch": "Klicke auf Relaunch, öffne Home Assistant wieder und starte Neuer Bildschirm.",
+        "else": "Bis dahin erstellt Tessera hier eine Datei, die du selbst auf den Bildschirm spielst."
       }
     },
     "alerts": {
@@ -4457,6 +4483,8 @@
         "blocked": "Der Browser erlaubt dieser Seite keine USB-Anschlüsse. Prüfe die Website-Berechtigungen im Browser oder wähle stattdessen „Download“.",
         "busy": "Der Anschluss des Bildschirms wird von einem anderen Programm oder Tab benutzt, etwa einem seriellen Monitor oder ESPHome Web. Schließe es und versuche es erneut.",
         "connect": "Das Board hat nicht geantwortet. Halte die BOOT-Taste auf dem Board gedrückt, während du den Anschluss wählst, bis die Installation beginnt, und versuche es erneut. Kabel ab- und wieder anstecken hilft auch manchmal.",
+        "silent": "An diesem Anschluss kam innerhalb von {seconds} Sekunden keine Antwort, es wurde also nichts installiert. Hat dein Browser mehr als einen Anschluss für den Bildschirm gezeigt, versuche es erneut und wähle den anderen. Halte sonst die BOOT-Taste auf dem Board gedrückt, während du den Anschluss wählst, und versuche es erneut.",
+        "other_chip": "Dieser Anschluss gehört zum zweiten Chip des Boards (einem RP2040), nicht zu dem Chip, auf dem der Bildschirm läuft. Es wurde nichts installiert. Versuche es erneut und wähle den anderen Anschluss des Boards; bei einem SenseCAP Indicator ist das der mit dem Namen USB Serial.",
         "wrong_chip": "Das Board am Kabel hat einen {found}-Chip, aber die Firmware dieses Bildschirms ist für einen {expected}. Schließe den richtigen Bildschirm an oder wähle sein Board.",
         "wrong_image": "Die Firmware von Tessera ist für einen {expected}, aber das Board am Kabel hat einen {found}. Es wurde nichts geschrieben.",
         "wrong_revision": "Die von Tessera gebaute Firmware ist für die Chip-Revisionen {from} bis {to}, aber der Chip am Kabel ist {found}. Es wurde nichts geschrieben. Fang neu an, damit Tessera für diesen Chip baut.",
@@ -4709,7 +4737,11 @@
       "leave": "{name} weglassen",
       "copy": "Kopieren",
       "hint": "{copy} kopiert die Kacheln mit allen Einstellungen. Wähle eine Seite oder ein Feld, hier oder auf einem anderen Bildschirm, und drücke {paste}.",
-      "remove": "Kachel entfernen | {n} Kacheln entfernen"
+      "remove": "Kachel entfernen | {n} Kacheln entfernen",
+      "shared": {
+        "hint": "Eine Änderung hier gilt für alle {n} Kacheln.",
+        "mixed": "Verschieden"
+      }
     },
     "menu": {
       "cut": "Ausschneiden",
@@ -5308,6 +5340,60 @@
         "install": "Installation",
         "icons": "Symbole",
         "other": "Build"
+      }
+    },
+    "steps": {
+      "later": "Später",
+      "set_up": "Einrichten",
+      "update": "Aktualisieren",
+      "not_now": "Nicht jetzt",
+      "not_done": "nicht erledigt",
+      "kept": "Gut. Es wartet im Menü von {screen}.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Firmware schreiben",
+          "again": "Erneut versuchen",
+          "cable": "Steck zuerst das USB-Kabel des Bildschirms in diesen Computer.",
+          "phase": {
+            "port": "Wähle den Chip in der Liste des Browsers. Sie zeigt nur diesen.",
+            "restart": "Der Chip startet als USB-Laufwerk neu.",
+            "drive": "Der Chip ist jetzt ein USB-Laufwerk namens {drive}. Wähle es und erlaube dieser Seite, darauf zu schreiben.",
+            "write": "Firmware wird geschrieben.",
+            "wait": "Der Chip startet. Warte, bis der Bildschirm ihn findet.",
+            "wait_chip": "Auf dem Chip läuft {version}. Warte, bis der Bildschirm ihn findet."
+          },
+          "choose_drive": "Laufwerk {drive} wählen",
+          "wrong_drive": "Das ist nicht das Laufwerk {drive}. Wähle das Laufwerk selbst, oben in der Liste, nicht einen Ordner auf diesem Computer.",
+          "no_window": "Der Browser hat sein Fenster für das Laufwerk nicht geöffnet. Vielleicht ist irgendwo noch ein anderes Dateifenster offen: schließe es oder lade diese Seite neu und klicke noch einmal.",
+          "drive_there": "Das Laufwerk {drive} ist schon da",
+          "done": "Firmware {version} ist auf dem Chip, und der Bildschirm hat ihn gefunden.",
+          "try": "Ton abspielen",
+          "errors": {
+            "no_port": "Es wurde kein Port gewählt. Steckt das USB-Kabel des Bildschirms in diesem Computer, zeigt die Liste des Browsers den Chip.",
+            "port": "Der Port des Chips ließ sich nicht öffnen. Schließe jedes andere Programm, das ihn benutzt, und versuche es erneut.",
+            "file": "Die Firmware ist nicht von Tessera angekommen. Versuche es erneut.",
+            "write": "Die Datei ließ sich nicht auf das Laufwerk schreiben. Versuche es erneut.",
+            "silent": "Der Bildschirm hat den Chip nicht gefunden. Zieh das USB-Kabel ab, steck es wieder ein und versuche es erneut."
+          },
+          "hand": {
+            "insecure": "Diese Seite wurde über einfaches http geöffnet, deshalb gibt der Browser ihr keinen USB-Port. Über https in Chrome oder Edge geöffnet (deine Home Assistant Cloud-Adresse geht), sind es zwei Klicks. Es geht auch von Hand:",
+            "browser": "Dieser Browser kann keine USB-Ports erreichen. In Chrome oder Edge auf einem Computer sind es zwei Klicks. Es geht auch von Hand:",
+            "download": "{name} herunterladen",
+            "drag": "Ein Laufwerk namens {drive} erscheint. Zieh die Datei darauf. Das Laufwerk verschwindet von selbst und der Chip startet.",
+            "did": "Das habe ich gemacht"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Summer-Firmware",
+        "title": "Gib dem Summer seinen Ton",
+        "lead": "Ein zweiter Chip in diesem Bildschirm steuert seinen Summer. Mit der Firmware von Tessera auf diesem Chip spielt der Summer den Gong der Türklingel und die Töne deiner Meldungen. Das dauert eine halbe Minute.",
+        "note": "Das ersetzt die Firmware von Seeed auf diesem Chip, die du von Seeed wiederbekommst. Die von Tessera liest die Sensoren eines D1S oder D1Pro nicht.",
+        "button": "Zieh das USB-Kabel aus dem Bildschirm. Halte mit einer Büroklammer die Taste in dem kleinen Loch des Gehäuses gedrückt und steck das Kabel wieder ein, mit dem anderen Ende in diesem Computer.",
+        "done_title": "Der Summer hat seinen Ton",
+        "done_lead": "Wähle unter Events, was er bei Meldungen und bei der Türklingel spielt.",
+        "update_title": "Eine neuere Firmware für den Summer",
+        "update_lead": "Tessera hat eine neuere Firmware für den Chip, der den Summer dieses Bildschirms steuert, als die, die darauf ist. Das dauert eine halbe Minute."
       }
     }
   }

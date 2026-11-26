@@ -158,6 +158,7 @@
       "extras": "Extra",
       "microphone": "Microfono",
       "media_player": "Volume",
+      "volume": "Volume",
       "wake_when_moved": "Riattiva se mosso",
       "backlight_pwm": "PWM retroilluminazione",
       "dimmest_level": "Livello minimo",
@@ -1061,6 +1062,9 @@
         "none": "Questo schermo non riproduce nessun suono per questo. Scegline prima uno.",
         "older": "Questo schermo ha bisogno di un aggiornamento del firmware per questo.",
         "busy": "Questo schermo è in chiamata in questo momento."
+      },
+      "steps": {
+        "request": "Questo passaggio non esiste su questo schermo."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Cancellazione eco",
           "hint": "Riduce il suono dell'altoparlante dello schermo nel segnale del microfono. Se disattivata, la cancellazione viene bypassata; microfono e full duplex restano attivi. Richiede il percorso audio AEC."
+        },
+        "volume": {
+          "label": "Volume",
+          "hint": "Quanto forte suona il cicalino: il campanello della porta, i suoni degli avvisi e i suoni di un plugin. Lo schermo lo conserva dopo un riavvio."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Log copiato.",
         "selected": "Il log è selezionato. Copia con Ctrl+C o Comando+C."
+      },
+      "address": {
+        "copied": "Indirizzo copiato.",
+        "selected": "L'indirizzo è selezionato. Copialo con Ctrl+C o Comando+C."
       }
     },
     "sidebar": {
@@ -3947,7 +3959,7 @@
         "here_click": "Clicca qui sotto su Installa.",
         "here_pick": "Il browser chiede quale dispositivo: scegli lo schermo e clicca su Connetti.",
         "file_title": "Riceverai un file da mettergli sopra",
-        "file_lead": "Questo browser non può scrivere da solo su uno schermo. Tessera crea un file, che metti sullo schermo con ESPHome Web in Chrome o Edge.",
+        "file_lead": "Tessera crea un file, che metti sullo schermo con ESPHome Web in Chrome o Edge.",
         "ha_title": "Collega il cavo al tuo Home Assistant",
         "ha_lead": "Non a questo computer, ma al dispositivo su cui gira Home Assistant. Lo vediamo appena è collegato.",
         "ha_which": "Qual è lo schermo?",
@@ -3985,7 +3997,8 @@
           "ha": "Aggiunta a Home Assistant"
         },
         "may_close": "puoi chiudere questa finestra",
-        "keep_open": "lascia aperta questa pagina finché non è sullo schermo",
+        "keep_open_title": "Lascia aperta questa pagina",
+        "keep_open": "È questa pagina a mettere il software sullo schermo, appena è pronto. Se chiudi questa scheda, lasci la pagina o il computer va in sospensione, non viene scritto nulla. Lascia collegato anche il cavo USB.",
         "show_log": "Cosa succede esattamente",
         "to_pages": "Crea le sue pagine",
         "another": "Aggiungi un altro schermo",
@@ -3995,6 +4008,19 @@
           "ha": "In Home Assistant",
           "actions": "Può controllare la tua casa"
         }
+      },
+      "no_usb": {
+        "insecure_title": "Questa pagina non è su un indirizzo sicuro, quindi non può raggiungere l'USB",
+        "insecure": "Installare da questo computer richiede due clic, senza alcun file, ma solo in Chrome o Edge su una pagina con indirizzo sicuro (https). Questa pagina è stata aperta in semplice http, dove il browser nasconde le sue porte USB.",
+        "browser_title": "Questo browser non può raggiungere l'USB",
+        "browser": "Installare da questo computer richiede due clic, senza alcun file, ma solo in Chrome o Edge su un computer. Apri Home Assistant lì e avvia di nuovo Nuovo schermo.",
+        "fix": "Due modi per farlo funzionare:",
+        "https": "Apri Home Assistant in https con Chrome o Edge, per esempio dal tuo indirizzo Home Assistant Cloud.",
+        "flag": "Oppure di' a Chrome di considerare sicuro l'indirizzo di questo Home Assistant:",
+        "flag_open": "Copia questo nella barra degli indirizzi di Chrome e premi Invio. Una pagina non può aprirlo al posto tuo.",
+        "flag_add": "Nel campo sotto \"Insecure origins treated as secure\" inserisci questo indirizzo e impostalo su Enabled.",
+        "flag_relaunch": "Clicca su Relaunch, riapri Home Assistant e avvia Nuovo schermo.",
+        "else": "Fino ad allora Tessera crea qui un file che metti tu sullo schermo."
       }
     },
     "alerts": {
@@ -4457,6 +4483,8 @@
         "blocked": "Il browser non consente a questa pagina di usare le porte USB. Controlla le autorizzazioni del sito nel browser, oppure scegli Scarica.",
         "busy": "La porta dello schermo è usata da un altro programma o scheda, come un monitor seriale o ESPHome Web. Chiudilo e riprova.",
         "connect": "La scheda non ha risposto. Tieni premuto il pulsante BOOT sulla scheda mentre scegli la porta, finché l'installazione non inizia, e riprova. Anche scollegare e ricollegare il cavo può aiutare.",
+        "silent": "Su quella porta non ha risposto nulla entro {seconds} secondi, quindi non è stato installato nulla. Se il browser ha mostrato più di una porta per lo schermo, riprova e scegli l'altra. Altrimenti tieni premuto il pulsante BOOT sulla scheda mentre scegli la porta e riprova.",
+        "other_chip": "Quella porta appartiene al secondo chip della scheda (un RP2040), non al chip su cui gira lo schermo. Non è stato installato nulla. Riprova e scegli l'altra porta della scheda; su un SenseCAP Indicator è quella chiamata USB Serial.",
         "wrong_chip": "La scheda collegata ha un chip {found}, ma il firmware di questo schermo è per un {expected}. Collega lo schermo giusto o scegli la sua scheda.",
         "wrong_image": "Il firmware compilato da Tessera è per un {expected}, ma la scheda collegata ha un {found}. Non è stato scritto nulla.",
         "wrong_revision": "Il firmware creato da Tessera è per le revisioni del chip da {from} a {to}, ma il chip sul cavo è {found}. Non è stato scritto nulla. Ricomincia, così Tessera lo crea per questo chip.",
@@ -4709,7 +4737,11 @@
       "leave": "Togli {name} dalla selezione",
       "copy": "Copia",
       "hint": "{copy} copia i riquadri con tutte le loro impostazioni. Scegli una pagina o una cella, qui o su un altro schermo, e premi {paste}.",
-      "remove": "Rimuovi riquadro | Rimuovi {n} riquadri"
+      "remove": "Rimuovi riquadro | Rimuovi {n} riquadri",
+      "shared": {
+        "hint": "Una modifica qui vale per tutti i {n} riquadri.",
+        "mixed": "Diverso"
+      }
     },
     "menu": {
       "cut": "Taglia",
@@ -5308,6 +5340,60 @@
         "install": "Installazione",
         "icons": "Icone",
         "other": "Compilazione"
+      }
+    },
+    "steps": {
+      "later": "Più tardi",
+      "set_up": "Configuralo",
+      "update": "Aggiornalo",
+      "not_now": "Non ora",
+      "not_done": "non fatto",
+      "kept": "Va bene. Aspetta nel menu di {screen}.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Scrivi il firmware",
+          "again": "Riprova",
+          "cable": "Collega prima il cavo USB dello schermo a questo computer.",
+          "phase": {
+            "port": "Scegli il chip nell'elenco del browser. Mostra solo questo.",
+            "restart": "Il chip si riavvia come unità USB.",
+            "drive": "Ora il chip è un'unità USB chiamata {drive}. Sceglila e lascia che questa pagina ci scriva.",
+            "write": "Scrittura del firmware.",
+            "wait": "Il chip si avvia. In attesa che lo schermo lo trovi.",
+            "wait_chip": "Il chip esegue {version}. In attesa che lo schermo lo trovi."
+          },
+          "choose_drive": "Scegli l'unità {drive}",
+          "wrong_drive": "Quella non è l'unità {drive}. Scegli l'unità stessa, in cima all'elenco, non una cartella di questo computer.",
+          "no_window": "Il browser non ha aperto la finestra per l'unità. Forse un'altra finestra dei file è ancora aperta da qualche parte: chiudila, o ricarica questa pagina, e clicca di nuovo.",
+          "drive_there": "L'unità {drive} c'è già",
+          "done": "Il firmware {version} è sul chip e lo schermo l'ha trovato.",
+          "try": "Riproduci un suono",
+          "errors": {
+            "no_port": "Non è stata scelta nessuna porta. Con il cavo USB dello schermo collegato a questo computer, l'elenco del browser mostra il chip.",
+            "port": "La porta del chip non si è aperta. Chiudi ogni altro programma che la usa, poi riprova.",
+            "file": "Il firmware non è arrivato da Tessera. Riprova.",
+            "write": "Non è stato possibile scrivere il file sull'unità. Riprova.",
+            "silent": "Lo schermo non ha trovato il chip. Togli il cavo USB, rimettilo e riprova."
+          },
+          "hand": {
+            "insecure": "Questa pagina è stata aperta in semplice http, quindi il browser non le dà nessuna porta USB. Aperta in https in Chrome o Edge (il tuo indirizzo Home Assistant Cloud va bene), bastano due clic. Si può fare anche a mano:",
+            "browser": "Questo browser non può raggiungere le porte USB. In Chrome o Edge su un computer bastano due clic. Si può fare anche a mano:",
+            "download": "Scarica {name}",
+            "drag": "Compare un'unità chiamata {drive}. Trascinaci sopra il file. L'unità sparisce da sola e il chip si avvia.",
+            "did": "Fatto"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Firmware del cicalino",
+        "title": "Dai al cicalino il suo suono",
+        "lead": "Un secondo chip in questo schermo pilota il cicalino. Con il firmware di Tessera su quel chip, il cicalino suona il campanello della porta e i suoni dei tuoi avvisi. Ci vuole mezzo minuto.",
+        "note": "Questo sostituisce il firmware di Seeed su quel chip, che puoi riavere da Seeed. Quello di Tessera non legge i sensori di un D1S o D1Pro.",
+        "button": "Togli il cavo USB dallo schermo. Tieni premuto con una graffetta il pulsante dentro il piccolo foro della scocca e rimetti il cavo, con l'altro capo in questo computer.",
+        "done_title": "Il cicalino ha il suo suono",
+        "done_lead": "Scegli in Eventi che cosa suona per gli avvisi e per il campanello.",
+        "update_title": "Un firmware più recente per il cicalino",
+        "update_lead": "Tessera ha un firmware più recente di quello installato per il chip che pilota il cicalino di questo schermo. Ci vuole mezzo minuto."
       }
     }
   }

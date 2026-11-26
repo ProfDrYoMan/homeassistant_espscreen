@@ -158,6 +158,7 @@
       "extras": "Extrák",
       "microphone": "Mikrofon",
       "media_player": "Hangerő",
+      "volume": "Hangerő",
       "wake_when_moved": "Ébresztés mozgatásra",
       "backlight_pwm": "Háttérvilágítás PWM",
       "dimmest_level": "Legsötétebb szint",
@@ -1061,6 +1062,9 @@
         "none": "Ez a képernyő nem játszik le hangot ehhez. Előbb válassz egyet.",
         "older": "Ehhez a képernyőnek firmware-frissítésre van szüksége.",
         "busy": "Ez a képernyő éppen hívásban van."
+      },
+      "steps": {
+        "request": "Ez a lépés nem létezik ezen a kijelzőn."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Visszhangszűrés",
           "hint": "Csökkenti a saját hangszóró hangját a mikrofon jelében. Kikapcsolva megkerüli a szűrést; a mikrofon és a teljes duplex hang továbbra is működik. AEC hangút szükséges."
+        },
+        "volume": {
+          "label": "Hangerő",
+          "hint": "Milyen hangosan szól a zümmer: az ajtócsengő csengőhangja, a figyelmeztetések hangjai és egy bővítmény hangjai. A kijelző újraindítás után is megjegyzi."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Napló kimásolva.",
         "selected": "A napló ki van jelölve. Másold Ctrl+C vagy Command+C billentyűkkel."
+      },
+      "address": {
+        "copied": "Cím kimásolva.",
+        "selected": "A cím ki van jelölve. Másold Ctrl+C-vel vagy Command+C-vel."
       }
     },
     "sidebar": {
@@ -3947,7 +3959,7 @@
         "here_click": "Kattints lent a Telepítés gombra.",
         "here_pick": "A böngésző megkérdezi, melyik eszköz: válaszd ki a kijelzőt, és kattints a Csatlakozás gombra.",
         "file_title": "Kapsz egy fájlt, amit rá kell tenned",
-        "file_lead": "Ez a böngésző nem tud magától a kijelzőre írni. A Tessera készít egy fájlt, amit az ESPHome Weben keresztül töltesz fel a kijelzőre Chrome-ban vagy Edge-ben.",
+        "file_lead": "A Tessera készít egy fájlt, amit az ESPHome Weben keresztül töltesz fel a kijelzőre Chrome-ban vagy Edge-ben.",
         "ha_title": "Dugd a kábelt a Home Assistantodba",
         "ha_lead": "Nem ebbe a számítógépbe, hanem abba a gépbe, amelyen a Home Assistant fut. Magunktól látjuk, amint bedugtad.",
         "ha_which": "Melyik a kijelző?",
@@ -3985,7 +3997,8 @@
           "ha": "Hozzáadás a Home Assistanthoz"
         },
         "may_close": "bezárhatod ezt az ablakot",
-        "keep_open": "hagyd nyitva ezt az oldalt, amíg rá nem kerül a kijelzőre",
+        "keep_open_title": "Hagyd nyitva ezt az oldalt",
+        "keep_open": "Ez az oldal maga tölti fel a szoftvert a kijelzőre, amint elkészült. Ha bezárod ezt a lapot, elhagyod az oldalt vagy a számítógép alvó módba lép, semmi sem íródik ki. Az USB-kábelt is hagyd bedugva.",
         "show_log": "Mi történik pontosan",
         "to_pages": "Oldalak létrehozása",
         "another": "Újabb kijelző hozzáadása",
@@ -3995,6 +4008,19 @@
           "ha": "A Home Assistantben",
           "actions": "Vezérelheti az otthonodat"
         }
+      },
+      "no_usb": {
+        "insecure_title": "Ez az oldal nem biztonságos címen fut, ezért nem éri el az USB-t",
+        "insecure": "Erről a számítógépről két kattintás a telepítés, fájl nélkül, de csak Chrome-ban vagy Edge-ben, biztonságos című (https) oldalon. Ezt az oldalt sima http-n nyitottad meg, ahol a böngésző elrejti az USB-portjait.",
+        "browser_title": "Ez a böngésző nem éri el az USB-t",
+        "browser": "Erről a számítógépről két kattintás a telepítés, fájl nélkül, de csak Chrome-ban vagy Edge-ben, számítógépen. Nyisd meg ott a Home Assistantot, és indítsd újra az Új kijelzőt.",
+        "fix": "Kétféleképpen működhet:",
+        "https": "Nyisd meg a Home Assistantot https-en Chrome-ban vagy Edge-ben, például a Home Assistant Cloud címeden.",
+        "flag": "Vagy mondd meg a Chrome-nak, hogy kezelje biztonságosként ennek a Home Assistantnak a címét:",
+        "flag_open": "Másold ezt a Chrome címsorába, és nyomj Entert. Egy oldal nem tudja megnyitni helyetted.",
+        "flag_add": "A(z) \"Insecure origins treated as secure\" alatti mezőbe írd be ezt a címet, és állítsd Enabled értékre.",
+        "flag_relaunch": "Kattints a Relaunch gombra, nyisd meg újra a Home Assistantot, és indítsd el az Új kijelzőt.",
+        "else": "Addig a Tessera itt készít egy fájlt, amit te magad töltesz fel a kijelzőre."
       }
     },
     "alerts": {
@@ -4457,6 +4483,8 @@
         "blocked": "A böngésző nem engedi, hogy ez az oldal USB-portokat használjon. Ellenőrizd a webhely engedélyeit a böngészőben, vagy válaszd inkább a Letöltést.",
         "busy": "A kijelző portját egy másik program vagy lap használja, például egy soros monitor vagy az ESPHome Web. Zárd be, és próbáld újra.",
         "connect": "A panel nem válaszolt. Tartsd nyomva a panel BOOT gombját, amíg kiválasztod a portot, egészen a telepítés indulásáig, és próbáld újra. A kábel ki- és visszadugása is segíthet.",
+        "silent": "Ezen a porton {seconds} másodpercen belül semmi sem válaszolt, ezért semmi sem települt. Ha a böngésző egynél több portot mutatott a képernyőhöz, próbáld újra, és válaszd a másikat. Egyébként tartsd lenyomva a lapon a BOOT gombot, amíg a portot választod, és próbáld újra.",
+        "other_chip": "Ez a port a lap második chipjéhez (egy RP2040-hez) tartozik, nem ahhoz a chiphez, amelyen a képernyő fut. Semmi sem települt. Próbáld újra, és válaszd a lap másik portját; a SenseCAP Indicatoron ez az USB Serial nevű.",
         "wrong_chip": "A kábelen lévő panelen {found} chip van, de ennek a kijelzőnek a firmware-e {expected} chiphez készült. Csatlakoztasd a megfelelő kijelzőt, vagy válaszd ki a paneljét.",
         "wrong_image": "A Tessera által fordított firmware {expected} chiphez készült, de a kábelen lévő panelen {found} van. Semmi sem lett felírva.",
         "wrong_revision": "A Tessera által készített firmware a(z) {from}–{to} chip-revíziókhoz való, de a kábelen lévő chip {found}. Semmi sem lett felírva. Kezdd újra, hogy a Tessera ehhez a chiphez készítse el.",
@@ -4709,7 +4737,11 @@
       "leave": "{name} kihagyása",
       "copy": "Másolás",
       "hint": "A(z) {copy} minden beállításukkal együtt másolja a csempéket. Válassz egy oldalt vagy cellát, itt vagy egy másik képernyőn, és nyomd meg a(z) {paste} billentyűt.",
-      "remove": "Csempe eltávolítása | {n} csempe eltávolítása"
+      "remove": "Csempe eltávolítása | {n} csempe eltávolítása",
+      "shared": {
+        "hint": "Az itteni módosítás mind a(z) {n} csempére érvényes.",
+        "mixed": "Eltérő"
+      }
     },
     "menu": {
       "cut": "Kivágás",
@@ -5308,6 +5340,60 @@
         "install": "Telepítés",
         "icons": "Ikonok",
         "other": "Fordítás"
+      }
+    },
+    "steps": {
+      "later": "Később",
+      "set_up": "Beállítás",
+      "update": "Frissítés",
+      "not_now": "Most nem",
+      "not_done": "nincs kész",
+      "kept": "Rendben. A(z) {screen} menüjében vár.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Firmware írása",
+          "again": "Újra",
+          "cable": "Előbb dugd a kijelző USB-kábelét ebbe a számítógépbe.",
+          "phase": {
+            "port": "Válaszd ki a chipet a böngésző listájából. Csak ezt az egyet mutatja.",
+            "restart": "A chip USB-meghajtóként indul újra.",
+            "drive": "A chip most egy {drive} nevű USB-meghajtó. Válaszd ki, és engedd, hogy ez az oldal írjon rá.",
+            "write": "A firmware írása.",
+            "wait": "A chip elindul. Várakozás, amíg a kijelző megtalálja.",
+            "wait_chip": "A chipen a(z) {version} fut. Várakozás, amíg a kijelző megtalálja."
+          },
+          "choose_drive": "A(z) {drive} meghajtó kiválasztása",
+          "wrong_drive": "Ez nem a(z) {drive} meghajtó. Magát a meghajtót válaszd, a lista tetején, ne egy mappát ezen a számítógépen.",
+          "no_window": "A böngésző nem nyitotta meg a meghajtó ablakát. Lehet, hogy valahol még nyitva van egy másik fájlablak: zárd be, vagy töltsd újra ezt az oldalt, és kattints újra.",
+          "drive_there": "A(z) {drive} meghajtó már ott van",
+          "done": "A(z) {version} firmware a chipen van, és a kijelző megtalálta.",
+          "try": "Hang lejátszása",
+          "errors": {
+            "no_port": "Nem választottál portot. Ha a kijelző USB-kábele ebben a számítógépben van, a böngésző listája mutatja a chipet.",
+            "port": "A chip portja nem nyílt meg. Zárj be minden más programot, amely használja, majd próbáld újra.",
+            "file": "A firmware nem érkezett meg a Tesserától. Próbáld újra.",
+            "write": "A fájlt nem sikerült a meghajtóra írni. Próbáld újra.",
+            "silent": "A kijelző nem találta meg a chipet. Húzd ki az USB-kábelt, dugd vissza, és próbáld újra."
+          },
+          "hand": {
+            "insecure": "Ezt az oldalt sima http-n nyitottad meg, ezért a böngésző nem ad neki USB-portot. Chrome-ban vagy Edge-ben https-en megnyitva (a Home Assistant Cloud címed megfelel) ez két kattintás. Kézzel is megy:",
+            "browser": "Ez a böngésző nem éri el az USB-portokat. Számítógépen, Chrome-ban vagy Edge-ben ez két kattintás. Kézzel is megy:",
+            "download": "{name} letöltése",
+            "drag": "Megjelenik egy {drive} nevű meghajtó. Húzd rá a fájlt. A meghajtó magától eltűnik, és a chip elindul.",
+            "did": "Megcsináltam"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Zümmer firmware",
+        "title": "Adj hangot a zümmernek",
+        "lead": "Ebben a kijelzőben egy második chip hajtja a zümmert. Ha a Tessera firmware-e van azon a chipen, a zümmer lejátssza az ajtócsengő csengőhangját és a figyelmeztetéseid hangjait. Fél percig tart.",
+        "note": "Ez lecseréli a Seeed firmware-ét azon a chipen, amelyet a Seeedtől visszakaphatsz. A Tesseráé nem olvassa a D1S vagy a D1Pro érzékelőit.",
+        "button": "Húzd ki az USB-kábelt a kijelzőből. Egy gemkapoccsal tartsd lenyomva a ház kis lyukában lévő gombot, és dugd vissza a kábelt úgy, hogy a másik vége ebben a számítógépben van.",
+        "done_title": "A zümmernek van hangja",
+        "done_lead": "Az Események alatt válaszd ki, mit játsszon a figyelmeztetésekhez és az ajtócsengőhöz.",
+        "update_title": "Újabb firmware a zümmerhez",
+        "update_lead": "A Tesserának újabb firmware-e van a kijelző zümmerét hajtó chiphez, mint ami rajta van. Fél percig tart."
       }
     }
   }

@@ -158,6 +158,7 @@
       "extras": "Extra's",
       "microphone": "Microfoon",
       "media_player": "Volume",
+      "volume": "Volume",
       "wake_when_moved": "Wakker bij bewegen",
       "backlight_pwm": "Achtergrondlicht-PWM",
       "dimmest_level": "Laagste stand",
@@ -1061,6 +1062,9 @@
         "none": "Dit scherm speelt hier geen geluid voor. Kies er eerst een.",
         "older": "Dit scherm heeft hiervoor een firmware-update nodig.",
         "busy": "Dit scherm is nu in gesprek."
+      },
+      "steps": {
+        "request": "Deze stap bestaat niet op dit scherm."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Echo-onderdrukking",
           "hint": "Verminder de eigen speaker in het microfoonsignaal. Uit omzeilt de verwerking; microfoon en full-duplex blijven werken. Vereist het AEC-audiopad."
+        },
+        "volume": {
+          "label": "Volume",
+          "hint": "Hoe hard de zoemer speelt: de chime van de deurbel, de geluiden van alerts en de geluiden van een plugin. Het scherm onthoudt het na een herstart."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Log gekopieerd.",
         "selected": "Log is geselecteerd. Kopieer met Ctrl+C of Command+C."
+      },
+      "address": {
+        "copied": "Adres gekopieerd.",
+        "selected": "Adres is geselecteerd. Kopieer met Ctrl+C of Command+C."
       }
     },
     "sidebar": {
@@ -3456,7 +3468,7 @@
         "here_click": "Klik hieronder op Installeren.",
         "here_pick": "Je browser vraagt welk apparaat: kies het scherm en klik op Verbinden.",
         "file_title": "Je krijgt een bestand om erop te zetten",
-        "file_lead": "Deze browser kan zelf niet naar een scherm schrijven. Tessera maakt een bestand, en dat zet je met ESPHome Web in Chrome of Edge op het scherm.",
+        "file_lead": "Tessera maakt een bestand, en dat zet je met ESPHome Web in Chrome of Edge op het scherm.",
         "ha_title": "Steek de kabel in je Home Assistant",
         "ha_lead": "Niet in deze computer, maar in het apparaat waar Home Assistant op draait. We zien vanzelf wanneer hij er is.",
         "ha_which": "Welke is het scherm?",
@@ -3494,7 +3506,8 @@
           "ha": "Toevoegen aan Home Assistant"
         },
         "may_close": "je mag dit venster sluiten",
-        "keep_open": "laat deze pagina open tot hij op het scherm staat",
+        "keep_open_title": "Laat deze pagina open",
+        "keep_open": "Deze pagina zet de software zelf op het scherm, zodra die gebouwd is. Sluit je dit tabblad, verlaat je de pagina of gaat de computer in slaap, dan wordt er niets geschreven. Laat ook de USB-kabel erin.",
         "show_log": "Wat er precies gebeurt",
         "to_pages": "Pagina's maken",
         "another": "Nog een scherm toevoegen",
@@ -3504,6 +3517,19 @@
           "ha": "In Home Assistant",
           "actions": "Mag je huis bedienen"
         }
+      },
+      "no_usb": {
+        "insecure_title": "Deze pagina staat niet op een veilig adres en kan daardoor niet bij USB",
+        "insecure": "Installeren vanaf deze computer is twee klikken, zonder bestand, maar alleen in Chrome of Edge op een pagina met een veilig adres (https). Deze pagina is geopend over gewoon http, en daar verbergt een browser zijn USB-poorten.",
+        "browser_title": "Deze browser kan niet bij USB",
+        "browser": "Installeren vanaf deze computer is twee klikken, zonder bestand, maar alleen in Chrome of Edge op een computer. Open Home Assistant daar en begin Nieuw scherm opnieuw.",
+        "fix": "Twee manieren om het te laten werken:",
+        "https": "Open Home Assistant over https in Chrome of Edge, bijvoorbeeld via je Home Assistant Cloud-adres.",
+        "flag": "Of laat Chrome het adres van deze Home Assistant als veilig behandelen:",
+        "flag_open": "Kopieer dit naar de adresbalk van Chrome en druk op Enter. Een pagina kan dit niet voor je openen.",
+        "flag_add": "Zet dit adres in het vak onder \"Insecure origins treated as secure\" en zet het op Enabled.",
+        "flag_relaunch": "Klik op Relaunch, open Home Assistant opnieuw en begin Nieuw scherm.",
+        "else": "Tot die tijd maakt Tessera hier een bestand dat je zelf op het scherm zet."
       }
     },
     "alerts": {
@@ -3966,6 +3992,8 @@
         "blocked": "De browser laat deze pagina geen USB-poorten gebruiken. Controleer de sitemachtigingen in de browser, of kies Downloaden.",
         "busy": "De poort van het scherm is in gebruik door een ander programma of tabblad, zoals een seriële monitor of ESPHome Web. Sluit dat en probeer het opnieuw.",
         "connect": "Het bord reageerde niet. Houd de BOOT-knop op het bord ingedrukt terwijl je de poort kiest, tot de installatie begint, en probeer het opnieuw. De kabel los en weer vast maken helpt soms ook.",
+        "silent": "Op die poort kwam binnen {seconds} seconden geen antwoord, dus er is niets geïnstalleerd. Liet je browser meer dan één poort voor het scherm zien, probeer het dan opnieuw en kies de andere. Houd anders de BOOT-knop op het bord ingedrukt terwijl je de poort kiest, en probeer het opnieuw.",
+        "other_chip": "Die poort hoort bij de tweede chip van het bord (een RP2040), niet bij de chip waarop het scherm draait. Er is niets geïnstalleerd. Probeer het opnieuw en kies de andere poort van het bord; op een SenseCAP Indicator is dat de poort die USB Serial heet.",
         "wrong_chip": "Het bord aan de kabel heeft een {found}-chip, maar de firmware van dit scherm is voor een {expected}. Sluit het juiste scherm aan, of kies het juiste bord.",
         "wrong_image": "De firmware die Tessera bouwde is voor een {expected}, maar het bord aan de kabel heeft een {found}. Er is niets geschreven.",
         "wrong_revision": "De firmware die Tessera bouwde is voor chipversies {from} tot en met {to}, maar de chip aan de kabel is {found}. Er is niets geschreven. Begin opnieuw, dan bouwt Tessera voor deze chip.",
@@ -4709,7 +4737,11 @@
       "leave": "{name} weglaten",
       "copy": "Kopiëren",
       "hint": "{copy} kopieert de tegels met al hun instellingen. Kies een pagina of een cel, hier of op een ander scherm, en druk op {paste}.",
-      "remove": "Tegel verwijderen | {n} tegels verwijderen"
+      "remove": "Tegel verwijderen | {n} tegels verwijderen",
+      "shared": {
+        "hint": "Een wijziging hier geldt voor alle {n} tegels.",
+        "mixed": "Verschillend"
+      }
     },
     "menu": {
       "cut": "Knippen",
@@ -5308,6 +5340,60 @@
         "install": "Installatie",
         "icons": "Iconen",
         "other": "Build"
+      }
+    },
+    "steps": {
+      "later": "Later",
+      "set_up": "Instellen",
+      "update": "Bijwerken",
+      "not_now": "Niet nu",
+      "not_done": "niet gedaan",
+      "kept": "Prima. Het wacht in het menu van {screen}.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Firmware schrijven",
+          "again": "Opnieuw proberen",
+          "cable": "Steek eerst de USB-kabel van het scherm in deze computer.",
+          "phase": {
+            "port": "Kies de chip in de lijst van de browser. Die toont alleen deze.",
+            "restart": "De chip herstart als USB-schijf.",
+            "drive": "De chip is nu een USB-schijf met de naam {drive}. Kies die, en laat deze pagina erop schrijven.",
+            "write": "Firmware schrijven.",
+            "wait": "De chip start. Wachten tot het scherm hem vindt.",
+            "wait_chip": "Op de chip draait {version}. Wachten tot het scherm hem vindt."
+          },
+          "choose_drive": "Kies de schijf {drive}",
+          "wrong_drive": "Dat is niet de schijf {drive}. Kies de schijf zelf, bovenaan de lijst, niet een map op deze computer.",
+          "no_window": "De browser opende zijn venster voor de schijf niet. Misschien staat er nog ergens een ander bestandsvenster open: sluit dat, of herlaad deze pagina, en klik opnieuw.",
+          "drive_there": "De schijf {drive} is er al",
+          "done": "Firmware {version} staat op de chip, en het scherm heeft hem gevonden.",
+          "try": "Geluid afspelen",
+          "errors": {
+            "no_port": "Er is geen poort gekozen. Met de USB-kabel van het scherm in deze computer toont de lijst van de browser de chip.",
+            "port": "De poort van de chip ging niet open. Sluit elk ander programma dat hem gebruikt en probeer het opnieuw.",
+            "file": "De firmware kwam niet aan vanaf Tessera. Probeer het opnieuw.",
+            "write": "Het bestand kon niet naar de schijf worden geschreven. Probeer het opnieuw.",
+            "silent": "Het scherm vond de chip niet. Haal de USB-kabel eruit, steek hem er weer in en probeer het opnieuw."
+          },
+          "hand": {
+            "insecure": "Deze pagina is geopend over gewoon http, dus de browser geeft haar geen USB-poort. Geopend over https in Chrome of Edge (je Home Assistant Cloud-adres werkt) is dit twee klikken. Het kan ook met de hand:",
+            "browser": "Deze browser kan niet bij USB-poorten. In Chrome of Edge op een computer is dit twee klikken. Het kan ook met de hand:",
+            "download": "{name} downloaden",
+            "drag": "Er verschijnt een schijf met de naam {drive}. Sleep het bestand erop. De schijf verdwijnt vanzelf en de chip start.",
+            "did": "Dat heb ik gedaan"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Zoemerfirmware",
+        "title": "Geef de zoemer zijn geluid",
+        "lead": "Een tweede chip in dit scherm stuurt de zoemer aan. Met de firmware van Tessera op die chip speelt de zoemer de chime van de deurbel en de geluiden van je alerts. Het duurt een halve minuut.",
+        "note": "Dit vervangt de firmware van Seeed op die chip, die je bij Seeed kunt terughalen. Die van Tessera leest de sensoren van een D1S of D1Pro niet.",
+        "button": "Haal de USB-kabel uit het scherm. Houd met een paperclip de knop in het kleine gaatje van de behuizing ingedrukt en steek de kabel er weer in, met het andere eind in deze computer.",
+        "done_title": "De zoemer heeft zijn geluid",
+        "done_lead": "Kies onder Events wat hij speelt bij alerts en bij de deurbel.",
+        "update_title": "Een nieuwere firmware voor de zoemer",
+        "update_lead": "Tessera heeft een nieuwere firmware voor de chip die de zoemer van dit scherm aanstuurt dan die erop staat. Het duurt een halve minuut."
       }
     }
   }

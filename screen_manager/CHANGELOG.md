@@ -11,6 +11,42 @@
   EXIO2 off after brightness stays at zero for 5 s, and enables it with a 50 ms startup wait above zero.
   Brightness uses the expander's PWM directly, without fading.
 
+## 0.4.107 (firmware 0.67.0)
+
+- **A thermostat's power key and temperature follow what the device can do.** A device with no temperature to set, such as a fan coil, no longer shows an empty box with - and + on its card: the line under its name says what it does and the temperature it measures, and its modes and fan row take the room. The power key is there only while it can do something: it turns the device off through its "off" mode where Home Assistant offers no turn off, and it is left out where the device cannot be switched that way. An ordinary thermostat or air conditioner looks and works as before.
+
+- **A humidifier's modes, a vacuum's suction speeds and a remote's activities show only when Home Assistant shows them.** As with the thermostat's fan and swing rows in 0.4.106: an integration that keeps listing choices for a feature the device lacks, or that is switched off in Home Assistant, no longer gets them on its tile or card. Each list now needs its feature in Home Assistant (`supported_features`) besides something in the list.
+
+## 0.4.106 (firmware 0.66.0)
+
+- **The thermostat's card shows a fan or swing row only when Home Assistant does.** A device whose integration lists swing modes while it has no louvres, or with the swing feature switched off in Home Assistant, still got a swing row on its card that did nothing useful. The fan row and the swing row now each need their feature in Home Assistant (`supported_features`) besides a list of choices, exactly as Home Assistant's own thermostat card decides it.
+
+## 0.4.105 (firmware 0.65.0)
+
+- **A new screen no longer waits minutes for Home Assistant after it joined the Wi-Fi.** When Home Assistant did not discover a freshly installed screen by itself, Tessera asked for it by name only now and then, counted from the moment the installation started: after a long build the next try could be five minutes away, while the screen already said "Waiting for Home Assistant" and the page still said it was joining the Wi-Fi. Tessera now asks every five seconds from the moment the software is on the screen.
+
+- **New screen says in red what must not be missed.** While a screen is installed from this computer, a red card says to keep the page open: the page itself puts the software on the screen once it is built, and closing it writes nothing. And where "In this computer" would only make a file, a red card says why: the page is not in Chrome or Edge, or it was opened over plain http. For a Home Assistant on a local http address it gives Chrome's setting that treats that one address as secure, with the setting's address and your Home Assistant's own to copy.
+
+- **The SenseCAP Indicator's buzzer plays sounds.** The Indicator has a second chip that drives its buzzer. New screen now ends with a step for it: two clicks put Tessera's firmware on that chip over the same USB cable, and from then on the buzzer plays the doorbell's chime, the sounds of your alerts and a plugin's sounds, at a Volume of its own under Extras. A buzzer only carries a narrow band of high notes, so the built-in sounds come to it in a version made for that band. A SenseCAP you already have gets the step as a card above the screen after its next update. Seeed's own firmware on that chip is replaced and can be put back.
+
+- **The SenseCAP Indicator shows pictures.** Camera tiles, the snapshot with an alert and a player's artwork now work on it, as on the other boards with the memory for them.
+
+- **A board can have a step of its own after installing.** Some boards need one more thing done once, such as a second chip that takes a firmware of its own. New screen offers it as a page after the screen works, a card above the screen offers it until it is done, and the screen's menu keeps it for later.
+
+- **Installing from the browser stops and says why when the chosen port does not answer.** With the wrong port chosen, Install kept turning and said nothing, and every new try used that same port again without asking. The page now waits 20 seconds for the chip, then stops with what to do, gives Install back and asks for the port again at the next click. On a board that shows two ports on one cable, such as the SenseCAP Indicator ("USB Serial" and "INDICATOR RP2040"), it knows the port of the second chip and says at once to choose the other one.
+
+## 0.4.104 (firmware 0.64.0)
+
+- **Save & send and Add tile work on a phone again.** With an AI connected for Layoutbot, a tap anywhere in the bar at the bottom of the phone editor opened Layoutbot's chat instead: an invisible part of its key lay over the whole bar. Each key in the bar is its own again. ([#471](https://github.com/MaxGramser/homeassistant_espscreen/issues/471), [#438](https://github.com/MaxGramser/homeassistant_espscreen/issues/438))
+
+- **A message no longer keeps Layoutbot's chat open on a phone.** A message such as "Settings added" with Undo lay over the key that closes the chat for as long as it showed. The chat now starts under the place of such a message, and a tap on a message sends it away. ([#471](https://github.com/MaxGramser/homeassistant_espscreen/issues/471))
+
+- **Set several tiles at once.** Choose tiles together (⌘ or Shift and a click, or drag a band over them) and the panel on the right now shows the settings they share: what a tap does, the controls on the tile, the small slider, the second line, the icon and the colour. One pick sets it on all of them and is one step of undo; where the tiles differ it says Mixed. Three blinds of the same kind share everything a blind can be set to, and tiles of different kinds what every tile has.
+
+- **What is open stands apart from the page.** The page behind a sheet, a dialog or a wizard is dimmed more, and in the dark look a menu or a list is a step lighter than what it opens over, with a line around it. The page behind barely changed before, most of all in the dark look.
+
+- **Easier under a finger.** On a phone or a tablet a menu's rows are taller and the menu uses the room it has, and the small keys (the cross on a tile, a switch, a help key) take a tap around them too. A light preset's panel no longer runs past the edge of a narrow phone.
+
 ## 0.4.103 (firmware 0.64.0)
 
 - **A plugin's times are right whatever time zone the app's machine is in.** A time that a web service or an entity gives without a time zone (a departure at 17:25, the start of a collection) was read in the zone of the machine the app runs on, not in your Home Assistant's. Where those differ (the app in a container that stands in UTC, a home in another zone than its host), a plugin's tile showed such times off by the difference, and so did the plugins' examples in the library. They are read in Home Assistant's time zone now, as the plugins' documentation says; a plugin that names a zone of its own for a time keeps it.

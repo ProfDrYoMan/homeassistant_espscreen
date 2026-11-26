@@ -158,6 +158,7 @@
       "extras": "Dodatki",
       "microphone": "Mikrofon",
       "media_player": "Głośność",
+      "volume": "Głośność",
       "wake_when_moved": "Wybudź przy ruchu",
       "backlight_pwm": "PWM podświetlenia",
       "dimmest_level": "Najniższy poziom",
@@ -1061,6 +1062,9 @@
         "none": "Ten ekran nie odtwarza do tego żadnego dźwięku. Najpierw wybierz jeden.",
         "older": "Ten ekran potrzebuje do tego aktualizacji firmware'u.",
         "busy": "Ten ekran jest teraz w trakcie rozmowy."
+      },
+      "steps": {
+        "request": "Ten krok nie istnieje na tym ekranie."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Usuwanie echa",
           "hint": "Ogranicza dźwięk własnego głośnika w sygnale mikrofonu. Wyłączenie omija usuwanie echa; mikrofon i pełny dupleks nadal działają. Wymaga toru audio AEC."
+        },
+        "volume": {
+          "label": "Głośność",
+          "hint": "Jak głośno gra brzęczyk: gong dzwonka do drzwi, dźwięki alertów i dźwięki wtyczki. Ekran pamięta ją po ponownym uruchomieniu."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Dziennik skopiowany.",
         "selected": "Dziennik jest zaznaczony. Skopiuj Ctrl+C lub Command+C."
+      },
+      "address": {
+        "copied": "Adres skopiowany.",
+        "selected": "Adres jest zaznaczony. Skopiuj go klawiszami Ctrl+C lub Command+C."
       }
     },
     "sidebar": {
@@ -3947,7 +3959,7 @@
         "here_click": "Kliknij poniżej Zainstaluj.",
         "here_pick": "Przeglądarka zapyta o urządzenie: wybierz ekran i kliknij Połącz.",
         "file_title": "Dostaniesz plik do wgrania na ekran",
-        "file_lead": "Ta przeglądarka nie potrafi sama zapisać danych na ekranie. Tessera tworzy plik, który wgrywasz na ekran przez ESPHome Web w Chrome lub Edge.",
+        "file_lead": "Tessera tworzy plik, który wgrywasz na ekran przez ESPHome Web w Chrome lub Edge.",
         "ha_title": "Podłącz kabel do swojego Home Assistant",
         "ha_lead": "Nie do tego komputera, tylko do urządzenia, na którym działa Home Assistant. Zobaczymy to od razu, gdy będzie podłączony.",
         "ha_which": "Które to ekran?",
@@ -3985,7 +3997,8 @@
           "ha": "Dodawanie do Home Assistant"
         },
         "may_close": "możesz zamknąć to okno",
-        "keep_open": "nie zamykaj tej strony, dopóki nie trafi na ekran",
+        "keep_open_title": "Nie zamykaj tej strony",
+        "keep_open": "Ta strona sama wgrywa oprogramowanie na ekran, gdy tylko zostanie zbudowane. Jeśli zamkniesz tę kartę, opuścisz stronę albo komputer przejdzie w stan uśpienia, nic nie zostanie zapisane. Zostaw też podłączony kabel USB.",
         "show_log": "Co dokładnie się dzieje",
         "to_pages": "Stwórz jego strony",
         "another": "Dodaj kolejny ekran",
@@ -3995,6 +4008,19 @@
           "ha": "W Home Assistant",
           "actions": "Może sterować Twoim domem"
         }
+      },
+      "no_usb": {
+        "insecure_title": "Ta strona nie działa pod bezpiecznym adresem, więc nie ma dostępu do USB",
+        "insecure": "Instalacja z tego komputera to dwa kliknięcia, bez żadnego pliku, ale tylko w Chrome lub Edge na stronie z bezpiecznym adresem (https). Ta strona została otwarta przez zwykłe http, a tam przeglądarka ukrywa swoje porty USB.",
+        "browser_title": "Ta przeglądarka nie ma dostępu do USB",
+        "browser": "Instalacja z tego komputera to dwa kliknięcia, bez żadnego pliku, ale tylko w Chrome lub Edge na komputerze. Otwórz tam Home Assistant i zacznij Nowy ekran jeszcze raz.",
+        "fix": "Dwa sposoby, żeby to zadziałało:",
+        "https": "Otwórz Home Assistant przez https w Chrome lub Edge, na przykład pod swoim adresem Home Assistant Cloud.",
+        "flag": "Albo każ Chrome traktować adres tego Home Assistant jako bezpieczny:",
+        "flag_open": "Skopiuj to do paska adresu Chrome i naciśnij Enter. Strona nie może otworzyć tego za ciebie.",
+        "flag_add": "W polu pod \"Insecure origins treated as secure\" wpisz ten adres i ustaw Enabled.",
+        "flag_relaunch": "Kliknij Relaunch, otwórz Home Assistant ponownie i zacznij Nowy ekran.",
+        "else": "Do tego czasu Tessera tworzy tutaj plik, który wgrywasz na ekran samodzielnie."
       }
     },
     "alerts": {
@@ -4457,6 +4483,8 @@
         "blocked": "Przeglądarka nie pozwala tej stronie używać portów USB. Sprawdź uprawnienia witryny w przeglądarce albo wybierz „Pobierz”.",
         "busy": "Port ekranu jest zajęty przez inny program lub kartę, na przykład monitor portu szeregowego albo ESPHome Web. Zamknij go i spróbuj ponownie.",
         "connect": "Płytka nie odpowiedziała. Przytrzymaj przycisk BOOT na płytce podczas wybierania portu, aż zacznie się instalacja, i spróbuj ponownie. Odłączenie i ponowne podłączenie kabla też może pomóc.",
+        "silent": "Na tym porcie nic nie odpowiedziało w ciągu {seconds} sekund, więc niczego nie zainstalowano. Jeśli przeglądarka pokazała więcej niż jeden port ekranu, spróbuj ponownie i wybierz drugi. W przeciwnym razie przytrzymaj przycisk BOOT na płytce podczas wybierania portu i spróbuj ponownie.",
+        "other_chip": "Ten port należy do drugiego układu płytki (RP2040), a nie do układu, na którym działa ekran. Niczego nie zainstalowano. Spróbuj ponownie i wybierz drugi port płytki; w SenseCAP Indicator jest to port o nazwie USB Serial.",
         "wrong_chip": "Podłączona płytka ma układ {found}, a firmware tego ekranu jest dla {expected}. Podłącz właściwy ekran albo wybierz jego płytkę.",
         "wrong_image": "Firmware skompilowany przez Tessera jest dla {expected}, a podłączona płytka ma {found}. Nic nie zostało zapisane.",
         "wrong_revision": "Firmware zbudowany przez Tessera jest dla rewizji układu od {from} do {to}, ale układ na kablu to {found}. Nic nie zostało zapisane. Zacznij od nowa, aby Tessera zbudowała go dla tego układu.",
@@ -4709,7 +4737,11 @@
       "leave": "Pomiń {name}",
       "copy": "Kopiuj",
       "hint": "{copy} kopiuje kafelki ze wszystkimi ustawieniami. Wybierz stronę lub komórkę, tutaj lub na innym ekranie, i naciśnij {paste}.",
-      "remove": "Usuń kafelek | Usuń {n} kafelki | Usuń {n} kafelków"
+      "remove": "Usuń kafelek | Usuń {n} kafelki | Usuń {n} kafelków",
+      "shared": {
+        "hint": "Zmiana tutaj dotyczy wszystkich {n} kafelków.",
+        "mixed": "Różne"
+      }
     },
     "menu": {
       "cut": "Wytnij",
@@ -5308,6 +5340,60 @@
         "install": "Instalacja",
         "icons": "Ikony",
         "other": "Kompilacja"
+      }
+    },
+    "steps": {
+      "later": "Później",
+      "set_up": "Skonfiguruj",
+      "update": "Zaktualizuj",
+      "not_now": "Nie teraz",
+      "not_done": "nie zrobiono",
+      "kept": "Dobrze. Czeka w menu ekranu {screen}.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Zapisz firmware",
+          "again": "Spróbuj ponownie",
+          "cable": "Najpierw podłącz kabel USB ekranu do tego komputera.",
+          "phase": {
+            "port": "Wybierz układ z listy przeglądarki. Pokazuje ona tylko ten jeden.",
+            "restart": "Układ uruchamia się ponownie jako dysk USB.",
+            "drive": "Układ jest teraz dyskiem USB o nazwie {drive}. Wybierz go i pozwól tej stronie na nim zapisywać.",
+            "write": "Zapisywanie firmware'u.",
+            "wait": "Układ się uruchamia. Czekam, aż ekran go znajdzie.",
+            "wait_chip": "Układ działa z wersją {version}. Czekam, aż ekran go znajdzie."
+          },
+          "choose_drive": "Wybierz dysk {drive}",
+          "wrong_drive": "To nie jest dysk {drive}. Wybierz sam dysk, na górze listy, a nie folder na tym komputerze.",
+          "no_window": "Przeglądarka nie otworzyła okna dysku. Być może gdzieś jest jeszcze otwarte inne okno plików: zamknij je albo odśwież tę stronę i kliknij ponownie.",
+          "drive_there": "Dysk {drive} już jest",
+          "done": "Firmware {version} jest na układzie, a ekran go znalazł.",
+          "try": "Odtwórz dźwięk",
+          "errors": {
+            "no_port": "Nie wybrano portu. Gdy kabel USB ekranu jest w tym komputerze, lista przeglądarki pokazuje układ.",
+            "port": "Port układu się nie otworzył. Zamknij każdy inny program, który go używa, i spróbuj ponownie.",
+            "file": "Firmware nie dotarł z Tessera. Spróbuj ponownie.",
+            "write": "Nie udało się zapisać pliku na dysku. Spróbuj ponownie.",
+            "silent": "Ekran nie znalazł układu. Wyjmij kabel USB, włóż go z powrotem i spróbuj ponownie."
+          },
+          "hand": {
+            "insecure": "Ta strona została otwarta przez zwykłe http, więc przeglądarka nie daje jej portu USB. Otwarta przez https w Chrome lub Edge (Twój adres Home Assistant Cloud się nada) to dwa kliknięcia. Da się też ręcznie:",
+            "browser": "Ta przeglądarka nie ma dostępu do portów USB. W Chrome lub Edge na komputerze to dwa kliknięcia. Da się też ręcznie:",
+            "download": "Pobierz {name}",
+            "drag": "Pojawia się dysk o nazwie {drive}. Przeciągnij na niego plik. Dysk sam zniknie, a układ się uruchomi.",
+            "did": "Zrobione"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Firmware brzęczyka",
+        "title": "Daj brzęczykowi jego dźwięk",
+        "lead": "Brzęczykiem tego ekranu steruje drugi układ. Z firmware'em Tessera na tym układzie brzęczyk gra gong dzwonka do drzwi i dźwięki Twoich alertów. Zajmuje to pół minuty.",
+        "note": "To zastępuje na tym układzie firmware Seeed, który możesz odzyskać od Seeed. Firmware Tessera nie odczytuje czujników D1S ani D1Pro.",
+        "button": "Wyjmij kabel USB z ekranu. Przytrzymaj spinaczem przycisk w małym otworze obudowy i włóż kabel z powrotem, z drugim końcem w tym komputerze.",
+        "done_title": "Brzęczyk ma swój dźwięk",
+        "done_lead": "W Zdarzeniach wybierz, co gra przy alertach i przy dzwonku do drzwi.",
+        "update_title": "Nowszy firmware dla brzęczyka",
+        "update_lead": "Tessera ma nowszy firmware dla układu sterującego brzęczykiem tego ekranu niż ten, który na nim jest. Zajmuje to pół minuty."
       }
     }
   }

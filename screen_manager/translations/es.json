@@ -158,6 +158,7 @@
       "extras": "Extras",
       "microphone": "Micrófono",
       "media_player": "Volumen",
+      "volume": "Volumen",
       "wake_when_moved": "Despertar al moverlo",
       "backlight_pwm": "PWM de retroiluminación",
       "dimmest_level": "Nivel mínimo",
@@ -1061,6 +1062,9 @@
         "none": "Esta pantalla no reproduce ningún sonido para esto. Elige uno primero.",
         "older": "Esta pantalla necesita una actualización de firmware para esto.",
         "busy": "Esta pantalla está en una llamada ahora mismo."
+      },
+      "steps": {
+        "request": "Este paso no existe en esta pantalla."
       }
     },
     "status": {
@@ -1297,6 +1301,10 @@
         "echo_cancellation": {
           "label": "Cancelación de eco",
           "hint": "Reduce el sonido del propio altavoz en la señal del micrófono. Al desactivarla se omite la cancelación; el micrófono y el dúplex completo siguen activos. Requiere la ruta de audio AEC."
+        },
+        "volume": {
+          "label": "Volumen",
+          "hint": "Lo fuerte que suena el zumbador: la campanilla del timbre, los sonidos de las alertas y los sonidos de un plugin. La pantalla lo conserva tras un reinicio."
         }
       }
     },
@@ -1758,6 +1766,10 @@
       "log": {
         "copied": "Registro copiado.",
         "selected": "El registro está seleccionado. Copia con Ctrl+C o Comando+C."
+      },
+      "address": {
+        "copied": "Dirección copiada.",
+        "selected": "La dirección está seleccionada. Cópiala con Ctrl+C o Comando+C."
       }
     },
     "sidebar": {
@@ -3947,7 +3959,7 @@
         "here_click": "Haz clic abajo en Instalar.",
         "here_pick": "Tu navegador pregunta qué dispositivo: elige la pantalla y haz clic en Conectar.",
         "file_title": "Recibirás un archivo para ponerle",
-        "file_lead": "Este navegador no puede escribir en una pantalla por sí mismo. Tessera crea un archivo, y tú lo pones en la pantalla con ESPHome Web en Chrome o Edge.",
+        "file_lead": "Tessera crea un archivo, y tú lo pones en la pantalla con ESPHome Web en Chrome o Edge.",
         "ha_title": "Enchufa el cable a tu Home Assistant",
         "ha_lead": "No a este ordenador, sino al equipo en el que funciona Home Assistant. Lo vemos en cuanto está conectado.",
         "ha_which": "¿Cuál es la pantalla?",
@@ -3985,7 +3997,8 @@
           "ha": "Añadiéndola a Home Assistant"
         },
         "may_close": "puedes cerrar esta ventana",
-        "keep_open": "deja esta página abierta hasta que esté en la pantalla",
+        "keep_open_title": "Deja esta página abierta",
+        "keep_open": "Esta página pone el software en la pantalla ella misma, en cuanto está compilado. Si cierras esta pestaña, sales de la página o el ordenador entra en reposo, no se escribe nada. Deja también el cable USB conectado.",
         "show_log": "Qué ocurre exactamente",
         "to_pages": "Crear sus páginas",
         "another": "Añadir otra pantalla",
@@ -3995,6 +4008,19 @@
           "ha": "En Home Assistant",
           "actions": "Puede controlar tu casa"
         }
+      },
+      "no_usb": {
+        "insecure_title": "Esta página no está en una dirección segura, así que no puede llegar al USB",
+        "insecure": "Instalar desde este ordenador son dos clics, sin ningún archivo, pero solo en Chrome o Edge y en una página con dirección segura (https). Esta página se abrió por http simple, donde el navegador oculta sus puertos USB.",
+        "browser_title": "Este navegador no puede llegar al USB",
+        "browser": "Instalar desde este ordenador son dos clics, sin ningún archivo, pero solo en Chrome o Edge en un ordenador. Abre Home Assistant allí y empieza Nueva pantalla otra vez.",
+        "fix": "Dos formas de hacerlo funcionar:",
+        "https": "Abre Home Assistant por https en Chrome o Edge, por ejemplo con tu dirección de Home Assistant Cloud.",
+        "flag": "O dile a Chrome que trate la dirección de este Home Assistant como segura:",
+        "flag_open": "Copia esto en la barra de direcciones de Chrome y pulsa Intro. Una página no puede abrirlo por ti.",
+        "flag_add": "En el cuadro bajo \"Insecure origins treated as secure\", pon esta dirección y ponlo en Enabled.",
+        "flag_relaunch": "Haz clic en Relaunch, abre Home Assistant de nuevo y empieza Nueva pantalla.",
+        "else": "Hasta entonces Tessera crea aquí un archivo que pones tú en la pantalla."
       }
     },
     "alerts": {
@@ -4457,6 +4483,8 @@
         "blocked": "El navegador no deja que esta página use puertos USB. Revisa los permisos del sitio en el navegador, o elige Descargar.",
         "busy": "El puerto de la pantalla lo usa otro programa o pestaña, como un monitor serie o ESPHome Web. Ciérralo y vuelve a intentarlo.",
         "connect": "La placa no respondió. Mantén pulsado el botón BOOT de la placa mientras eliges el puerto, hasta que empiece la instalación, y vuelve a intentarlo. Desconectar y volver a conectar el cable también puede ayudar.",
+        "silent": "Nada respondió en ese puerto en {seconds} segundos, así que no se instaló nada. Si tu navegador mostró más de un puerto para la pantalla, inténtalo de nuevo y elige el otro. Si no, mantén pulsado el botón BOOT de la placa mientras eliges el puerto e inténtalo de nuevo.",
+        "other_chip": "Ese puerto es del segundo chip de la placa (un RP2040), no del chip en el que funciona la pantalla. No se instaló nada. Inténtalo de nuevo y elige el otro puerto de la placa; en un SenseCAP Indicator es el que se llama USB Serial.",
         "wrong_chip": "La placa conectada tiene un chip {found}, pero el firmware de esta pantalla es para un {expected}. Conecta la pantalla correcta o elige su placa.",
         "wrong_image": "El firmware que compiló Tessera es para un {expected}, pero la placa conectada tiene un {found}. No se escribió nada.",
         "wrong_revision": "El firmware que creó Tessera es para las revisiones de chip {from} a {to}, pero el chip del cable es {found}. No se ha escrito nada. Empieza de nuevo para que Tessera lo cree para este chip.",
@@ -4709,7 +4737,11 @@
       "leave": "Quitar {name} de la selección",
       "copy": "Copiar",
       "hint": "{copy} copia los mosaicos con todos sus ajustes. Elige una página o una celda, aquí o en otra pantalla, y pulsa {paste}.",
-      "remove": "Eliminar mosaico | Eliminar {n} mosaicos"
+      "remove": "Eliminar mosaico | Eliminar {n} mosaicos",
+      "shared": {
+        "hint": "Un cambio aquí vale para los {n} mosaicos.",
+        "mixed": "Distinto"
+      }
     },
     "menu": {
       "cut": "Cortar",
@@ -5308,6 +5340,60 @@
         "install": "Instalación",
         "icons": "Iconos",
         "other": "Compilación"
+      }
+    },
+    "steps": {
+      "later": "Más tarde",
+      "set_up": "Configurarlo",
+      "update": "Actualizarlo",
+      "not_now": "Ahora no",
+      "not_done": "sin hacer",
+      "kept": "De acuerdo. Espera en el menú de {screen}.",
+      "kinds": {
+        "chip_firmware": {
+          "go": "Escribir el firmware",
+          "again": "Intentar de nuevo",
+          "cable": "Conecta primero el cable USB de la pantalla a este ordenador.",
+          "phase": {
+            "port": "Elige el chip en la lista del navegador. Solo muestra este.",
+            "restart": "El chip se reinicia como unidad USB.",
+            "drive": "El chip es ahora una unidad USB llamada {drive}. Elígela y deja que esta página escriba en ella.",
+            "write": "Escribiendo el firmware.",
+            "wait": "El chip arranca. Esperando a que la pantalla lo encuentre.",
+            "wait_chip": "El chip ejecuta {version}. Esperando a que la pantalla lo encuentre."
+          },
+          "choose_drive": "Elegir la unidad {drive}",
+          "wrong_drive": "Esa no es la unidad {drive}. Elige la unidad en sí, arriba en la lista, no una carpeta de este ordenador.",
+          "no_window": "El navegador no abrió su ventana para la unidad. Puede que otra ventana de archivos siga abierta en algún sitio: ciérrala, o recarga esta página, y haz clic de nuevo.",
+          "drive_there": "La unidad {drive} ya está ahí",
+          "done": "El firmware {version} está en el chip y la pantalla lo ha encontrado.",
+          "try": "Reproducir un sonido",
+          "errors": {
+            "no_port": "No se eligió ningún puerto. Con el cable USB de la pantalla en este ordenador, la lista del navegador muestra el chip.",
+            "port": "El puerto del chip no se abrió. Cierra cualquier otro programa que lo use e inténtalo de nuevo.",
+            "file": "El firmware no llegó desde Tessera. Inténtalo de nuevo.",
+            "write": "No se pudo escribir el archivo en la unidad. Inténtalo de nuevo.",
+            "silent": "La pantalla no encontró el chip. Quita el cable USB, vuelve a conectarlo e inténtalo de nuevo."
+          },
+          "hand": {
+            "insecure": "Esta página se abrió por http sin cifrar, así que el navegador no le da ningún puerto USB. Abierta por https en Chrome o Edge (tu dirección de Home Assistant Cloud sirve), son dos clics. También se puede hacer a mano:",
+            "browser": "Este navegador no puede acceder a los puertos USB. En Chrome o Edge en un ordenador son dos clics. También se puede hacer a mano:",
+            "download": "Descargar {name}",
+            "drag": "Aparece una unidad llamada {drive}. Arrastra el archivo a ella. La unidad desaparece sola y el chip arranca.",
+            "did": "Ya lo he hecho"
+          }
+        }
+      },
+      "buzzer": {
+        "menu": "Firmware del zumbador",
+        "title": "Dale su sonido al zumbador",
+        "lead": "Un segundo chip de esta pantalla controla su zumbador. Con el firmware de Tessera en ese chip, el zumbador reproduce la campanilla del timbre y los sonidos de tus alertas. Tarda medio minuto.",
+        "note": "Esto sustituye el firmware de Seeed en ese chip, que puedes recuperar de Seeed. El de Tessera no lee los sensores de un D1S o D1Pro.",
+        "button": "Quita el cable USB de la pantalla. Mantén pulsado con un clip el botón que hay dentro del pequeño agujero de la carcasa y vuelve a conectar el cable, con el otro extremo en este ordenador.",
+        "done_title": "El zumbador ya tiene su sonido",
+        "done_lead": "Elige en Eventos qué reproduce para las alertas y para el timbre.",
+        "update_title": "Un firmware más nuevo para el zumbador",
+        "update_lead": "Tessera tiene un firmware más nuevo para el chip que controla el zumbador de esta pantalla que el que lleva. Tarda medio minuto."
       }
     }
   }

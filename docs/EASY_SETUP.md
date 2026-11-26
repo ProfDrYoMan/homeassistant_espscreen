@@ -155,7 +155,11 @@ Home Assistant Cloud address or your own certificate. On a plain http page, **In
 makes a file to download instead (below). Not in the port list? Use a cable that carries data
 (some only charge), and install the driver for the board's USB chip (CP210x, CH340 or CH9102) if
 your computer needs one. The board doesn't answer? Hold its **BOOT** button while you choose the
-port, until the installation starts.
+port, until the installation starts. The page waits 20 seconds for the chip on the chosen port. Without an
+answer it stops, says so, builds nothing and gives **Install** back, and the next click asks for the port again:
+the browser remembers a port once chosen, and the page lets go of one that did not answer. Some boards show two
+ports on one cable, because a second chip sits beside the ESP32 (the SenseCAP Indicator's RP2040). The page
+knows such a port by its USB ids, refuses it at once and says to choose the other one.
 
 **Download.** For any other browser:
 
@@ -206,7 +210,9 @@ in Tessera's sidebar, ready for its tiles; until then it waits there under its n
 Tessera keeps at it until that holds. It answers Home Assistant's discovery of the screen, finds the screen by its name
 on the network when Home Assistant didn't discover it (or the discovery was dismissed or ignored), gives Home Assistant
 the new key when **New screen** made new ones for a screen it already had, and turns the actions back on when Home
-Assistant ignored a tap. Should it still not work out, the screen's card in the sidebar says so.
+Assistant ignored a tap. Should it still not work out, the screen's card in the sidebar says so. A screen whose firmware went on a moment ago is asked for by name every five seconds for the
+first three minutes, so it is in Home Assistant within seconds of joining the Wi-Fi, also when Home Assistant does not
+discover it by itself; a profile that only waits for its firmware is asked for less and less often.
 
 Tessera adds a screen by itself when it knows the screen's key: when the screen's YAML is in the ESPHome folder Tessera
 reads. That is every screen made with **New screen**, and a screen of your own whose YAML sits in Home Assistant's

@@ -11,6 +11,11 @@
   EXIO2 off after brightness stays at zero for 5 s, and enables it with a 50 ms startup wait above zero.
   Brightness uses the expander's PWM directly, without fading.
 
+## 0.4.108 (firmware 0.68.0)
+
+- **A thermostat's tile says more under its name, and you choose what.** A thermostat or airco that was on showed only the temperature it is set to. It now says its mode, that temperature and the room's temperature, such as "Cool · 19° · Now 22.5°". In the tile's settings, under Second line with Automatic chosen, chips switch each part on or off: Mode, Action (what it is doing right now), Set to and Now. A tile whose own − and + already show the set temperature leaves it out of the line. Screens show it after their update.
+- **Home Assistant's logbook says which screen operated something.** When you change something on a screen, the entity's logbook in Home Assistant gets a line such as "operated on Hall screen, page Living room, tile Thermostat", next to the change itself. Until now such a change stood there without a person or a device, because Home Assistant does not record which ESPHome device sent an action. Several changes to the same entity within a few seconds, like dragging a slider, give one line. It needs nothing set up, and it comes with the screen's next update.
+
 ## 0.4.107 (firmware 0.67.0)
 
 - **A thermostat's power key and temperature follow what the device can do.** A device with no temperature to set, such as a fan coil, no longer shows an empty box with - and + on its card: the line under its name says what it does and the temperature it measures, and its modes and fan row take the room. The power key is there only while it can do something: it turns the device off through its "off" mode where Home Assistant offers no turn off, and it is left out where the device cannot be switched that way. An ordinary thermostat or air conditioner looks and works as before.

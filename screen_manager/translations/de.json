@@ -132,7 +132,9 @@
       "update_failed": "Aktualisierung fehlgeschlagen",
       "hint_key": "Eine Verbindung von {address} wurde abgewiesen: ihr Schlüssel gehört nicht zu diesem Bildschirm. Gib den Schlüssel dieses Bildschirms in der ESPHome-Integration von Home Assistant ein.",
       "no_answer_title": "Keine Antwort von Home Assistant",
-      "no_answer_text": "Oft darf dieser Bildschirm noch keine Aktionen ausführen. Erlaube es in Home Assistant: ESPHome > dieser Bildschirm > Konfigurieren."
+      "no_answer_text": "Oft darf dieser Bildschirm noch keine Aktionen ausführen. Erlaube es in Home Assistant: ESPHome > dieser Bildschirm > Konfigurieren.",
+      "logbook_tile": "bedient auf {screen}, Seite {page}, Kachel {tile}",
+      "logbook_page": "bedient auf {screen}, Seite {page}"
     },
     "preparing": {
       "default": "Kacheln werden sortiert",
@@ -2869,7 +2871,13 @@
         "hint_auto": "Was der Bildschirm selbst ermittelt: eine Helligkeit, eine Temperatur, wann ein Skript zuletzt lief.",
         "hint_none": "Die Kachel zeigt ihren Namen und nichts darunter.",
         "hint_attr": "Ein Wert dieser Entität, benannt und geschrieben wie in Home Assistant.",
-        "hint_text": "Immer dieselben Worte, was die Entität auch tut."
+        "hint_text": "Immer dieselben Worte, was die Entität auch tut.",
+        "parts_aria": "Was die Zeile des Thermostats sagt",
+        "part_mode": "Modus",
+        "part_action": "Aktion",
+        "part_target": "Eingestellt",
+        "part_now": "Jetzt",
+        "hint_parts": "Wähle, was die Zeile sagt. Wo − und + der Kachel die eingestellte Temperatur zeigen, lässt die Zeile sie weg."
       },
       "slider": {
         "label": "Kleiner Schieberegler auf der Kachel",

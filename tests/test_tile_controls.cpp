@@ -217,6 +217,23 @@ int main() {
   assert(climate_card_status(dry, true) == "Drying · 68%" && climate_card_status(dry) == "Drying · Now 68%");
   assert(status_text(dry) == "Drying · 68%" && humidity_text(45.5f) == "45.5%" && reading_text(dry, 68) == "68%");
 
+  // A thermostat tile's own line (firmware 0.68.0): mode, target and the room's temperature unless its second line
+  // names other parts; Off and the room's temperature while it is off; the target leaves where the -/+ shows it.
+  Tile airco = make("climate.airco", "cool", 1); airco.target = 19; airco.current = 22.5f; airco.edit_extra().hvac_action = "cooling";
+  assert(climate_parts("") == CLIMATE_PARTS_DEFAULT && climate_parts("auto") == CLIMATE_PARTS_DEFAULT && climate_parts("show:") == 0);
+  assert(climate_parts("show:now,mode") == (CLIMATE_PART_NOW | CLIMATE_PART_MODE) && climate_parts("show:later,action") == CLIMATE_PART_ACTION);
+  assert(!subtitle_by_hand("show:mode"));
+  assert(climate_tile_line(airco, CLIMATE_PARTS_DEFAULT, false) == "Cool · 19° · Now 22.5°");
+  assert(climate_tile_line(airco, CLIMATE_PARTS_DEFAULT, true) == "Cool · Now 22.5°");
+  assert(climate_tile_line(airco, CLIMATE_PARTS_DEFAULT, false, CLIMATE_PART_NOW) == "Cool · 19°");
+  assert(climate_tile_line(airco, climate_parts("show:action,now"), false) == "Cooling · Now 22.5°");
+  assert(climate_tile_line(airco, climate_parts("show:"), false).empty());
+  Tile airco_off = airco; airco_off.state = "off";
+  assert(climate_tile_line(airco_off, CLIMATE_PARTS_DEFAULT, false) == "Off · Now 22.5°");
+  assert(climate_tile_line(airco_off, climate_parts("show:target"), false) == "Off");
+  Tile ranged = make("climate.house", "heat_cool", 2); ranged.current = 21; ranged.edit_extra().target_low = 18; ranged.edit_extra().target_high = 22.5f;
+  assert(climate_tile_line(ranged, CLIMATE_PARTS_DEFAULT, false) == "Heat/Cool · 18 - 22.5° · Now 21°");
+
   // A vacuum's battery ends its own status line only; Nothing, its own text and a value stay as chosen (#293).
   Tile docked_robot = make("vacuum.robot", "docked"); docked_robot.battery = 100;
   assert(vacuum_tail(docked_robot) == " / 100%");
@@ -556,6 +573,26 @@ int main() {
     rows = climate_rows(ducted);                                               // a flag without a list is no row either
     assert(rows.size() == 1 && rows[0].kind == 'f');
     ducted.supported = 0; assert(climate_rows(ducted).empty() && climate_modes(ducted).size() == 4);
+  }
+  // Where a thermostat's line has no room, the tile tries shorter ones in turn: without the room's temperature, then
+  // without the mode too, so the temperature it is set to stays readable beside a long word for the mode.
+  {
+    Tile room = make("climate.room", "heat_cool", 1); room.target = 20; room.current = 22.5f;
+    assert(climate_tile_line(room, CLIMATE_PARTS_DEFAULT, false) == "Heat/Cool · 20° · Now 22.5°");
+    assert(climate_tile_shorter(room, CLIMATE_PARTS_DEFAULT, false) == "Heat/Cool · 20°\n20°");
+    room.current = NAN;   // nothing measured: the whole line is already without it, and one shorter line is left
+    assert(climate_tile_line(room, CLIMATE_PARTS_DEFAULT, false) == "Heat/Cool · 20°");
+    assert(climate_tile_shorter(room, CLIMATE_PARTS_DEFAULT, false) == "20°");
+    // The tile's own - and + show the target: the line has the mode alone, and nothing shorter says anything.
+    assert(climate_tile_line(room, CLIMATE_PARTS_DEFAULT, true) == "Heat/Cool" && climate_tile_shorter(room, CLIMATE_PARTS_DEFAULT, true).empty());
+    assert(climate_tile_shorter(room, CLIMATE_PART_MODE, false).empty());
+    // The temperature it is set to as Home Assistant writes it: 68° and 21.5°, never 68.0° (this was a test that read
+    // the source's line in tests/test_climate_range.py before the line became climate_tile_line).
+    room.target = 68; assert(climate_tile_line(room, CLIMATE_PART_TARGET, false) == "68°");
+    room.target = 21.5f; assert(climate_tile_line(room, CLIMATE_PART_TARGET, false) == "21.5°");
+    room.target = 20;
+    room.state = "off"; room.current = 19;
+    assert(climate_tile_line(room, CLIMATE_PARTS_DEFAULT, false) == "Off · Now 19°" && climate_tile_shorter(room, CLIMATE_PARTS_DEFAULT, false) == "Off");
   }
   // The thermostat's power key (the card's key and the tile's circle) exists only while it can do something, by the
   // flags Home Assistant asks for climate.turn_off and climate.turn_on. 128 is TURN_OFF, 256 TURN_ON.
